@@ -42,7 +42,7 @@ export const STAGE_CONFIG = {
       position: { x: 0, y: 0, z: 0 },
     },
     model: {
-      path: "/models/background_2.fbx",
+      path: "/models/background1.glb",
       position: { x: 0, y: 0, z: 0 },
       envMapIntensity: 1,
       castShadow: true,

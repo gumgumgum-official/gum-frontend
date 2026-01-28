@@ -21,7 +21,7 @@ export function createStageManager(renderer, scene) {
       const newStage = stages.get(stageNumber);
       if (newStage) {
         currentStage = newStage;
-        currentStage.setup(scene);
+        currentStage.setup(scene, renderer);
         console.log(`✅ Stage ${stageNumber} 로드 완료`);
       }
     },
