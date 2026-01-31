@@ -45,7 +45,10 @@ export function Stage2() {
         domElement: canvas,
         getPropRoots: () => propRoots,
         getPropPath: (i) => config.props?.[i]?.path ?? "",
-        options: { stageName: "stage2" },
+        options: {
+          stageName: "stage2",
+          getInitialCameraConfig: () => config.camera,
+        },
       });
 
       // 배경 GLB 로드

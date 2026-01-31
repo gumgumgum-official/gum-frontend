@@ -15,6 +15,10 @@ export default [
         console: "readonly",
         alert: "readonly",
         requestAnimationFrame: "readonly",
+        setTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        clearTimeout: "readonly",
         // Vite
         import: "readonly",
       },
