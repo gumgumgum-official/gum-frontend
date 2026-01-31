@@ -2,6 +2,10 @@ import * as THREE from "three";
 import { createStageManager } from "./utils/StageManager";
 import { Stage1 } from "./stages/Stage1";
 import { Stage2 } from "./stages/Stage2";
+import { Stage3 } from "./stages/Stage3";
+import { Stage4 } from "./stages/Stage4";
+import { Stage5 } from "./stages/Stage5";
+import { Stage6 } from "./stages/Stage6";
 import { APP_CONFIG } from "./config/appConfig.js";
 
 // Canvas
@@ -55,8 +59,10 @@ const stageManager = createStageManager(renderer, scene);
 // 단계 등록
 stageManager.registerStage(1, Stage1());
 stageManager.registerStage(2, Stage2());
-// stageManager.registerStage(3, Stage3());
-// ...
+stageManager.registerStage(3, Stage3());
+stageManager.registerStage(4, Stage4());
+stageManager.registerStage(5, Stage5());
+stageManager.registerStage(6, Stage6());
 
 // 시작 단계
 stageManager.switchToStage(APP_CONFIG.initialStage);

@@ -70,7 +70,7 @@ npm run format
 src/
 ├── config/           # 설정 파일
 │   ├── appConfig.js  # 앱 전체 설정 (조명, 렌더러 등)
-│   └── stageConfig.js # 스테이지별 설정
+│   └── stages/       # 스테이지별 설정 (stage1.js ~ stage6.js)
 ├── ui/               # UI 컴포넌트 (Phase 1 입국 신고서 등)
 │   └── EntryForm.js  # 입국 신고서 폼
 ├── stages/           # 스테이지별 장면 (Phase 1~6 = Stage 1~6)
@@ -101,18 +101,21 @@ Phase–Stage 매핑은 `docs/FLOW.md`의 "Phase ↔ Stage 매핑" 섹션을 참
 
 ### 새 스테이지 추가하기
 
-1. `src/stages/StageX.js` 파일 생성
-2. `src/config/stageConfig.js`에 설정 추가
+1. `src/config/stages/stageX.js`에 설정 추가
+2. `src/stages/StageX.js` 파일 생성
 3. `src/main.js`에서 스테이지 등록
 
 ```javascript
+// stageX.js 예시
+export const STAGE_X_CONFIG = { camera: {...}, background: {...} };
+
 // StageX.js 예시
 import * as THREE from "three";
-import { STAGE_CONFIG } from "../config/stageConfig.js";
+import { STAGE_X_CONFIG } from "../config/stages/stageX.js";
 
 export function StageX() {
-  let objects = [];
-  const config = STAGE_CONFIG.stageX;
+  const objects = [];
+  const config = STAGE_X_CONFIG;
 
   return {
     camera: null,
@@ -141,7 +144,7 @@ export function StageX() {
 ### 설정 값 수정하기
 
 모든 하드코딩된 값은 `src/config/` 폴더의 설정 파일에 있습니다.
-- 스테이지별 설정: `stageConfig.js`
+- 스테이지별 설정: `config/stages/stageN.js`
 - 공통 설정: `appConfig.js`
 
 ## 라이선스

@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
-import { STAGE_CONFIG } from "../config/stageConfig.js";
+import { STAGE2_CONFIG } from "../config/stages/stage2.js";
 
 export function Stage2() {
   let objects = [];
-  const config = STAGE_CONFIG.stage2;
+  const config = STAGE2_CONFIG;
 
   return {
     camera: null,

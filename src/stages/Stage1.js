@@ -1,9 +1,9 @@
 import * as THREE from "three";
-import { STAGE_CONFIG } from "../config/stageConfig.js";
+import { STAGE1_CONFIG } from "../config/stages/stage1.js";
 
 export function Stage1() {
   let objects = [];
-  const config = STAGE_CONFIG.stage1;
+  const config = STAGE1_CONFIG;
 
   return {
     camera: null,
