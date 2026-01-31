@@ -1,25 +1,35 @@
+/**
+ * Stage2: 배경 GLB + 오브제(GLB) 로드, 디버그 컨트롤로 카메라/오브제 조정
+ * - 로드: assetLoaders (GLB)
+ * - 입력/디버그: stageDebugControls (Orbit, Transform, Drag, C/G/S)
+ */
+
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { getGLBLoader } from "../utils/assetLoaders.js";
+import { createStageDebugControls } from "../utils/stageDebugControls.js";
 import { STAGE_CONFIG } from "../config/stageConfig.js";
 
 export function Stage2() {
-  let objects = [];
-  let controls = null;
   const config = STAGE_CONFIG.stage2;
+  const glbLoader = getGLBLoader();
+
+  const objects = [];
+  const propRoots = [];
+  let debugControls = null;
 
   return {
     camera: null,
 
     setup(scene, renderer) {
-      // Fog & Background (일단 끔 - 디버깅용)
-      // scene.fog = new THREE.Fog(config.fog.color, config.fog.near, config.fog.far);
-      scene.background = new THREE.Color(0x333333); // 어두운 배경으로 모델 잘 보이게
+      const canvas = renderer.domElement;
 
-      // 바다 일단 끔 (디버깅용)
-      // const seaGeometry = new THREE.PlaneGeometry(...);
+      scene.fog = new THREE.Fog(
+        config.fog.color,
+        config.fog.near,
+        config.fog.far,
+      );
+      scene.background = new THREE.Color(config.background.color);
 
-      // 초기 카메라 (모델 로드 전)
       this.camera = new THREE.PerspectiveCamera(
         45,
         window.innerWidth / window.innerHeight,
@@ -29,130 +39,164 @@ export function Stage2() {
       this.camera.position.set(100, 50, 100);
       this.camera.lookAt(0, 0, 0);
 
-      // OrbitControls - 마우스로 카메라 조작!
-      const canvas = renderer.domElement;
-      controls = new OrbitControls(this.camera, canvas);
-      controls.enableDamping = true;
-      controls.target.set(0, 0, 0);
+      debugControls = createStageDebugControls({
+        scene,
+        camera: this.camera,
+        domElement: canvas,
+        getPropRoots: () => propRoots,
+        getPropPath: (i) => config.props?.[i]?.path ?? "",
+        options: { stageName: "stage2" },
+      });
 
-      // Background 모델 (GLB)
-      const loader = new GLTFLoader();
-      loader.load(
-        config.model.path,
-        (gltf) => {
+      // 배경 GLB 로드
+      glbLoader.load(config.model.path, {
+        onLoad: (gltf) => {
           const model = gltf.scene;
-
-          // 모델 바운딩 박스 확인
           const box = new THREE.Box3().setFromObject(model);
           const size = box.getSize(new THREE.Vector3());
           const center = box.getCenter(new THREE.Vector3());
           const maxDim = Math.max(size.x, size.y, size.z);
 
-          console.log("📦 모델 크기:", size);
-          console.log("📍 모델 중심:", center);
-
-          // 카메라를 모델이 잘 보이는 위치로 자동 설정
           this.camera.position.set(
             center.x + maxDim * 1.5,
             center.y + maxDim * 0.8,
             center.z + maxDim * 1.5,
           );
-          this.camera.far = maxDim * 10;
+          this.camera.far = Math.max(1000, maxDim * 10);
           this.camera.updateProjectionMatrix();
-
-          // OrbitControls 타겟을 모델 중심으로
-          controls.target.copy(center);
-          controls.update();
+          debugControls.setOrbitTarget(center);
 
           model.traverse((child) => {
-            if (child.isMesh && child.material) {
-              child.castShadow = true;
-              child.receiveShadow = true;
+            if (child.isMesh) {
+              if (child.material) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+              child.raycast = () => {}; // 배경은 클릭 제외
             }
           });
 
-          console.log("✅ Stage2: Background 로드 완료");
-          console.log("🎮 마우스로 화면 조작 가능! (드래그: 회전, 휠: 줌)");
-          console.log("💡 좋은 앵글 찾으면 콘솔에 카메라 위치 출력:");
-          console.log("   camera.position:", this.camera.position);
-
           objects.push(model);
           scene.add(model);
-        },
-        (xhr) => {
-          if (xhr.total > 0) {
-            console.log(
-              `Stage2: ${((xhr.loaded / xhr.total) * 100).toFixed(2)}% loaded`,
+
+          // 오브제 로드
+          if (config.props?.length) {
+            loadPropsFromConfig(
+              glbLoader,
+              config.props,
+              scene,
+              objects,
+              propRoots,
+              () => {
+                debugControls.setDraggableObjects(propRoots);
+              },
             );
           }
         },
-        (error) => {
-          console.error("❌ Stage2 로드 에러:", error);
+        onProgress: (xhr) => {
+          if (xhr.total > 0) {
+            console.log(
+              `Stage2 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
+            );
+          }
         },
-      );
+        onError: (err) => console.error("❌ Stage2 배경 로드 에러:", err),
+      });
 
-      // 원점에 도우미 추가 (디버깅용)
       const axesHelper = new THREE.AxesHelper(50);
       scene.add(axesHelper);
       objects.push(axesHelper);
 
-      // 카메라 위치 복사 단축키 (C 키)
-      const camera = this.camera;
-      this._onKeyDown = (e) => {
-        if (e.key === "c" || e.key === "C") {
-          const pos = camera.position;
-          const rot = camera.rotation;
-          console.log("📋 카메라 설정값 (stageConfig.js에 복사):");
-          console.log(`camera: {
-  fov: ${camera.fov.toFixed(1)},
-  near: 0.1,
-  far: ${camera.far.toFixed(0)},
-  position: { x: ${pos.x.toFixed(1)}, y: ${pos.y.toFixed(1)}, z: ${pos.z.toFixed(1)} },
-  lookAt: { x: ${controls.target.x.toFixed(1)}, y: ${controls.target.y.toFixed(1)}, z: ${controls.target.z.toFixed(1)} },
-},`);
-        }
-      };
-      window.addEventListener("keydown", this._onKeyDown);
-
       console.log("✅ Stage2 setup 완료");
-      console.log("💡 C 키: 현재 카메라 설정값 출력");
     },
 
-    update(_delta) {
-      // OrbitControls 업데이트
-      if (controls) {
-        controls.update();
-      }
+    update(delta) {
+      if (debugControls) debugControls.update(delta);
     },
 
     cleanup(scene) {
-      // 이벤트 리스너 정리
-      if (this._onKeyDown) {
-        window.removeEventListener("keydown", this._onKeyDown);
-        this._onKeyDown = null;
+      if (debugControls) {
+        debugControls.dispose();
+        debugControls = null;
       }
-
-      // OrbitControls 정리
-      if (controls) {
-        controls.dispose();
-        controls = null;
-      }
+      propRoots.length = 0;
 
       objects.forEach((obj) => {
         scene.remove(obj);
         if (obj.geometry) obj.geometry.dispose();
         if (obj.material) {
           if (Array.isArray(obj.material)) {
-            obj.material.forEach((mat) => mat.dispose());
+            obj.material.forEach((m) => m.dispose());
           } else {
             obj.material.dispose();
           }
         }
       });
-      objects = [];
+      objects.length = 0;
       scene.fog = null;
       scene.background = null;
       console.log("🧹 Stage2 정리 완료");
     },
   };
+}
+
+/**
+ * config.props 배열 기준으로 GLB 로드 후 scene에 추가
+ * @param {ReturnType<getGLBLoader>} loader
+ * @param {Array<{ path: string, position?, rotation?, scale? }>} propsConfig
+ * @param {THREE.Scene} scene
+ * @param {THREE.Object3D[]} objects - dispose용
+ * @param {THREE.Object3D[]} propRoots - 선택/드래그용
+ * @param {() => void} onAllDone
+ */
+function loadPropsFromConfig(
+  loader,
+  propsConfig,
+  scene,
+  objects,
+  propRoots,
+  onAllDone,
+) {
+  let done = 0;
+  const total = propsConfig.length;
+
+  propsConfig.forEach((propConfig) => {
+    loader.load(propConfig.path, {
+      onLoad: (gltf) => {
+        const root = gltf.scene;
+        root.position.set(
+          propConfig.position?.x ?? 0,
+          propConfig.position?.y ?? 0,
+          propConfig.position?.z ?? 0,
+        );
+        root.rotation.set(
+          THREE.MathUtils.degToRad(propConfig.rotation?.x ?? 0),
+          THREE.MathUtils.degToRad(propConfig.rotation?.y ?? 0),
+          THREE.MathUtils.degToRad(propConfig.rotation?.z ?? 0),
+        );
+        root.scale.set(
+          propConfig.scale?.x ?? 1,
+          propConfig.scale?.y ?? 1,
+          propConfig.scale?.z ?? 1,
+        );
+        root.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        scene.add(root);
+        objects.push(root);
+        propRoots.push(root);
+        console.log(`✅ 오브제 로드: ${propConfig.path}`);
+        done++;
+        if (done === total) onAllDone();
+      },
+      onError: (err) => {
+        console.error(`❌ 오브제 로드 실패: ${propConfig.path}`, err);
+        done++;
+        if (done === total) onAllDone();
+      },
+    });
+  });
 }

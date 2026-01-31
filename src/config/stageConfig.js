@@ -48,5 +48,14 @@ export const STAGE_CONFIG = {
       castShadow: true,
       receiveShadow: true,
     },
+    // 배경 위에 올릴 오브제 (여러 개 가능)
+    props: [
+      {
+        path: "/models/collision.glb",
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: -90, y: 0, z: 0 }, // 90도 회전 (거꾸로 매달림 보정)
+        scale: { x: 1, y: 1, z: 1 },
+      },
+    ],
   },
 };

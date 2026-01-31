@@ -33,6 +33,13 @@ export default [
     },
   },
   {
-    ignores: ["node_modules", "dist", "*.config.js"],
+    ignores: [
+      "node_modules",
+      "dist",
+      "*.config.js",
+      "public/**",
+      "**/libs/**",
+      "**/*.wasm",
+    ],
   },
 ];
