@@ -26,11 +26,11 @@
     "three": "^0.182.0"
   },
   "lint-staged": {
-    "*.js": [
+    "src/**/*.js": [
       "eslint --fix",
       "prettier --write"
     ],
-    "*.{css,html}": [
+    "src/**/*.{css,html}": [
       "prettier --write"
     ]
   }
