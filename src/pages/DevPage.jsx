@@ -2,9 +2,9 @@ import { useMemo } from "react";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
 import styles from "./Page.module.css";
 
-const DEV_STAGES = [1, 2, 3, 4, 5, 6];
+const DEV_STAGES = [2, 3, 4, 5, 6];
 
-/** 개발용: 모든 Stage, 키보드 1~6 전환 */
+/** 개발용: Stage 2~6, 키보드 2~6 전환 */
 export function DevPage() {
   const allowedStages = useMemo(() => DEV_STAGES, []);
 

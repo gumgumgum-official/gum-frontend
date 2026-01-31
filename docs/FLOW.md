@@ -2,7 +2,7 @@
 
 ## 1. 하드웨어 간 데이터 흐름
 
-1. **iPad**: 유저 입력 -> `POST /api/worry` -> Server
+1. **iPad (별도 프로젝트)**: 유저 입력 -> `POST /api/worry` -> Server
 2. **Server**: `Socket.io` 브로드캐스팅 -> Beam Projector & PC
 3. **Beam Projector**: 실시간 3D 텍스트 객체 렌더링 및 물리 시뮬레이션
 4. **Arcade Button**: 물리 신호 -> PC 인터랙션 트리거
@@ -19,20 +19,20 @@
 
 ## 3. Phase ↔ Stage 매핑
 
-PRD의 Phase와 코드의 Stage는 1:1로 대응합니다.
+PRD의 Phase와 코드의 Stage는 1:1로 대응합니다. **본 프로젝트(gum-frontend)는 Stage 2~6만 포함**합니다.
 
-| Phase | Stage | 내용 |
-| :---- | :---- | :--- |
-| Phase 1 | Stage 1 | 입국 신고서 (폼 UI: `src/ui/EntryForm.js`) |
-| Phase 2 | Stage 2 | 고민 시각화 (Beam Projector, 3D 텍스트 투하) |
-| Phase 3 | Stage 3 | 부셔버리자 (Cannon-es 파편, 꽃) |
-| Phase 4 | Stage 4 | 털어버리자 (Confetti, 댄스) |
-| Phase 5 | Stage 5 | 난 너의 편 (Raycasting 포옹, 폴라로이드) |
-| Phase 6 | Stage 6 | 헤어짐 (배웅, 말풍선) |
+| Phase | Stage | 내용 | 프로젝트 |
+| :---- | :---- | :--- | :------- |
+| Phase 1 | Stage 1 | 입국 신고서 (태블릿 폼 UI) | 별도 프로젝트 |
+| Phase 2 | Stage 2 | 고민 시각화 (Beam Projector, 3D 텍스트 투하) | gum-frontend |
+| Phase 3 | Stage 3 | 부셔버리자 (Cannon-es 파편, 꽃) | gum-frontend |
+| Phase 4 | Stage 4 | 털어버리자 (Confetti, 댄스) | gum-frontend |
+| Phase 5 | Stage 5 | 난 너의 편 (Raycasting 포옹, 폴라로이드) | gum-frontend |
+| Phase 6 | Stage 6 | 헤어짐 (배웅, 말풍선) | gum-frontend |
 
 ## 4. 유저 시나리오 (User Journey)
 
-- **입장**: 입국 신고서 작성 (아이패드)
+- **입장**: 입국 신고서 작성 (아이패드, 별도 프로젝트)
 - **관찰**: 내 고민이 섬으로 떨어지는 것을 빔 프로젝터로 확인
 - **체험**: 체험 존 이동 후 버튼을 눌러 고민을 부수고 꽃을 피움
 - **교감**: 껌딱지들과 춤추고 포옹하며 위로를 얻음

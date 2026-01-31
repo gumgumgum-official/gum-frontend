@@ -20,6 +20,8 @@
 
 ### 3.1. [Phase 1] 여행의 시작: 입국 신고서
 
+> **본 프로젝트(gum-frontend) 범위 아님** — 별도 프로젝트에서 구현됨.
+
 - **UI/UX**: 기내 창가 뷰 배경의 아이패드 입력 화면.
 - **기능**: 애플펜슬을 이용한 '걱정거리' 텍스트 입력 및 데이터 전송.
 - **요구사항**:
@@ -73,6 +75,11 @@
 - **Performance**: 다수의 물리 객체 존재 시 60fps 유지 (Instanced Mesh 활용).
 - **Extensibility**: 각 Phase를 Scene 단위로 관리하여 유지보수 용이성 확보.
 - **Real-time**: 태블릿 입력 데이터가 빔 프로젝트 서버로 지연 없이 전달될 것.
+
+## 5. 프로젝트 범위 (Scope)
+
+- **본 프로젝트(gum-frontend)**: Phase 2 ~ Phase 6 (Stage 2 ~ Stage 6)
+- **별도 프로젝트**: Phase 1 (입국 신고서 태블릿 UI) — `POST /api/worry` 등으로 연동
 
 ---
 

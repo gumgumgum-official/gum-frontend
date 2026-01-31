@@ -2,6 +2,9 @@
 
 껌딱지 나라로의 여행 - React + Three.js 기반 인터랙티브 3D 웹 전시
 
+> **본 프로젝트(gum-frontend) 범위**: Stage 2 ~ Stage 6 (Phase 2 ~ Phase 6)  
+> Phase 1 (입국 신고서 태블릿 UI)는 별도 프로젝트에서 구현됨. `docs/PRD.md` 참고.
+
 ## 사용 방법 (Usage)
 
 ### 개발 서버 실행
@@ -17,8 +20,7 @@ npm run dev
 
 | 용도 | URL | 설명 |
 |------|-----|------|
-| **개발용** | `http://localhost:5173/dev` | 모든 Stage 테스트, 키보드 1~6으로 전환 |
-| **태블릿** | `http://localhost:5173/tablet` | 입국 신고서 폼 (Stage 1) |
+| **개발용** | `http://localhost:5173/dev` | Stage 2~6 테스트, 키보드 2~6으로 전환 |
 | **빔 프로젝터** | `http://localhost:5173/beam` | 고민 시각화 (Stage 2) |
 | **키오스크** | `http://localhost:5173/kiosk` | 체험 존 (Stage 3~6) |
 
@@ -28,7 +30,7 @@ npm run dev
 
 실제 전시에서는 각 기기가 아래 URL로 접속합니다.
 
-- **태블릿(iPad)**: `/tablet` — 입국 신고서 입력 후 `POST /api/worry` 전송
+- **태블릿(iPad)**: 별도 프로젝트 — 입국 신고서 입력 후 `POST /api/worry` 전송
 - **빔 프로젝터**: `/beam` — Socket.io로 고민 데이터 수신 후 3D 텍스트 표시
 - **체험 존 PC**: `/kiosk` — 아케이드 버튼으로 Stage 3→4→5→6 순차 진행
 
@@ -41,8 +43,7 @@ npm run dev
 | 경로 | 페이지 | Stage | 키보드 전환 | 비고 |
 |------|--------|-------|:----------:|------|
 | `/` | - | - | - | `/dev`로 리다이렉트 |
-| `/dev` | DevPage | 1, 2, 3, 4, 5, 6 | ✅ | 개발용, 모든 Stage 테스트 |
-| `/tablet` | TabletPage | 1 | ❌ | 입국 신고서 + 3D 배경 |
+| `/dev` | DevPage | 2, 3, 4, 5, 6 | ✅ | 개발용, Stage 2~6 테스트 |
 | `/beam` | BeamPage | 2 | ❌ | 빔 프로젝터 전용 |
 | `/kiosk` | KioskPage | 3, 4, 5, 6 | ❌ | 체험 존, 순차 진행 |
 | `*` | - | - | - | 404 시 `/dev`로 리다이렉트 |
@@ -52,16 +53,9 @@ npm run dev
 #### DevPage (`/dev`)
 
 - **용도**: 개발·디버깅
-- **Stage**: 1~6 전체
-- **기능**: 키보드 `1`~`6`으로 즉시 Stage 전환
+- **Stage**: 2~6
+- **기능**: 키보드 `2`~`6`으로 즉시 Stage 전환
 - **초기 Stage**: 2
-
-#### TabletPage (`/tablet`)
-
-- **용도**: 태블릿 입력 화면 (Phase 1)
-- **Stage**: 1 (기내 창가 뷰 배경)
-- **기능**: 입국 신고서 폼(걱정거리 입력) → 제출 시 API 전송 (구현 예정)
-- **UI**: EntryForm 오버레이 + Three.js 배경
 
 #### BeamPage (`/beam`)
 
@@ -80,7 +74,6 @@ npm run dev
 
 | 키 | 동작 |
 |----|------|
-| `1` | Stage 1 (입국 신고서) |
 | `2` | Stage 2 (고민 시각화) |
 | `3` | Stage 3 (부셔버리자) |
 | `4` | Stage 4 (털어버리자) |
@@ -113,7 +106,7 @@ npm install
 npm run dev
 ```
 브라우저에서 `http://localhost:5173` 열기  
-페이지 경로: `/dev`(개발용), `/tablet`, `/beam`, `/kiosk` — 위 **사용 방법** 참고
+페이지 경로: `/dev`(개발용), `/beam`, `/kiosk` — 위 **사용 방법** 참고
 
 ### 프로덕션 빌드
 ```bash
@@ -158,18 +151,16 @@ npm run format
 src/
 ├── config/           # 설정 파일
 │   ├── appConfig.js  # 앱 전체 설정
-│   └── stages/       # 스테이지별 설정 (stage1.js ~ stage6.js)
+│   └── stages/       # 스테이지별 설정 (stage2.js ~ stage6.js)
 ├── components/       # React 컴포넌트
-│   ├── ThreeCanvas.jsx  # Three.js 캔버스 래퍼
-│   └── EntryForm.jsx    # 입국 신고서 폼
+│   └── ThreeCanvas.jsx  # Three.js 캔버스 래퍼
 ├── pages/            # 라우트별 페이지
-│   ├── TabletPage.jsx   # /tablet (Stage 1)
 │   ├── BeamPage.jsx     # /beam (Stage 2)
 │   ├── KioskPage.jsx    # /kiosk (Stage 3~6)
 │   └── DevPage.jsx      # /dev (개발용, 키보드 전환)
 ├── three/            # Three.js 초기화
-│   └── initThreeApp.js  # 기존 main.js 로직
-├── stages/           # 스테이지별 장면 (Stage1.js ~ Stage6.js)
+│   └── initThreeApp.js  # Stage 2~6 로직
+├── stages/           # 스테이지별 장면 (Stage2.js ~ Stage6.js)
 ├── utils/            # 유틸리티
 ├── App.jsx           # React Router 설정
 ├── main.jsx          # React 진입점
@@ -242,7 +233,7 @@ export function StageX() {
 
 ### 참고 문서
 
-- **`docs/PRD.md`** — 제품 요구사항 정의 (Phase 1~6 상세)
+- **`docs/PRD.md`** — 제품 요구사항 정의 (Phase 1~6 상세, 본 프로젝트 범위: Phase 2~6)
 - **`docs/FLOW.md`** — 시스템 아키텍처, Phase–Stage 매핑, 데이터 흐름
 
 ## 라이선스

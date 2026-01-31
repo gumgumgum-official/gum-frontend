@@ -5,7 +5,6 @@
 
 import * as THREE from "three";
 import { createStageManager } from "../utils/StageManager.js";
-import { Stage1 } from "../stages/Stage1.js";
 import { Stage2 } from "../stages/Stage2.js";
 import { Stage3 } from "../stages/Stage3.js";
 import { Stage4 } from "../stages/Stage4.js";
@@ -13,8 +12,8 @@ import { Stage5 } from "../stages/Stage5.js";
 import { Stage6 } from "../stages/Stage6.js";
 import { APP_CONFIG } from "../config/appConfig.js";
 
+/** Stage 1은 별도 프로젝트(태블릿)에서 구현 */
 const STAGE_FACTORIES = {
-  1: Stage1,
   2: Stage2,
   3: Stage3,
   4: Stage4,
@@ -26,9 +25,9 @@ const STAGE_FACTORIES = {
  * Three.js 앱을 canvas에 초기화합니다.
  * @param {HTMLCanvasElement} canvasElement
  * @param {Object} options
- * @param {number[]} options.allowedStages - 허용 Stage 목록 (예: [1], [2], [3,4,5,6])
+ * @param {number[]} options.allowedStages - 허용 Stage 목록 (예: [2], [3,4,5,6])
  * @param {number} options.initialStage - 시작 Stage
- * @param {boolean} [options.enableKeyboardSwitch=false] - 키보드 1~6 전환 활성화
+ * @param {boolean} [options.enableKeyboardSwitch=false] - 키보드 2~6 전환 활성화
  * @returns {{ dispose: function }} dispose()로 리소스 정리
  */
 export function initThreeApp(canvasElement, options = {}) {
@@ -114,11 +113,11 @@ export function initThreeApp(canvasElement, options = {}) {
   }
   window.addEventListener("resize", handleResize);
 
-  // Keyboard (개발용)
+  // Keyboard (개발용, Stage 2~6)
   let keydownHandler = null;
   if (enableKeyboardSwitch) {
     keydownHandler = (e) => {
-      if (e.key >= "1" && e.key <= "6") {
+      if (e.key >= "2" && e.key <= "6") {
         const num = parseInt(e.key);
         if (allowedStages.includes(num)) {
           stageManager.switchToStage(num);
