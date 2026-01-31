@@ -28,6 +28,10 @@ export default [
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
         FormData: "readonly",
+        setTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        clearTimeout: "readonly",
         import: "readonly",
       },
     },
@@ -55,6 +59,13 @@ export default [
     },
   },
   {
-    ignores: ["node_modules", "dist", "*.config.js"],
+    ignores: [
+      "node_modules",
+      "dist",
+      "*.config.js",
+      "public/**",
+      "**/libs/**",
+      "**/*.wasm",
+    ],
   },
 ];

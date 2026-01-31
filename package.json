@@ -36,7 +36,7 @@
       "eslint --fix",
       "prettier --write"
     ],
-    "*.{css,html}": [
+    "src/**/*.{css,html}": [
       "prettier --write"
     ]
   }
