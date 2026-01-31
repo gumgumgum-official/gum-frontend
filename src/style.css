@@ -9,35 +9,24 @@ body {
   font-family: sans-serif;
 }
 
-#app {
+#root {
   position: relative;
   width: 100%;
   height: 100vh;
 }
 
-#three-canvas {
+.three-canvas {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   outline: none;
+  display: block;
 }
 
-/* Phase 1: 입국 신고서 등 UI 오버레이용 컨테이너 */
-#ui-root {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#ui-root .entry-form {
+/* Phase 1: 입국 신고서 폼 */
+.entry-form {
   pointer-events: auto;
   background: rgba(255, 255, 255, 0.95);
   padding: 1.5rem 2rem;
@@ -47,24 +36,24 @@ body {
   max-width: 90vw;
 }
 
-#ui-root .entry-form__title {
+.entry-form__title {
   font-size: 1.25rem;
   margin-bottom: 0.5rem;
 }
 
-#ui-root .entry-form__desc {
+.entry-form__desc {
   font-size: 0.875rem;
   color: #555;
   margin-bottom: 1rem;
 }
 
-#ui-root .entry-form__label {
+.entry-form__label {
   display: block;
   font-size: 0.875rem;
   margin-bottom: 0.25rem;
 }
 
-#ui-root .entry-form__input {
+.entry-form__input {
   width: 100%;
   padding: 0.5rem;
   margin-bottom: 1rem;
@@ -74,7 +63,7 @@ body {
   resize: vertical;
 }
 
-#ui-root .entry-form__submit {
+.entry-form__submit {
   width: 100%;
   padding: 0.6rem 1rem;
   background: #333;
@@ -85,6 +74,6 @@ body {
   cursor: pointer;
 }
 
-#ui-root .entry-form__submit:hover {
+.entry-form__submit:hover {
   background: #555;
 }

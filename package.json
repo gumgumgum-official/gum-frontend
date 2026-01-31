@@ -7,15 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src/**/*.js",
-    "lint:fix": "eslint src/**/*.js --fix",
-    "format": "prettier --write \"src/**/*.{js,css,html}\"",
-    "format:check": "prettier --check \"src/**/*.{js,css,html}\"",
+    "lint": "eslint src/**/*.{js,jsx}",
+    "lint:fix": "eslint src/**/*.{js,jsx} --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,css,html}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,css,html}\"",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.8.0",
@@ -23,10 +26,13 @@
   },
   "dependencies": {
     "cannon-es": "^0.20.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.0.1",
     "three": "^0.182.0"
   },
   "lint-staged": {
-    "*.js": [
+    "*.{js,jsx}": [
       "eslint --fix",
       "prettier --write"
     ],

@@ -37,5 +37,10 @@ export function createStageManager(renderer, scene) {
     getCurrentCamera() {
       return currentStage ? currentStage.camera : null;
     },
+
+    // 현재 Stage 가져오기 (cleanup용)
+    getCurrentStage() {
+      return currentStage;
+    },
   };
 }

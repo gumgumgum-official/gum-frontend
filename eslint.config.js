@@ -1,27 +1,42 @@
 import js from "@eslint/js";
 import prettier from "eslint-config-prettier";
+import react from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   js.configs.recommended,
   prettier,
   {
+    files: ["**/*.{js,jsx}"],
+    plugins: {
+      react,
+      "react-hooks": reactHooks,
+    },
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
       globals: {
-        // 브라우저 환경
         window: "readonly",
         document: "readonly",
         console: "readonly",
         alert: "readonly",
         requestAnimationFrame: "readonly",
+        cancelAnimationFrame: "readonly",
         FormData: "readonly",
-        // Vite
         import: "readonly",
       },
     },
+    settings: {
+      react: {
+        version: "detect",
+      },
+    },
     rules: {
-      // 경고만 표시 (에러 아님)
       "no-unused-vars": [
         "warn",
         {
@@ -29,8 +44,14 @@ export default [
           varsIgnorePattern: "^_",
         },
       ],
-      "no-console": "off", // console.log 허용
+      "no-console": "off",
       "no-debugger": "warn",
+      "react/react-in-jsx-scope": "off",
+      "react/prop-types": "off",
+      "react/jsx-uses-react": "error",
+      "react/jsx-uses-vars": "error",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
   {
