@@ -71,7 +71,9 @@ src/
 ├── config/           # 설정 파일
 │   ├── appConfig.js  # 앱 전체 설정 (조명, 렌더러 등)
 │   └── stageConfig.js # 스테이지별 설정
-├── stages/           # 스테이지별 장면
+├── ui/               # UI 컴포넌트 (Phase 1 입국 신고서 등)
+│   └── EntryForm.js  # 입국 신고서 폼
+├── stages/           # 스테이지별 장면 (Phase 1~6 = Stage 1~6)
 │   ├── Stage1.js
 │   ├── Stage2.js
 │   └── ...
@@ -80,6 +82,8 @@ src/
 ├── main.js           # 메인 엔트리 포인트
 └── style.css         # 스타일
 ```
+
+Phase–Stage 매핑은 `docs/FLOW.md`의 "Phase ↔ Stage 매핑" 섹션을 참고하세요.
 
 ## 키보드 단축키
 

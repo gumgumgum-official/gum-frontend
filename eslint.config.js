@@ -15,6 +15,7 @@ export default [
         console: "readonly",
         alert: "readonly",
         requestAnimationFrame: "readonly",
+        FormData: "readonly",
         // Vite
         import: "readonly",
       },
