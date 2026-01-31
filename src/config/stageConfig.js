@@ -24,7 +24,8 @@ export const STAGE_CONFIG = {
       near: 1,
       far: 20000,
       position: { x: 0, y: 750, z: 830 },
-      rotation: { x: -30, y: 0, z: 0 }, // degrees
+      rotation: { x: -30, y: 0, z: 0 },
+      // lookAt 추가하면 Orbit 끄고 카메라 고정. C 키 출력값 붙여넣기
     },
     fog: {
       color: 0xb0e0e6,

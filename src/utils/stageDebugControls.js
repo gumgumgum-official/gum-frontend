@@ -21,9 +21,10 @@ import { DragControls } from "three/examples/jsm/controls/DragControls.js";
  * @param {() => THREE.Object3D[]} params.getPropRoots - 선택/드래그 대상 루트 배열 (참조로 갱신)
  * @param {(index: number) => string} params.getPropPath - prop index → 경로 (config 출력용)
  * @param {Object} [params.options]
- * @param {boolean} [params.options.enableOrbit=true]
+ * @param {boolean} [params.options.enableOrbit=true] - false 또는 config에 lookAt 있으면 카메라 고정
  * @param {boolean} [params.options.enableDrag=true]
- * @param {string} [params.options.stageName='stage'] - 로그용 (예: 'stage2')
+ * @param {string} [params.options.stageName='stage']
+ * @param {() => { position?: {x,y,z}, lookAt?: {x,y,z}, fov?, near?, far? }} [params.options.getInitialCameraConfig] - 있으면 적용. lookAt 있으면 Orbit 미생성(고정)
  */
 export function createStageDebugControls(params) {
   const {
@@ -39,10 +40,12 @@ export function createStageDebugControls(params) {
     enableOrbit = true,
     enableDrag = true,
     stageName = "stage",
+    getInitialCameraConfig,
   } = options;
 
   const mouse = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
+  const fixedLookAt = new THREE.Vector3();
 
   let orbitControls = null;
   let transformControls = null;
@@ -50,12 +53,49 @@ export function createStageDebugControls(params) {
   let onKeyDown = null;
   let onPointerDown = null;
   let onPointerMove = null;
+  let useFixedCamera = false;
 
-  // ---- OrbitControls
-  if (enableOrbit) {
+  // ---- 카메라 초기값 적용
+  const initialCam = getInitialCameraConfig?.();
+  if (initialCam) {
+    if (initialCam.position) {
+      camera.position.set(
+        initialCam.position.x ?? 0,
+        initialCam.position.y ?? 0,
+        initialCam.position.z ?? 0,
+      );
+    }
+    if (initialCam.fov != null) camera.fov = initialCam.fov;
+    if (initialCam.near != null) camera.near = initialCam.near;
+    if (initialCam.far != null) camera.far = initialCam.far;
+    camera.updateProjectionMatrix();
+    if (initialCam.lookAt != null && typeof initialCam.lookAt.x === "number") {
+      fixedLookAt.set(
+        initialCam.lookAt.x,
+        initialCam.lookAt.y,
+        initialCam.lookAt.z,
+      );
+      useFixedCamera = true; // lookAt 있으면 Orbit 끄고 고정
+    }
+  }
+
+  // ---- OrbitControls (고정 모드가 아닐 때만)
+  let orbitLogTimeout = null;
+  if (enableOrbit && !useFixedCamera) {
     orbitControls = new OrbitControls(camera, domElement);
     orbitControls.enableDamping = true;
     orbitControls.target.set(0, 0, 0);
+    if (initialCam?.lookAt) {
+      orbitControls.target.copy(fixedLookAt);
+    }
+    // 배경(뷰) 드래그 끝날 때 콘솔 출력 (change 디바운스)
+    orbitControls.addEventListener("change", () => {
+      if (orbitLogTimeout) clearTimeout(orbitLogTimeout);
+      orbitLogTimeout = setTimeout(() => {
+        orbitLogTimeout = null;
+        logConfigToConsole();
+      }, 200);
+    });
   }
 
   // ---- TransformControls (축 조정)
@@ -64,6 +104,7 @@ export function createStageDebugControls(params) {
   scene.add(transformControls);
   transformControls.addEventListener("dragging-changed", (e) => {
     if (orbitControls) orbitControls.enabled = !e.value;
+    if (!e.value) logConfigToConsole(); // 축 드래그 끝날 때마다 콘솔 출력
   });
 
   // ---- 클릭 시 TransformControls 부착 (오브제만, getPropRoots 기준)
@@ -102,12 +143,14 @@ export function createStageDebugControls(params) {
   };
   domElement.addEventListener("pointermove", onPointerMove);
 
-  // ---- C/G/S 키: config 콘솔 출력
+  // ---- C/G/S/T/R/E 키: config 출력 (1,2,3은 main에서 스테이지 전환용이라 T/R/E 사용)
+  function getLookAtTarget() {
+    return orbitControls ? orbitControls.target : fixedLookAt;
+  }
+
   function formatCameraConfig() {
     const pos = camera.position;
-    const target = orbitControls
-      ? orbitControls.target
-      : new THREE.Vector3(0, 0, 0);
+    const target = getLookAtTarget();
     return `camera: {
   fov: ${camera.fov.toFixed(1)},
   near: ${camera.near},
@@ -129,15 +172,57 @@ export function createStageDebugControls(params) {
 },`;
   }
 
+  /** 콘솔에 카메라 + 오브제 전체 config 출력 (복사용). 드래그 끝날 때마다 호출됨. */
+  function logConfigToConsole() {
+    const roots = getPropRoots();
+    const target = getLookAtTarget();
+    const cameraBlock = `  camera: {
+    fov: ${camera.fov.toFixed(1)},
+    near: ${camera.near},
+    far: ${camera.far.toFixed(0)},
+    position: { x: ${camera.position.x.toFixed(1)}, y: ${camera.position.y.toFixed(1)}, z: ${camera.position.z.toFixed(1)} },
+    lookAt: { x: ${target.x.toFixed(1)}, y: ${target.y.toFixed(1)}, z: ${target.z.toFixed(1)} },
+  },`;
+    const propsBlock = roots
+      .map((root, i) => formatPropConfig(root, i))
+      .join(",\n");
+    console.log(`📋 [${stageName}] config (stageConfig에 복사):`);
+    console.log(
+      `  ${stageName}: {\n${cameraBlock}\n    props: [\n${propsBlock}\n    ],\n  },`,
+    );
+  }
+
+  const DEBUG_KEYS = [
+    "c",
+    "C",
+    "g",
+    "G",
+    "s",
+    "S",
+    "t",
+    "T",
+    "r",
+    "R",
+    "e",
+    "E",
+  ];
+  const useCapture = true;
+
   onKeyDown = (e) => {
+    const key = e.key;
+    if (!DEBUG_KEYS.includes(key)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation?.(); // 다른 리스너 막기
+
     const roots = getPropRoots();
 
-    if (e.key === "c" || e.key === "C") {
+    if (key === "c" || key === "C") {
       console.log(`📋 [${stageName}] 카메라 설정 (stageConfig에 복사):`);
       console.log(formatCameraConfig());
     }
 
-    if (e.key === "g" || e.key === "G") {
+    if (key === "g" || key === "G") {
       const obj = transformControls?.object;
       if (obj) {
         const idx = roots.indexOf(obj);
@@ -150,36 +235,26 @@ export function createStageDebugControls(params) {
       }
     }
 
-    if (e.key === "s" || e.key === "S") {
-      const target = orbitControls
-        ? orbitControls.target
-        : new THREE.Vector3(0, 0, 0);
-      const cameraBlock = `  camera: {
-    fov: ${camera.fov.toFixed(1)},
-    near: ${camera.near},
-    far: ${camera.far.toFixed(0)},
-    position: { x: ${camera.position.x.toFixed(1)}, y: ${camera.position.y.toFixed(1)}, z: ${camera.position.z.toFixed(1)} },
-    lookAt: { x: ${target.x.toFixed(1)}, y: ${target.y.toFixed(1)}, z: ${target.z.toFixed(1)} },
-  },`;
-      const propsBlock = roots
-        .map((root, i) => formatPropConfig(root, i))
-        .join(",\n");
-      console.log(`📋 [${stageName}] 전체 config (stageConfig에 덮어쓰기):`);
-      console.log(
-        `  ${stageName}: {\n${cameraBlock}\n    props: [\n${propsBlock}\n    ],\n  },`,
-      );
-    }
+    if (key === "s" || key === "S") logConfigToConsole();
 
-    if (transformControls && ["1", "2", "3"].includes(e.key)) {
-      const modes = { 1: "translate", 2: "rotate", 3: "scale" };
-      transformControls.setMode(modes[e.key]);
+    // T=이동, R=회전, E=크기 (1,2,3은 main에서 스테이지 전환용)
+    if (transformControls) {
+      if (key === "t" || key === "T") transformControls.setMode("translate");
+      if (key === "r" || key === "R") transformControls.setMode("rotate");
+      if (key === "e" || key === "E") transformControls.setMode("scale");
     }
   };
-  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keydown", onKeyDown, useCapture);
+  domElement.setAttribute("tabindex", "0");
+  domElement.style.outline = "none";
+  domElement.focus(); // 포커스를 캔버스로 두어 키가 페이지로 가도록
 
   console.log(
-    `🎮 [${stageName}] 디버그 컨트롤: 드래그=카메라, 오브제 끌기=이동, 클릭=축 조정 | C/G/S=config 출력`,
+    `🎮 [${stageName}] 오브제/축 드래그 끝날 때마다 콘솔에 config 출력 → 복사해서 stageConfig에 붙여넣기`,
   );
+  if (useFixedCamera) {
+    console.log(`📷 [${stageName}] 카메라 고정 모드 (config.lookAt 적용)`);
+  }
 
   return {
     getCamera: () => camera,
@@ -202,6 +277,7 @@ export function createStageDebugControls(params) {
       });
       dragControls.addEventListener("dragend", () => {
         if (orbitControls) orbitControls.enabled = true;
+        logConfigToConsole(); // 오브제 드래그 끝날 때마다 콘솔 출력
       });
     },
 
@@ -215,10 +291,15 @@ export function createStageDebugControls(params) {
 
     update(_delta) {
       if (orbitControls) orbitControls.update();
+      if (useFixedCamera) camera.lookAt(fixedLookAt);
     },
 
     dispose() {
-      window.removeEventListener("keydown", onKeyDown);
+      if (orbitLogTimeout) {
+        clearTimeout(orbitLogTimeout);
+        orbitLogTimeout = null;
+      }
+      window.removeEventListener("keydown", onKeyDown, useCapture);
       domElement.removeEventListener("pointerdown", onPointerDown);
       domElement.removeEventListener("pointermove", onPointerMove);
       if (transformControls) {
