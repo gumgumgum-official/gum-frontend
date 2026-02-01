@@ -18,6 +18,7 @@
  * @property {number[]} [allowedStages] - 허용 Stage 목록 (예: [2], [3,4,5,6])
  * @property {number} [initialStage] - 시작 Stage
  * @property {boolean} [enableKeyboardSwitch] - 키보드 2~6 전환 활성화
+ * @property {function(string, Error?): void} [onError] - 에러 시 사용자 피드백용 콜백 (메시지, 원본 에러)
  */
 
 /**

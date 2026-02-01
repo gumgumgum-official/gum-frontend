@@ -46,6 +46,7 @@ npm run dev
 | `/dev` | DevPage | 2, 3, 4, 5, 6 | ✅ | 개발용, Stage 2~6 테스트 |
 | `/beam` | BeamPage | 2 | ❌ | 빔 프로젝터 전용 |
 | `/kiosk` | KioskPage | 3, 4, 5, 6 | ❌ | 체험 존, 순차 진행 |
+| `/memory-test` | MemoryTestPage | 2~6 | ❌ | 메모리 누수 테스트 |
 | `*` | - | - | - | 404 시 `/dev`로 리다이렉트 |
 
 ### 페이지별 상세
@@ -145,6 +146,20 @@ npm run format:check
 npm run format
 ```
 
+### 메모리 누수 테스트
+
+ThreeCanvas 마운트/언마운트 반복 후 heap 변화를 확인합니다.
+
+1. **Chrome**을 아래 플래그로 실행 (heap 측정용):
+   ```text
+   chrome.exe --enable-precise-memory-info --expose-gc
+   ```
+2. `npm run dev` 후 `http://localhost:5173/memory-test` 접속
+3. **"메모리 누수 테스트 시작"** 버튼 클릭
+4. 10회 마운트/언마운트 후 초기 대비 heap 증가량 확인
+   - 누수 없음: 증가량이 일정 범위 내 (±수 MB 이내, GC 영향)
+   - 누수 의심: 매 사이클마다 지속적으로 증가
+
 ## 프로젝트 구조
 
 ```
@@ -155,9 +170,10 @@ src/
 ├── components/       # React 컴포넌트
 │   └── ThreeCanvas.jsx  # Three.js 캔버스 래퍼
 ├── pages/            # 라우트별 페이지
-│   ├── BeamPage.jsx     # /beam (Stage 2)
-│   ├── KioskPage.jsx    # /kiosk (Stage 3~6)
-│   └── DevPage.jsx      # /dev (개발용, 키보드 전환)
+│   ├── BeamPage.jsx        # /beam (Stage 2)
+│   ├── KioskPage.jsx       # /kiosk (Stage 3~6)
+│   ├── DevPage.jsx         # /dev (개발용, 키보드 전환)
+│   └── MemoryTestPage.jsx  # /memory-test (메모리 누수 테스트)
 ├── three/            # Three.js 초기화
 │   └── initThreeApp.js  # Stage 2~6 로직
 ├── stages/           # 스테이지별 장면 (Stage2.js ~ Stage6.js)

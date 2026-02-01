@@ -24,3 +24,21 @@ body {
   outline: none;
   display: block;
 }
+
+.three-canvas-error {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1a1a;
+  color: #f0f0f0;
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.three-canvas-error p {
+  max-width: 28rem;
+}

@@ -18,13 +18,6 @@ export const STAGE2_CONFIG = {
   background: {
     color: 0xb0e0e6,
   },
-  sea: {
-    size: { width: 10000, height: 10000 },
-    color: 0xb0e0e6,
-    roughness: 0.3,
-    metalness: 0.2,
-    position: { x: 0, y: 0, z: 0 },
-  },
   model: {
     path: "/models/background1.glb",
     position: { x: 0, y: 0, z: 0 },

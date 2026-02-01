@@ -34,8 +34,14 @@ export function initThreeApp(canvasElement, options = {}) {
     allowedStages = [],
     initialStage,
     enableKeyboardSwitch = false,
+    onError,
   } = options;
   const safeAllowedStages = Array.isArray(allowedStages) ? allowedStages : [];
+
+  const reportError = (userMessage, err) => {
+    console.error(userMessage, err ?? "");
+    onError?.(userMessage, err);
+  };
 
   if (!canvasElement) {
     console.warn("[initThreeApp] canvas element가 없습니다.");
@@ -54,7 +60,10 @@ export function initThreeApp(canvasElement, options = {}) {
       antialias: APP_CONFIG?.renderer?.antialias ?? true,
     });
   } catch (err) {
-    console.error("[initThreeApp] WebGL 초기화 실패:", err);
+    reportError(
+      "WebGL를 사용할 수 없습니다. 브라우저나 기기를 확인해 주세요.",
+      err,
+    );
     return { dispose: noopDispose };
   }
 
@@ -104,7 +113,7 @@ export function initThreeApp(canvasElement, options = {}) {
       try {
         stageManager.registerStage(stageNum, factory());
       } catch (err) {
-        console.error(`[initThreeApp] Stage ${stageNum} 생성 실패:`, err);
+        reportError(`Stage ${stageNum}을 불러오는 데 실패했습니다.`, err);
       }
     }
   });
@@ -118,7 +127,10 @@ export function initThreeApp(canvasElement, options = {}) {
     try {
       stageManager.switchToStage(safeInitialStage);
     } catch (err) {
-      console.error(`[initThreeApp] Stage ${safeInitialStage} 전환 실패:`, err);
+      reportError(
+        `화면을 전환하는 데 실패했습니다. (Stage ${safeInitialStage})`,
+        err,
+      );
     }
   }
 

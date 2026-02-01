@@ -12,7 +12,7 @@ export function Stage5() {
   return {
     camera: null,
 
-    setup(scene) {
+    setup(scene, _renderer) {
       this.camera = new THREE.PerspectiveCamera(
         config.camera.fov,
         window.innerWidth / window.innerHeight,
