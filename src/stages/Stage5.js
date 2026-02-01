@@ -39,7 +39,13 @@ export function Stage5() {
       objects.forEach((obj) => {
         scene.remove(obj);
         if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
       });
       objects.length = 0;
       scene.background = null;

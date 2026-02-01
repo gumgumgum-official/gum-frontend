@@ -30,14 +30,27 @@ export function Stage2() {
       );
       scene.background = new THREE.Color(config.background.color);
 
+      const cam = config.camera;
       this.camera = new THREE.PerspectiveCamera(
-        45,
+        cam.fov ?? 45,
         window.innerWidth / window.innerHeight,
-        0.1,
-        10000,
+        cam.near ?? 0.1,
+        cam.far ?? 10000,
       );
-      this.camera.position.set(100, 50, 100);
-      this.camera.lookAt(0, 0, 0);
+      this.camera.position.set(
+        cam.position?.x ?? 0,
+        cam.position?.y ?? 0,
+        cam.position?.z ?? 0,
+      );
+      if (cam.lookAt) {
+        this.camera.lookAt(
+          cam.lookAt.x ?? 0,
+          cam.lookAt.y ?? 0,
+          cam.lookAt.z ?? 0,
+        );
+      } else {
+        this.camera.lookAt(0, 0, 0);
+      }
 
       debugControls = createStageDebugControls({
         scene,
@@ -65,7 +78,7 @@ export function Stage2() {
             center.y + maxDim * 0.8,
             center.z + maxDim * 1.5,
           );
-          this.camera.far = Math.max(1000, maxDim * 10);
+          this.camera.far = Math.max(config.camera.far ?? 10000, maxDim * 10);
           this.camera.updateProjectionMatrix();
           debugControls.setOrbitTarget(center);
 

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { initThreeApp } from "../three/initThreeApp.js";
 
 /**
@@ -6,7 +6,7 @@ import { initThreeApp } from "../three/initThreeApp.js";
  * @param {Object} props
  * @param {number[]} props.allowedStages - 허용 Stage 목록
  * @param {number} props.initialStage - 시작 Stage
- * @param {boolean} [props.enableKeyboardSwitch] - 키보드 1~6 전환 (개발용)
+ * @param {boolean} [props.enableKeyboardSwitch] - 키보드 2~6 전환 (개발용)
  */
 export function ThreeCanvas({
   allowedStages,
@@ -16,12 +16,19 @@ export function ThreeCanvas({
   const canvasRef = useRef(null);
   const disposeRef = useRef(null);
 
+  // 배열 참조가 매번 바뀌어도 내용이 같으면 재초기화 방지
+  const stagesKey = useMemo(
+    () => JSON.stringify(allowedStages ?? []),
+    [allowedStages],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const stages = JSON.parse(stagesKey);
     const app = initThreeApp(canvas, {
-      allowedStages,
+      allowedStages: stages,
       initialStage,
       enableKeyboardSwitch,
     });
@@ -33,7 +40,7 @@ export function ThreeCanvas({
         disposeRef.current = null;
       }
     };
-  }, [allowedStages, initialStage, enableKeyboardSwitch]);
+  }, [stagesKey, initialStage, enableKeyboardSwitch]);
 
   return <canvas ref={canvasRef} className="three-canvas" />;
 }
