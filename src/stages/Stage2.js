@@ -2,15 +2,16 @@
  * Stage2: 배경 GLB + 오브제(GLB) 로드, 디버그 컨트롤로 카메라/오브제 조정
  * - 로드: assetLoaders (GLB)
  * - 입력/디버그: stageDebugControls (Orbit, Transform, Drag, C/G/S)
+ * @returns {import("../types.js").StageInstance}
  */
 
 import * as THREE from "three";
 import { getGLBLoader } from "../utils/assetLoaders.js";
 import { createStageDebugControls } from "../utils/stageDebugControls.js";
-import { STAGE_CONFIG } from "../config/stageConfig.js";
+import { STAGE2_CONFIG } from "../config/stages/stage2.js";
 
 export function Stage2() {
-  const config = STAGE_CONFIG.stage2;
+  const config = STAGE2_CONFIG;
   const glbLoader = getGLBLoader();
 
   const objects = [];
@@ -30,14 +31,27 @@ export function Stage2() {
       );
       scene.background = new THREE.Color(config.background.color);
 
+      const cam = config.camera;
       this.camera = new THREE.PerspectiveCamera(
-        45,
+        cam.fov ?? 45,
         window.innerWidth / window.innerHeight,
-        0.1,
-        10000,
+        cam.near ?? 0.1,
+        cam.far ?? 10000,
       );
-      this.camera.position.set(100, 50, 100);
-      this.camera.lookAt(0, 0, 0);
+      this.camera.position.set(
+        cam.position?.x ?? 0,
+        cam.position?.y ?? 0,
+        cam.position?.z ?? 0,
+      );
+      if (cam.lookAt) {
+        this.camera.lookAt(
+          cam.lookAt.x ?? 0,
+          cam.lookAt.y ?? 0,
+          cam.lookAt.z ?? 0,
+        );
+      } else {
+        this.camera.lookAt(0, 0, 0);
+      }
 
       debugControls = createStageDebugControls({
         scene,
@@ -65,7 +79,7 @@ export function Stage2() {
             center.y + maxDim * 0.8,
             center.z + maxDim * 1.5,
           );
-          this.camera.far = Math.max(1000, maxDim * 10);
+          this.camera.far = Math.max(config.camera.far ?? 10000, maxDim * 10);
           this.camera.updateProjectionMatrix();
           debugControls.setOrbitTarget(center);
 
@@ -145,11 +159,11 @@ export function Stage2() {
 
 /**
  * config.props 배열 기준으로 GLB 로드 후 scene에 추가
- * @param {ReturnType<getGLBLoader>} loader
- * @param {Array<{ path: string, position?, rotation?, scale? }>} propsConfig
- * @param {THREE.Scene} scene
- * @param {THREE.Object3D[]} objects - dispose용
- * @param {THREE.Object3D[]} propRoots - 선택/드래그용
+ * @param {{ load: function(string, { onLoad: function, onError?: function }): void }} loader - GLB 로더
+ * @param {import("../types.js").Stage2PropConfig[]} propsConfig
+ * @param {import("three").Scene} scene
+ * @param {import("three").Object3D[]} objects - dispose용
+ * @param {import("three").Object3D[]} propRoots - 선택/드래그용
  * @param {() => void} onAllDone
  */
 function loadPropsFromConfig(
