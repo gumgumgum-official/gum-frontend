@@ -225,6 +225,12 @@ export function StageX() {
 }
 ```
 
+### JSDoc 타입 (jsconfig.json)
+
+- `jsconfig.json`에 `checkJs: true` 설정 — JSDoc 기반 타입 검사
+- `src/types.js`에 Stage, config, initThreeApp 등 공통 타입 정의
+- VS Code 등 IDE에서 자동완성 및 타입 체크 지원
+
 ### 설정 값 수정하기
 
 모든 하드코딩된 값은 `src/config/` 폴더의 설정 파일에 있습니다.

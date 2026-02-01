@@ -1,3 +1,7 @@
+/**
+ * Stage4: 털어버리자 (콘서트장/파티장, Confetti)
+ * @returns {import("../types.js").StageInstance}
+ */
 import * as THREE from "three";
 import { STAGE4_CONFIG } from "../config/stages/stage4.js";
 

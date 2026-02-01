@@ -2,6 +2,7 @@
  * Stage2: 배경 GLB + 오브제(GLB) 로드, 디버그 컨트롤로 카메라/오브제 조정
  * - 로드: assetLoaders (GLB)
  * - 입력/디버그: stageDebugControls (Orbit, Transform, Drag, C/G/S)
+ * @returns {import("../types.js").StageInstance}
  */
 
 import * as THREE from "three";
@@ -158,11 +159,11 @@ export function Stage2() {
 
 /**
  * config.props 배열 기준으로 GLB 로드 후 scene에 추가
- * @param {ReturnType<getGLBLoader>} loader
- * @param {Array<{ path: string, position?, rotation?, scale? }>} propsConfig
- * @param {THREE.Scene} scene
- * @param {THREE.Object3D[]} objects - dispose용
- * @param {THREE.Object3D[]} propRoots - 선택/드래그용
+ * @param {{ load: function(string, { onLoad: function, onError?: function }): void }} loader - GLB 로더
+ * @param {import("../types.js").Stage2PropConfig[]} propsConfig
+ * @param {import("three").Scene} scene
+ * @param {import("three").Object3D[]} objects - dispose용
+ * @param {import("three").Object3D[]} propRoots - 선택/드래그용
  * @param {() => void} onAllDone
  */
 function loadPropsFromConfig(

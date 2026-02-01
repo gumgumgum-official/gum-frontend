@@ -1,5 +1,6 @@
 // Phase 4: 털어버리자 (콘서트장/파티장, Confetti)
 
+/** @type {import("../types.js").StageBasicConfig} */
 export const STAGE4_CONFIG = {
   camera: {
     fov: 60,

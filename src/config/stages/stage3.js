@@ -1,5 +1,6 @@
 // Phase 3: 부셔버리자 (밝은 초원, 스트레스 해소)
 
+/** @type {import("../types.js").StageBasicConfig} */
 export const STAGE3_CONFIG = {
   camera: {
     fov: 60,

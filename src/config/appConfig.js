@@ -1,5 +1,14 @@
 // 앱 전체 설정값
 
+/**
+ * @typedef {Object} AppConfig
+ * @property {number} initialStage
+ * @property {{antialias: boolean, pixelRatio: number}} renderer
+ * @property {Object} lights
+ * @property {string} canvasSelector
+ */
+
+/** @type {AppConfig} */
 export const APP_CONFIG = {
   // 초기 시작 스테이지
   initialStage: 2,

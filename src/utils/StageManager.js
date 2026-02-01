@@ -1,5 +1,11 @@
 // ----- 단계 전환 관리
 
+/**
+ * Stage 전환을 관리하는 StageManager 생성
+ * @param {import("three").WebGLRenderer} renderer
+ * @param {import("three").Scene} scene
+ * @returns {{ registerStage: function, switchToStage: function, update: function, getCurrentCamera: function, getCurrentStage: function }}
+ */
 export function createStageManager(renderer, scene) {
   let currentStage = null;
   const stages = new Map();

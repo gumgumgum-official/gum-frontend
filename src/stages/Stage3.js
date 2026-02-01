@@ -1,3 +1,7 @@
+/**
+ * Stage3: 부셔버리자 (밝은 초원, 스트레스 해소)
+ * @returns {import("../types.js").StageInstance}
+ */
 import * as THREE from "three";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 

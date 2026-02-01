@@ -1,3 +1,7 @@
+/**
+ * Stage6: 헤어짐 (공항 배경, 배웅)
+ * @returns {import("../types.js").StageInstance}
+ */
 import * as THREE from "three";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 

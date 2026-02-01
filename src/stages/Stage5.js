@@ -1,3 +1,7 @@
+/**
+ * Stage5: 난 너의 편 (따뜻한 햇살 광장, 포옹)
+ * @returns {import("../types.js").StageInstance}
+ */
 import * as THREE from "three";
 import { STAGE5_CONFIG } from "../config/stages/stage5.js";
 

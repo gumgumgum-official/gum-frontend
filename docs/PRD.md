@@ -8,13 +8,13 @@
 
 ## 2. 기술 스택 (Technical Stack)
 
-| 구분         | 기술 스택                        | 비고                               |
-| :----------- | :------------------------------- | :--------------------------------- |
-| **Core**     | Three.js, Cannon-es              | 3D 렌더링 및 물리 엔진 연산        |
-| **Frontend** | React (권장) or Vanilla JS, Vite | 빠른 빌드 및 모듈 관리             |
-| **Quality**  | ESLint, Prettier                 | 코드 컨벤션 유지                   |
-| **Workflow** | Husky, lint-staged               | Git 커밋 전 코드 검증              |
-| **Hardware** | iPad, Arcade Button (Enter)      | 입국 신고서 입력 및 물리 버튼 연동 |
+| 구분         | 기술 스택                              | 비고                               |
+| :----------- | :------------------------------------- | :--------------------------------- |
+| **Core**     | Three.js, Cannon-es                    | 3D 렌더링 및 물리 엔진 연산        |
+| **Frontend** | React, React Router, Vite              | 라우팅 및 빌드 관리                |
+| **Quality**  | ESLint, Prettier, JSDoc (jsconfig)     | 코드 컨벤션 및 타입 검사           |
+| **Workflow** | Husky, lint-staged                     | Git 커밋 전 코드 검증              |
+| **Hardware** | Beam Projector, Computer(Kiosk), Enter | Phase 2(빔), Phase 3~6(컴퓨터)     |
 
 ## 3. 사용자 여정 및 상세 요구사항 (User Journey & Requirements)
 
@@ -33,7 +33,8 @@
 - **UI/UX**: 쿼터뷰(CCTV 뷰) 기반의 둥근 섬 형태 배경.
 - **기능**: 입력받은 고민을 3D 텍스트 객체로 변환하여 실시간 투하.
 - **요구사항**:
-  - `Three.js Orthographic Camera`를 활용한 동물의 숲 스타일 뷰 구현.
+  - `Three.js PerspectiveCamera`를 활용한 둥근 섬 배경 뷰 구현.
+  - GLB 모델 기반 배경/오브제 로드, config(`stage2.js`)로 카메라·fog·배경 설정.
   - 껌딱지 캐릭터들의 자율 AI 모션(걷기, 상호작용) 배치.
   - 누적된 고민 텍스트들이 섬 위에 쌓이는 물리 로직 구현.
 
@@ -73,12 +74,13 @@
 ## 4. 비기능적 요구사항 (Non-Functional)
 
 - **Performance**: 다수의 물리 객체 존재 시 60fps 유지 (Instanced Mesh 활용).
-- **Extensibility**: 각 Phase를 Scene 단위로 관리하여 유지보수 용이성 확보.
+- **Extensibility**: Stage 단위 관리, stage별 config 분리(`config/stages/stageN.js`), JSDoc 타입 정의(`types.js`).
 - **Real-time**: 태블릿 입력 데이터가 빔 프로젝트 서버로 지연 없이 전달될 것.
 
 ## 5. 프로젝트 범위 (Scope)
 
 - **본 프로젝트(gum-frontend)**: Phase 2 ~ Phase 6 (Stage 2 ~ Stage 6)
+- **라우트**: `/beam`(Stage 2), `/kiosk`(Stage 3~6 순차), `/dev`(Stage 2~6 키보드 전환, 개발용)
 - **별도 프로젝트**: Phase 1 (입국 신고서 태블릿 UI) — `POST /api/worry` 등으로 연동
 
 ---

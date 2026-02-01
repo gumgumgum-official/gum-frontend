@@ -25,12 +25,9 @@ const noopDispose = () => {};
 
 /**
  * Three.js 앱을 canvas에 초기화합니다.
- * @param {HTMLCanvasElement} canvasElement
- * @param {Object} options
- * @param {number[]} options.allowedStages - 허용 Stage 목록 (예: [2], [3,4,5,6])
- * @param {number} options.initialStage - 시작 Stage
- * @param {boolean} [options.enableKeyboardSwitch=false] - 키보드 2~6 전환 활성화
- * @returns {{ dispose: function }} dispose()로 리소스 정리
+ * @param {HTMLCanvasElement} canvasElement - Three.js가 렌더링할 canvas 요소
+ * @param {import("../types.js").InitThreeAppOptions} [options]
+ * @returns {import("../types.js").InitThreeAppReturn}
  */
 export function initThreeApp(canvasElement, options = {}) {
   const {
