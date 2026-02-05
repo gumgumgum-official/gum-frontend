@@ -9,7 +9,6 @@ import { initThreeApp } from "../three/initThreeApp.js";
  * @param {number} props.initialStage - 시작 Stage
  * @param {boolean} [props.enableKeyboardSwitch] - 키보드 2~6 전환 (개발용)
  * @param {function(string, Error?): void} [props.onError] - 에러 시 호출 (미전달 시 화면에 메시지 표시)
- * @returns {JSX.Element}
  */
 export function ThreeCanvas({
   allowedStages,

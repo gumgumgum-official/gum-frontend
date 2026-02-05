@@ -13,7 +13,7 @@ export const STAGE3_CONFIG = {
     color: 0x98d8aa, // 밝은 초원
   },
   model: {
-    path: "/models/part3_2.glb",
+    path: "/models/stage3/part3_2.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,

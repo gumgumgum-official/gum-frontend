@@ -13,7 +13,7 @@ export const STAGE6_CONFIG = {
     color: 0xdfe6e9, // 공항 하이앵글
   },
   model: {
-    path: "/models/part6_1.glb",
+    path: "/models/stage6/part6_1.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
