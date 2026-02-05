@@ -1,6 +1,6 @@
 // Phase 5: 난 너의 편 (따뜻한 햇살 광장, 포옹)
 
-/** @type {import("../types.js").StageBasicConfig} */
+/** @type {import("../../types.js").StageBasicConfig} */
 export const STAGE5_CONFIG = {
   camera: {
     fov: 60,

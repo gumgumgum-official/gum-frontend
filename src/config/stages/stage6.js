@@ -1,6 +1,6 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-/** @type {import("../types.js").StageBasicConfig} */
+/** @type {import("../../types.js").StageBasicConfig} */
 export const STAGE6_CONFIG = {
   camera: {
     fov: 60,
