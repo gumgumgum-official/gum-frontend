@@ -3,16 +3,21 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
+import { getGLBLoader } from "../utils/assetLoaders.js";
+import { createStageDebugControls } from "../utils/stageDebugControls.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 
 export function Stage6() {
   const objects = [];
   const config = STAGE6_CONFIG;
+  const glbLoader = getGLBLoader();
+  let debugControls = null;
 
   return {
     camera: null,
 
-    setup(scene, _renderer) {
+    setup(scene, renderer) {
+      const canvas = renderer.domElement;
       this.camera = new THREE.PerspectiveCamera(
         config.camera.fov,
         window.innerWidth / window.innerHeight,
@@ -24,22 +29,84 @@ export function Stage6() {
         config.camera.position.y,
         config.camera.position.z,
       );
-      this.camera.lookAt(
-        config.camera.lookAt.x,
-        config.camera.lookAt.y,
-        config.camera.lookAt.z,
-      );
+      if (config.camera.lookAt) {
+        this.camera.lookAt(
+          config.camera.lookAt.x,
+          config.camera.lookAt.y,
+          config.camera.lookAt.z,
+        );
+      } else {
+        this.camera.lookAt(0, 0, 0);
+      }
 
       scene.background = new THREE.Color(config.background.color);
+
+      debugControls = createStageDebugControls({
+        scene,
+        camera: this.camera,
+        domElement: canvas,
+        getPropRoots: () => [], // Stage6에는 props 없음
+        getPropPath: () => "",
+        options: {
+          stageName: "stage6",
+          getInitialCameraConfig: () => config.camera,
+        },
+      });
+
+      // 배경 GLB 로드
+      glbLoader.load(config.model.path, {
+        onLoad: (gltf) => {
+          const model = gltf.scene;
+          const box = new THREE.Box3().setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+
+          model.position.set(
+            config.model.position?.x ?? 0,
+            config.model.position?.y ?? 0,
+            config.model.position?.z ?? 0,
+          );
+
+          model.traverse((child) => {
+            if (child.isMesh) {
+              if (config.model.castShadow !== undefined) {
+                child.castShadow = config.model.castShadow;
+              }
+              if (config.model.receiveShadow !== undefined) {
+                child.receiveShadow = config.model.receiveShadow;
+              }
+              child.raycast = () => {}; // 배경은 클릭 제외
+            }
+          });
+
+          objects.push(model);
+          scene.add(model);
+          debugControls.setOrbitTarget(center);
+          console.log("✅ Stage6 모델 로드 완료");
+        },
+        onProgress: (xhr) => {
+          if (xhr.total > 0) {
+            console.log(
+              `Stage6 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
+            );
+          }
+        },
+        onError: (err) => console.error("❌ Stage6 배경 로드 에러:", err),
+      });
 
       console.log("✅ Stage6 생성 완료");
     },
 
-    update(_delta) {
+    update(delta) {
+      if (debugControls) debugControls.update(delta);
       // TODO: 배웅 애니메이션, 말풍선 호버
     },
 
     cleanup(scene) {
+      if (debugControls) {
+        debugControls.dispose();
+        debugControls = null;
+      }
+
       objects.forEach((obj) => {
         scene.remove(obj);
         if (obj.geometry) obj.geometry.dispose();
