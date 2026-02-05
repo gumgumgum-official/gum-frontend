@@ -13,7 +13,7 @@ export const STAGE4_CONFIG = {
     color: 0x1a1a2e, // 파티장 분위기
   },
   model: {
-    path: "/models/part4_1.glb",
+    path: "/models/stage4/part4_1.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,

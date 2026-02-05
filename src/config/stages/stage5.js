@@ -13,7 +13,7 @@ export const STAGE5_CONFIG = {
     color: 0xffeaa7, // 따뜻한 햇살
   },
   model: {
-    path: "/models/parrt5_2.glb",
+    path: "/models/stage5/part5_2.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
