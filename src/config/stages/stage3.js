@@ -6,8 +6,8 @@ export const STAGE3_CONFIG = {
     fov: 60.0,
     near: 0.1,
     far: 1000,
-    position: { x: -0.4, y: 6.1, z: 17.6 },
-    lookAt: { x: 0.3, y: -0.4, z: 0.5 },
+    position: { x: -0.4, y: 6.6, z: 19.5 },
+    lookAt: { x: 0.0, y: 1.2, z: 0.0 },
   },
   background: {
     color: 0x98d8aa, // 밝은 초원
