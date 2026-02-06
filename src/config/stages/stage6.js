@@ -1,15 +1,22 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-/** @type {import("../../types.js").StageBasicConfig} */
+/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig }} */
 export const STAGE6_CONFIG = {
   camera: {
-    fov: 60,
+    fov: 60.0,
     near: 0.1,
     far: 1000,
-    position: { x: 0, y: 10, z: 15 },
-    lookAt: { x: 0, y: 0, z: 0 },
+    position: { x: 5.5, y: 4.0, z: 9.6 },
+    lookAt: { x: 2.6, y: 0.9, z: -0.9 },
   },
   background: {
     color: 0xdfe6e9, // 공항 하이앵글
+  },
+  model: {
+    path: "/models/stage6/part6_1.glb",
+    position: { x: 0, y: 0, z: 0 },
+    envMapIntensity: 1,
+    castShadow: true,
+    receiveShadow: true,
   },
 };
