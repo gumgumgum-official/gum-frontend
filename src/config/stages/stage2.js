@@ -19,7 +19,7 @@ export const STAGE2_CONFIG = {
     color: 0xb0e0e6,
   },
   model: {
-    path: "/models/background1.glb",
+    path: "/models/stage2/background1.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
