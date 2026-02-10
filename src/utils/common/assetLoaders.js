@@ -29,7 +29,7 @@ export function createGLBLoader(options = {}) {
      * GLB/GLTF 로드 (콜백)
      * @param {string} path - URL (예: '/models/xxx.glb')
      * @param {Object} callbacks
-     * @param {(gltf: GLTF) => void} callbacks.onLoad
+     * @param {(gltf: import('three/examples/jsm/loaders/GLTFLoader').GLTF) => void} callbacks.onLoad
      * @param {(xhr: ProgressEvent) => void} [callbacks.onProgress]
      * @param {(err: Error) => void} [callbacks.onError]
      */
@@ -38,7 +38,7 @@ export function createGLBLoader(options = {}) {
         path,
         (gltf) => onLoad(gltf),
         (xhr) => onProgress?.(xhr),
-        (err) => onError?.(err),
+        (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
       );
     },
 
