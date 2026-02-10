@@ -1,10 +1,12 @@
 /**
  * Stage4: 털어버리자 (콘서트장/파티장, Confetti)
+ * 마우스 흔들기 → 색종이 파티클
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
-import { getGLBLoader } from "../utils/assetLoaders.js";
-import { createStageDebugControls } from "../utils/stageDebugControls.js";
+import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
+import { createConfettiParticleSystem } from "../utils/stages/stage4/confettiParticles.js";
 import { STAGE4_CONFIG } from "../config/stages/stage4.js";
 
 export function Stage4() {
@@ -12,12 +14,17 @@ export function Stage4() {
   const config = STAGE4_CONFIG;
   const glbLoader = getGLBLoader();
   let debugControls = null;
+  let canvas = null;
+  let onConfettiMouseMove = null;
+  const confettiSystem = createConfettiParticleSystem({
+    spawnPlaneY: 6,
+  });
 
   return {
     camera: null,
 
     setup(scene, renderer) {
-      const canvas = renderer.domElement;
+      canvas = renderer.domElement;
       this.camera = new THREE.PerspectiveCamera(
         config.camera.fov,
         window.innerWidth / window.innerHeight,
@@ -38,8 +45,12 @@ export function Stage4() {
       } else {
         this.camera.lookAt(0, 0, 0);
       }
+      confettiSystem.setup(scene, this.camera);
 
       scene.background = new THREE.Color(config.background.color);
+
+      onConfettiMouseMove = (e) => confettiSystem.onMouseMove(e);
+      window.addEventListener("mousemove", onConfettiMouseMove);
 
       debugControls = createStageDebugControls({
         scene,
@@ -98,10 +109,17 @@ export function Stage4() {
 
     update(delta) {
       if (debugControls) debugControls.update(delta);
-      // TODO: Confetti 파티클, 캐릭터 댄스
+
+      confettiSystem.update(delta);
     },
 
     cleanup(scene) {
+      if (onConfettiMouseMove) {
+        window.removeEventListener("mousemove", onConfettiMouseMove);
+        onConfettiMouseMove = null;
+      }
+      confettiSystem.cleanup(scene);
+
       if (debugControls) {
         debugControls.dispose();
         debugControls = null;
