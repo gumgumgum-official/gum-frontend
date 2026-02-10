@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
+import { inspectModel, inspectGLTF } from "../utils/common/modelInspector.js";
 
 export function Stage3() {
   const objects = [];
@@ -103,8 +104,26 @@ export function Stage3() {
           const box = new THREE.Box3().setFromObject(model);
           const center = box.getCenter(new THREE.Vector3());
 
-          // 배경 모델의 바운딩 박스 저장 (캐릭터 이동 범위 제한용)
-          backgroundBounds = box.clone();
+          // island 객체 찾기 (children[1])
+          const islandObject =
+            model.children.find((child) => child.name === "island") ||
+            model.children[1];
+
+          if (islandObject) {
+            // island 객체의 바운딩 박스 계산 (캐릭터 이동 범위 제한용)
+            islandObject.updateMatrixWorld(true);
+            backgroundBounds = new THREE.Box3().setFromObject(islandObject);
+
+            console.log(
+              `🏝️ Island 바운딩 박스: min=(${backgroundBounds.min.x.toFixed(2)}, ${backgroundBounds.min.y.toFixed(2)}, ${backgroundBounds.min.z.toFixed(2)}), max=(${backgroundBounds.max.x.toFixed(2)}, ${backgroundBounds.max.y.toFixed(2)}, ${backgroundBounds.max.z.toFixed(2)})`,
+            );
+          } else {
+            // island를 찾을 수 없으면 전체 모델의 바운딩 박스 사용
+            console.warn(
+              "⚠️ Island 객체를 찾을 수 없습니다. 전체 모델의 바운딩 박스를 사용합니다.",
+            );
+            backgroundBounds = box.clone();
+          }
 
           // 배경 모델의 최대 y값 계산 (위치 적용 후)
           // 모든 메시를 순회하여 실제 최대 y값 찾기
@@ -141,6 +160,9 @@ export function Stage3() {
           debugControls.setOrbitTarget(center);
           console.log("✅ Stage3 배경 모델 로드 완료");
 
+          // GLB 파일 구조 확인
+          inspectModel(model, null, "배경 모델");
+
           // 배경 모델 로드 완료 후 ilbuni 로드
           glbLoader.load("/models/stage3/ilbuni.glb", {
             onLoad: (gltf) => {
@@ -169,6 +191,9 @@ export function Stage3() {
               console.log(
                 `✅ Stage3 ilbuni 모델 로드 완료 (y: ${ilbuniYPosition.toFixed(2)})`,
               );
+
+              // ilbuni 모델 구조 확인
+              inspectGLTF(gltf, "ilbuni 모델");
             },
             onProgress: (xhr) => {
               if (xhr.total > 0) {
