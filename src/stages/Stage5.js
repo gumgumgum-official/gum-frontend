@@ -3,8 +3,8 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
-import { getGLBLoader } from "../utils/assetLoaders.js";
-import { createStageDebugControls } from "../utils/stageDebugControls.js";
+import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE5_CONFIG } from "../config/stages/stage5.js";
 
 export function Stage5() {
