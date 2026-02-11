@@ -36,7 +36,11 @@ export function Stage3() {
           config.camera.lookAt.z,
         );
       } else {
-        this.camera.lookAt(0, 0, 0);
+        this.camera.lookAt(
+          config.camera.defaultLookAt.x,
+          config.camera.defaultLookAt.y,
+          config.camera.defaultLookAt.z,
+        );
       }
 
       scene.background = new THREE.Color(config.background.color);
@@ -48,7 +52,7 @@ export function Stage3() {
         getPropRoots: () => [], // Stage3에는 props 없음
         getPropPath: () => "",
         options: {
-          stageName: "stage3",
+          stageName: config.stageName,
           getInitialCameraConfig: () => config.camera,
         },
       });
@@ -61,9 +65,9 @@ export function Stage3() {
           const center = box.getCenter(new THREE.Vector3());
 
           model.position.set(
-            config.model.position?.x ?? 0,
-            config.model.position?.y ?? 0,
-            config.model.position?.z ?? 0,
+            config.model.position.x,
+            config.model.position.y,
+            config.model.position.z,
           );
 
           model.traverse((child) => {
