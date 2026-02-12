@@ -4,7 +4,7 @@
  */
 
 import * as THREE from "three";
-import { createStageManager } from "../utils/StageManager.js";
+import { createStageManager } from "../utils/common/StageManager.js";
 import { Stage2 } from "../stages/Stage2.js";
 import { Stage3 } from "../stages/Stage3.js";
 import { Stage4 } from "../stages/Stage4.js";

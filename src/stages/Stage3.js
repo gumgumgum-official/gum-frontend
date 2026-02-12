@@ -3,15 +3,43 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
-import { getGLBLoader } from "../utils/assetLoaders.js";
-import { createStageDebugControls } from "../utils/stageDebugControls.js";
+import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
+import { inspectModel, inspectGLTF } from "../utils/common/modelInspector.js";
 
 export function Stage3() {
   const objects = [];
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
   let debugControls = null;
+  let backgroundModelMaxY = 0; // 배경 모델의 최대 y값 저장
+  let backgroundBounds = null; // 배경 모델의 바운딩 박스 저장
+  let ilbuniModel = null; // ilbuni 모델 참조
+  let ilbuniYPosition = 0; // ilbuni의 y 위치 저장
+
+  // 키보드 입력 상태
+  const keys = {
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false,
+  };
+
+  // 키보드 이벤트 핸들러
+  const handleKeyDown = (event) => {
+    if (event.key in keys) {
+      keys[event.key] = true;
+      event.preventDefault();
+    }
+  };
+
+  const handleKeyUp = (event) => {
+    if (event.key in keys) {
+      keys[event.key] = false;
+      event.preventDefault();
+    }
+  };
 
   return {
     camera: null,
@@ -41,6 +69,10 @@ export function Stage3() {
 
       scene.background = new THREE.Color(config.background.color);
 
+      // 키보드 이벤트 리스너 등록
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keyup", handleKeyUp);
+
       debugControls = createStageDebugControls({
         scene,
         camera: this.camera,
@@ -57,13 +89,58 @@ export function Stage3() {
       glbLoader.load(config.model.path, {
         onLoad: (gltf) => {
           const model = gltf.scene;
-          const box = new THREE.Box3().setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
 
+          // 먼저 위치 설정
           model.position.set(
             config.model.position?.x ?? 0,
             config.model.position?.y ?? 0,
             config.model.position?.z ?? 0,
+          );
+
+          // 변환 행렬 업데이트
+          model.updateMatrixWorld(true);
+
+          // 위치 적용 후 바운딩 박스 재계산
+          const box = new THREE.Box3().setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+
+          // island 객체 찾기 (children[1])
+          const islandObject =
+            model.children.find((child) => child.name === "island") ||
+            model.children[1];
+
+          if (islandObject) {
+            // island 객체의 바운딩 박스 계산 (캐릭터 이동 범위 제한용)
+            islandObject.updateMatrixWorld(true);
+            backgroundBounds = new THREE.Box3().setFromObject(islandObject);
+
+            console.log(
+              `🏝️ Island 바운딩 박스: min=(${backgroundBounds.min.x.toFixed(2)}, ${backgroundBounds.min.y.toFixed(2)}, ${backgroundBounds.min.z.toFixed(2)}), max=(${backgroundBounds.max.x.toFixed(2)}, ${backgroundBounds.max.y.toFixed(2)}, ${backgroundBounds.max.z.toFixed(2)})`,
+            );
+          } else {
+            // island를 찾을 수 없으면 전체 모델의 바운딩 박스 사용
+            console.warn(
+              "⚠️ Island 객체를 찾을 수 없습니다. 전체 모델의 바운딩 박스를 사용합니다.",
+            );
+            backgroundBounds = box.clone();
+          }
+
+          // 배경 모델의 최대 y값 계산 (위치 적용 후)
+          // 모든 메시를 순회하여 실제 최대 y값 찾기
+          let actualMaxY = box.max.y;
+          model.traverse((child) => {
+            if (child.isMesh && child.geometry) {
+              const meshBox = new THREE.Box3().setFromObject(child);
+              if (meshBox.max.y > actualMaxY) {
+                actualMaxY = meshBox.max.y;
+              }
+            }
+          });
+
+          backgroundModelMaxY = actualMaxY;
+
+          console.log(
+            `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), actualMaxY=${actualMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
           );
 
           model.traverse((child) => {
@@ -81,7 +158,52 @@ export function Stage3() {
           objects.push(model);
           scene.add(model);
           debugControls.setOrbitTarget(center);
-          console.log("✅ Stage3 모델 로드 완료");
+          console.log("✅ Stage3 배경 모델 로드 완료");
+
+          // GLB 파일 구조 확인
+          inspectModel(model, null, "배경 모델");
+
+          // 배경 모델 로드 완료 후 ilbuni 로드
+          glbLoader.load("/models/stage3/ilbuni.glb", {
+            onLoad: (gltf) => {
+              ilbuniModel = gltf.scene;
+
+              // ilbuni 모델의 바운딩 박스 계산
+              const ilbuniBox = new THREE.Box3().setFromObject(ilbuniModel);
+              const ilbuniMinY = ilbuniBox.min.y;
+
+              // 배경 모델 위에 서도록 y 위치 설정
+              // ilbuni의 최하단(발)이 배경 모델의 최상단에 닿도록
+              const { groundOffset } = config.ilbuni;
+              ilbuniYPosition = backgroundModelMaxY - ilbuniMinY + groundOffset;
+
+              ilbuniModel.position.set(0, ilbuniYPosition, 0);
+
+              ilbuniModel.traverse((child) => {
+                if (child.isMesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
+              });
+
+              objects.push(ilbuniModel);
+              scene.add(ilbuniModel);
+              console.log(
+                `✅ Stage3 ilbuni 모델 로드 완료 (y: ${ilbuniYPosition.toFixed(2)})`,
+              );
+
+              // ilbuni 모델 구조 확인
+              inspectGLTF(gltf, "ilbuni 모델");
+            },
+            onProgress: (xhr) => {
+              if (xhr.total > 0) {
+                console.log(
+                  `Stage3 ilbuni: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
+                );
+              }
+            },
+            onError: (err) => console.error("❌ Stage3 ilbuni 로드 에러:", err),
+          });
         },
         onProgress: (xhr) => {
           if (xhr.total > 0) {
@@ -98,10 +220,77 @@ export function Stage3() {
 
     update(delta) {
       if (debugControls) debugControls.update(delta);
-      // TODO: Cannon-es 파편화, 꽃 연출
+
+      // ilbuni 캐릭터 이동 처리: 로드 순서와 관계없이 ilbuni와 배경 바운드가 모두 준비된 경우에만 실행
+      if (ilbuniModel && backgroundBounds) {
+        const {
+          moveSpeed,
+          boundsPadding,
+          cameraOffset: camOffset,
+          cameraLerpFactor,
+          lookAtHeightOffset,
+        } = config.ilbuni;
+        const moveVector = new THREE.Vector3();
+
+        // 방향키 입력에 따른 이동 벡터 계산
+        if (keys.ArrowUp) moveVector.z -= 1;
+        if (keys.ArrowDown) moveVector.z += 1;
+        if (keys.ArrowLeft) moveVector.x -= 1;
+        if (keys.ArrowRight) moveVector.x += 1;
+
+        // 정규화하여 대각선 이동 시 속도 일정하게 유지
+        if (moveVector.length() > 0) {
+          moveVector.normalize();
+          moveVector.multiplyScalar(moveSpeed * delta);
+
+          // y 위치는 유지하고 x, z만 이동
+          let newX = ilbuniModel.position.x + moveVector.x;
+          let newZ = ilbuniModel.position.z + moveVector.z;
+
+          // 배경 모델의 바운딩 박스 범위 내로 제한 (backgroundBounds는 위 조건으로 항상 유효)
+          newX = THREE.MathUtils.clamp(
+            newX,
+            backgroundBounds.min.x + boundsPadding,
+            backgroundBounds.max.x - boundsPadding,
+          );
+          newZ = THREE.MathUtils.clamp(
+            newZ,
+            backgroundBounds.min.z + boundsPadding,
+            backgroundBounds.max.z - boundsPadding,
+          );
+
+          ilbuniModel.position.x = newX;
+          ilbuniModel.position.z = newZ;
+          ilbuniModel.position.y = ilbuniYPosition; // y 위치 고정
+
+          // 이동 방향에 따라 캐릭터 회전
+          if (moveVector.length() > 0.01) {
+            const angle = Math.atan2(moveVector.x, moveVector.z);
+            ilbuniModel.rotation.y = angle;
+          }
+        }
+
+        // 카메라가 캐릭터를 따라가도록 설정
+        const cameraOffset = new THREE.Vector3(
+          camOffset.x,
+          camOffset.y,
+          camOffset.z,
+        );
+        const targetPosition = ilbuniModel.position.clone().add(cameraOffset);
+
+        this.camera.position.lerp(targetPosition, cameraLerpFactor);
+
+        const lookAtPosition = ilbuniModel.position.clone();
+        lookAtPosition.y += lookAtHeightOffset;
+        this.camera.lookAt(lookAtPosition);
+      }
     },
 
     cleanup(scene) {
+      // 키보드 이벤트 리스너 제거
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+
       if (debugControls) {
         debugControls.dispose();
         debugControls = null;
@@ -124,6 +313,7 @@ export function Stage3() {
       });
       objects.length = 0;
       scene.background = null;
+      ilbuniModel = null;
       console.log("🧹 Stage3 정리 완료");
     },
   };
