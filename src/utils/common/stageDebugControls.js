@@ -101,6 +101,8 @@ export function createStageDebugControls(params) {
   // ---- TransformControls (축 조정)
   transformControls = new TransformControls(camera, domElement);
   transformControls.setMode("translate");
+  // TransformControls는 Object3D를 확장하므로 씬에 추가 가능 (타입 단언 필요)
+  // @ts-ignore - TransformControls extends Object3D but TypeScript types may not reflect this
   scene.add(transformControls);
   transformControls.addEventListener("dragging-changed", (e) => {
     if (orbitControls) orbitControls.enabled = !e.value;
@@ -304,6 +306,7 @@ export function createStageDebugControls(params) {
       domElement.removeEventListener("pointermove", onPointerMove);
       if (transformControls) {
         transformControls.detach();
+        // @ts-expect-error - TransformControls extends Object3D but TypeScript types may not reflect this
         scene.remove(transformControls);
         transformControls.dispose();
       }

@@ -174,8 +174,8 @@ export function Stage3() {
 
               // 배경 모델 위에 서도록 y 위치 설정
               // ilbuni의 최하단(발)이 배경 모델의 최상단에 닿도록
-              const offset = 0.2; // 여유 공간
-              ilbuniYPosition = backgroundModelMaxY - ilbuniMinY + offset;
+              const { groundOffset } = config.ilbuni;
+              ilbuniYPosition = backgroundModelMaxY - ilbuniMinY + groundOffset;
 
               ilbuniModel.position.set(0, ilbuniYPosition, 0);
 
@@ -221,9 +221,15 @@ export function Stage3() {
     update(delta) {
       if (debugControls) debugControls.update(delta);
 
-      // ilbuni 캐릭터 이동 처리
-      if (ilbuniModel) {
-        const moveSpeed = 5.0; // 이동 속도
+      // ilbuni 캐릭터 이동 처리: 로드 순서와 관계없이 ilbuni와 배경 바운드가 모두 준비된 경우에만 실행
+      if (ilbuniModel && backgroundBounds) {
+        const {
+          moveSpeed,
+          boundsPadding,
+          cameraOffset: camOffset,
+          cameraLerpFactor,
+          lookAtHeightOffset,
+        } = config.ilbuni;
         const moveVector = new THREE.Vector3();
 
         // 방향키 입력에 따른 이동 벡터 계산
@@ -241,22 +247,17 @@ export function Stage3() {
           let newX = ilbuniModel.position.x + moveVector.x;
           let newZ = ilbuniModel.position.z + moveVector.z;
 
-          // 배경 모델의 바운딩 박스 범위 내로 제한
-          if (backgroundBounds) {
-            // 캐릭터의 크기를 고려한 여유 공간 (선택사항)
-            const padding = 0.5; // 캐릭터가 가장자리에 닿지 않도록 여유 공간
-
-            newX = THREE.MathUtils.clamp(
-              newX,
-              backgroundBounds.min.x + padding,
-              backgroundBounds.max.x - padding,
-            );
-            newZ = THREE.MathUtils.clamp(
-              newZ,
-              backgroundBounds.min.z + padding,
-              backgroundBounds.max.z - padding,
-            );
-          }
+          // 배경 모델의 바운딩 박스 범위 내로 제한 (backgroundBounds는 위 조건으로 항상 유효)
+          newX = THREE.MathUtils.clamp(
+            newX,
+            backgroundBounds.min.x + boundsPadding,
+            backgroundBounds.max.x - boundsPadding,
+          );
+          newZ = THREE.MathUtils.clamp(
+            newZ,
+            backgroundBounds.min.z + boundsPadding,
+            backgroundBounds.max.z - boundsPadding,
+          );
 
           ilbuniModel.position.x = newX;
           ilbuniModel.position.z = newZ;
@@ -270,16 +271,17 @@ export function Stage3() {
         }
 
         // 카메라가 캐릭터를 따라가도록 설정
-        const cameraOffset = new THREE.Vector3(0, 3, 8); // 카메라 오프셋 (뒤에서 위로)
+        const cameraOffset = new THREE.Vector3(
+          camOffset.x,
+          camOffset.y,
+          camOffset.z,
+        );
         const targetPosition = ilbuniModel.position.clone().add(cameraOffset);
 
-        // 부드러운 카메라 이동 (lerp)
-        const lerpFactor = 0.1;
-        this.camera.position.lerp(targetPosition, lerpFactor);
+        this.camera.position.lerp(targetPosition, cameraLerpFactor);
 
-        // 카메라가 캐릭터를 바라보도록 설정
         const lookAtPosition = ilbuniModel.position.clone();
-        lookAtPosition.y += 1; // 캐릭터 머리 높이
+        lookAtPosition.y += lookAtHeightOffset;
         this.camera.lookAt(lookAtPosition);
       }
     },
