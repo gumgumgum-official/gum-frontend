@@ -29,7 +29,7 @@ const MIN_DISTANCE_BETWEEN = 5.2;
 const SPAWN_INSET_RATIO = 0.15; // 위·앞 15% 안쪽
 const SPAWN_INSET_SIDE_RATIO = 0.28; // 왼쪽·오른쪽 여유 더 줌 (튀어나오지 않게)
 const SPAWN_INSET_BOTTOM_RATIO = 0.45; // 아래(세모 부분)는 더 많이 빼서 중간·위 위주로 스폰
-const SPAWN_HEIGHT_MIN = 3; // 0키 누르면 이 높이부터 시작 (빨리 보이게)
+const SPAWN_HEIGHT_MIN = 3; // 낙하 시작 높이 하한 (빨리 보이게)
 const SPAWN_HEIGHT_MAX = 14; // 최대 시작 높이 (너무 높으면 오래 걸림)
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
 const FALL_GRAVITY_MAX = -22 * 0.15;
@@ -219,10 +219,10 @@ export function Stage2() {
         },
       });
 
-      // 키보드 0키: 애니메이션 재시작 (순차적으로·랜덤 속도로 다시 떨어뜨리기)
+      // 키보드 0키: 이미 있는 글자들만 다시 공중으로 올려서 재낙하 (디버그용)
       const handleKeyDown = (event) => {
         if (event.key === "0" || event.code === "Digit0") {
-          console.log("[Stage2] 0키: 순차·랜덤 속도로 재낙하");
+          console.log("[Stage2] 0키: 재낙하");
           const spawn = getSpawnBounds();
           const { minX, maxX, minZ, maxZ } = spawn;
           fallingTexts.forEach((ft) => {
@@ -370,12 +370,13 @@ function loadPropsFromConfig(
 }
 
 /**
- * 버킷에 있는 기존 SVG 전부 누적 로드 (진입 시 한 번)
- * 1) Storage list(sessionId) 시도 → 2) 실패/0개면 테이블 handwriting_files 에서 경로 조회
- * (Public 버킷이라도 list 권한이 없으면 0개 나올 수 있음 → 테이블 fallback)
+ * 버킷/테이블에 있는 기존 SVG 전부 로드 후, 땅에 두지 않고 공중에서 순차 낙하 시작.
+ * - 첫 프레임: 땅엔 아무것도 없음. 렌더 시작되자마자 첫 글자부터 낙하 애니메이션 시작.
+ * - Realtime 인식 시에는 handwritingRealtime에서 createFallingText(initial: false) 호출.
  */
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files"; // session_id, storage_path, created_at, client_id
+const STAGGER_MS = 90; // 첫 글자 즉시, 이후 글자는 이 간격으로 순차 스폰
 
 async function loadInitialHandwritings(
   scene,
@@ -403,11 +404,15 @@ async function loadInitialHandwritings(
     }
 
     console.log(
-      `[Stage2] 누적 로드: ${sessionId} 에서 ${pathsToLoad.length}개 SVG`,
+      `[Stage2] 누적 로드: ${sessionId} 에서 ${pathsToLoad.length}개 SVG → 공중에서 순차 낙하`,
     );
 
     const bucket = HANDWRITING_BUCKET;
-    for (const { path, id, createdAt, clientId } of pathsToLoad) {
+    for (let i = 0; i < pathsToLoad.length; i++) {
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, STAGGER_MS));
+      }
+      const { path, id, createdAt, clientId } = pathsToLoad[i];
       const { data: urlData } = supabase.storage
         .from(bucket)
         .getPublicUrl(path);
@@ -425,7 +430,7 @@ async function loadInitialHandwritings(
         scene,
         camera,
         fallingTextsArr,
-        { initial: true },
+        { initial: false },
         getIslandBounds,
       );
     }
@@ -562,7 +567,7 @@ async function createFallingText(
     }
 
     const group = new THREE.Group();
-    const scale = 0.006;
+    const scale = 0.006 * 0.75; // 현재 대비 75% 크기
     const extrudeSettings = {
       depth: 0.05,
       bevelEnabled: true,
