@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import { createStageManager } from "../utils/common/StageManager.js";
+import { createStageLoadingOverlay } from "../utils/common/StageLoadingOverlay.js";
 import { Stage2 } from "../stages/Stage2.js";
 import { Stage3 } from "../stages/Stage3.js";
 import { Stage4 } from "../stages/Stage4.js";
@@ -168,13 +169,20 @@ export function initThreeApp(canvasElement, options = {}) {
   }
   window.addEventListener("resize", handleResize);
 
-  // Keyboard (개발용, Stage 2~6)
+  // Keyboard (개발용, Stage 2~6) — 전환 시 로딩 비디오 재생
+  const loadingVideoSrc = APP_CONFIG?.stageTransition?.loadingVideoSrc;
+  const stageLoadingOverlay =
+    loadingVideoSrc != null
+      ? createStageLoadingOverlay({ videoSrc: loadingVideoSrc })
+      : null;
+
   let keydownHandler = null;
   if (enableKeyboardSwitch) {
     keydownHandler = (e) => {
       if (e.key >= "2" && e.key <= "6") {
         const num = parseInt(e.key);
         if (safeAllowedStages.includes(num)) {
+          if (stageLoadingOverlay) stageLoadingOverlay.show();
           stageManager.switchToStage(num);
         }
       }
@@ -184,6 +192,11 @@ export function initThreeApp(canvasElement, options = {}) {
 
   return {
     dispose() {
+      try {
+        stageLoadingOverlay?.hide();
+      } catch (err) {
+        console.error("[initThreeApp] loading overlay hide 오류:", err);
+      }
       try {
         if (animationId !== null) {
           cancelAnimationFrame(animationId);
