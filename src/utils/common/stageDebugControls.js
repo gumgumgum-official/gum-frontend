@@ -195,6 +195,9 @@ export function createStageDebugControls(params) {
     console.log(
       `  ${stageName}: {\n${cameraBlock}\n    props: [\n${propsBlock}\n    ],\n  },`,
     );
+    console.log(
+      `💡 position=시점(맨꼭대기/측면 등), lookAt=바라보는 점(보통 0,0,0 고정)`,
+    );
   }
 
   const DEBUG_KEYS = [

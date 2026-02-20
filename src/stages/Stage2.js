@@ -23,13 +23,13 @@ const ISLAND_BOUNDS = {
   minZ: -3.21,
   maxZ: 6.89,
 };
-const GROUND_Y = 0.5;
+const GROUND_Y = 0.7;
 const MIN_DISTANCE_BETWEEN = 0.75;
 const SPAWN_INSET_RATIO = 0.15; // 위·앞 15% 안쪽
 const SPAWN_INSET_SIDE_RATIO = 0.28; // 왼쪽·오른쪽 여유 더 줌 (튀어나오지 않게)
 const SPAWN_INSET_BOTTOM_RATIO = 0.45; // 아래(세모 부분)는 더 많이 빼서 중간·위 위주로 스폰
-const SPAWN_HEIGHT_MIN = 12; // 순차 낙하: 시작 높이 최소
-const SPAWN_HEIGHT_MAX = 42; // 순차 낙하: 시작 높이 최대 (너무 높으면 한참 뒤에 떨어짐)
+const SPAWN_HEIGHT_MIN = 3; // 0키 누르면 이 높이부터 시작 (빨리 보이게)
+const SPAWN_HEIGHT_MAX = 14; // 최대 시작 높이 (너무 높으면 오래 걸림)
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
 const FALL_GRAVITY_MAX = -22 * 0.15;
 const FALL_INITIAL_VY_MAX = -6 * 0.15;
@@ -581,7 +581,7 @@ async function createFallingText(
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.scale.set(scale, -scale, 1);
+      mesh.scale.set(scale, scale, 1);
       group.add(mesh);
       meshes.push(mesh);
     });
@@ -602,6 +602,10 @@ async function createFallingText(
 
     group.position.set(startX, startY, startZ);
     group.rotation.set(-Math.PI / 2, 0, 0);
+
+    if (initial) {
+      setReadableRotationTowardCamera(group, camera, GROUND_Y);
+    }
 
     const speedFactor = 0.25 + Math.random() * 0.75;
     const gravity = FALL_GRAVITY_MAX * speedFactor;
@@ -670,7 +674,9 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
   }
 }
 
-/** 착지 시 글자 정면이 카메라(position x:-0.8, y:13.3, z:21.1 등)를 향하도록 회전 */
+/**
+ * 착지/누적 시 정면이 카메라를 보게: 메시의 읽는 면(+Z)이 카메라 방향을 정확히 보도록.
+ */
 function setReadableRotationTowardCamera(group, camera, groundY) {
   const dir = new THREE.Vector3(
     camera.position.x - group.position.x,
@@ -680,7 +686,8 @@ function setReadableRotationTowardCamera(group, camera, groundY) {
   const len = dir.length();
   if (len < 1e-6) return;
   dir.normalize();
-  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
 }
 
 /**
