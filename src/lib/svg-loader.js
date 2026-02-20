@@ -24,6 +24,9 @@ export async function fetchSVG(url) {
  * @param {string} svgString
  * @returns {THREE.Shape[]}
  */
+/**
+ * SVG Y축은 보통 아래가 +. Three.js는 위가 +. Y 뒤집어서 똑바로 읽히게.
+ */
 export function parseSVGToShapes(svgString) {
   const loader = new SVGLoader();
   const svgData = loader.parse(svgString);
@@ -31,7 +34,9 @@ export function parseSVGToShapes(svgString) {
 
   svgData.paths.forEach((path) => {
     path.subPaths.forEach((subPath) => {
-      const shape = new THREE.Shape(subPath.getPoints());
+      const points = subPath.getPoints();
+      const flipped = points.map((p) => new THREE.Vector2(p.x, -p.y));
+      const shape = new THREE.Shape(flipped);
       shapes.push(shape);
     });
   });
