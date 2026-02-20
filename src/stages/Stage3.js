@@ -16,8 +16,8 @@ import { getSessionId } from "../lib/session.js";
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
 
-/** Stage2 대비 2배 크기 (Stage2: 0.006*0.75 = 0.0045 → 2x = 0.009) */
-const STAGE3_LETTER_SCALE = 0.006 * 0.75 * 2;
+/** Stage2 대비 4배 크기 (글자 일부도 크게 보이도록) */
+const STAGE3_LETTER_SCALE = 0.006 * 0.75 * 4;
 const STAGE3_SPAWN_HEIGHT = 5;
 const STAGE3_GRAVITY = -22 * 0.15;
 const STAGE3_INITIAL_VY = -6 * 0.15;
@@ -119,6 +119,11 @@ export function Stage3() {
       }
     }
     if (list.length === 0) return null;
+    list.sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
+    });
     const latest = list[list.length - 1];
     const { data: urlData } = supabase.storage
       .from(HANDWRITING_BUCKET)
@@ -305,35 +310,164 @@ export function Stage3() {
     return triangles;
   }
 
-  /** 한 번 타격 시 글자 전체의 fraction(1/8)만 잘려 나가도록 — 평면에 가까운 슬라이스 */
-  function partitionTrianglesOneSlice(triangles, centerWorld, fraction) {
-    const n = new THREE.Vector3(
-      Math.random() - 0.5,
-      Math.random() - 0.5,
-      Math.random() - 0.5,
-    ).normalize();
-    const d = -n.dot(centerWorld);
-    const _centroid = new THREE.Vector3();
-    const withDist = [];
-    for (const tri of triangles) {
-      _centroid
-        .set(0, 0, 0)
-        .add(tri.p0)
-        .add(tri.p1)
-        .add(tri.p2)
-        .multiplyScalar(1 / 3);
-      const dist = _centroid.dot(n) + d;
-      withDist.push({ tri, absDist: Math.abs(dist) });
+  /** 한 삼각형을 평면 x = cutX 로 클리핑. 로컬 좌표. 반환: { left: tris, right: tris } */
+  function clipTriangleByPlane(tri, cutX) {
+    const d0 = tri.p0.x - cutX;
+    const d1 = tri.p1.x - cutX;
+    const d2 = tri.p2.x - cutX;
+    const left = [];
+    const right = [];
+    const pushTri = (arr, q0, q1, q2, m0, m1, m2) => {
+      arr.push({
+        p0: q0.clone(),
+        p1: q1.clone(),
+        p2: q2.clone(),
+        n0: m0.clone(),
+        n1: m1.clone(),
+        n2: m2.clone(),
+      });
+    };
+    const lerp = (pA, pB, t) => new THREE.Vector3().lerpVectors(pA, pB, t);
+    const lerpN = (nA, nB, t) =>
+      new THREE.Vector3().lerpVectors(nA, nB, t).normalize();
+    if (d0 <= 0 && d1 <= 0 && d2 <= 0) {
+      pushTri(left, tri.p0, tri.p1, tri.p2, tri.n0, tri.n1, tri.n2);
+      return { left, right };
     }
-    withDist.sort((a, b) => a.absDist - b.absDist);
-    const takeCount = Math.max(
-      1,
-      Math.min(Math.ceil(triangles.length * fraction), triangles.length),
-    );
-    const toFly = withDist.slice(0, takeCount).map((x) => x.tri);
-    const remaining = withDist.slice(takeCount).map((x) => x.tri);
-    if (toFly.length === 0) return { remaining, fragments: [] };
-    return { remaining, fragments: [toFly] };
+    if (d0 >= 0 && d1 >= 0 && d2 >= 0) {
+      pushTri(right, tri.p0, tri.p1, tri.p2, tri.n0, tri.n1, tri.n2);
+      return { left, right };
+    }
+    const t01 = d0 - d1 !== 0 ? -d0 / (d1 - d0) : 0;
+    const t12 = d1 - d2 !== 0 ? -d1 / (d2 - d1) : 0;
+    const t20 = d2 - d0 !== 0 ? -d2 / (d0 - d2) : 0;
+    if (d0 >= 0 && d1 < 0 && d2 < 0) {
+      const A = lerp(tri.p0, tri.p1, t01);
+      const B = lerp(tri.p0, tri.p2, t20);
+      const nA = lerpN(tri.n0, tri.n1, t01);
+      const nB = lerpN(tri.n0, tri.n2, t20);
+      pushTri(right, tri.p0, A, B, tri.n0, nA, nB);
+      pushTri(left, tri.p1, tri.p2, B, tri.n1, tri.n2, nB);
+      pushTri(left, tri.p1, B, A, tri.n1, nB, nA);
+    } else if (d0 < 0 && d1 >= 0 && d2 < 0) {
+      const A = lerp(tri.p0, tri.p1, t01);
+      const B = lerp(tri.p1, tri.p2, t12);
+      const nA = lerpN(tri.n0, tri.n1, t01);
+      const nB = lerpN(tri.n1, tri.n2, t12);
+      pushTri(right, tri.p1, A, B, tri.n1, nA, nB);
+      pushTri(left, tri.p0, A, tri.p2, tri.n0, nA, tri.n2);
+      pushTri(left, A, B, tri.p2, nA, nB, tri.n2);
+    } else if (d0 < 0 && d1 < 0 && d2 >= 0) {
+      const A = lerp(tri.p1, tri.p2, t12);
+      const B = lerp(tri.p0, tri.p2, t20);
+      const nA = lerpN(tri.n1, tri.n2, t12);
+      const nB = lerpN(tri.n0, tri.n2, t20);
+      pushTri(right, tri.p2, B, A, tri.n2, nB, nA);
+      pushTri(left, tri.p0, tri.p1, A, tri.n0, tri.n1, nA);
+      pushTri(left, tri.p0, A, B, tri.n0, nA, nB);
+    } else if (d0 < 0 && d1 >= 0 && d2 >= 0) {
+      const A = lerp(tri.p0, tri.p1, t01);
+      const B = lerp(tri.p0, tri.p2, t20);
+      const nA = lerpN(tri.n0, tri.n1, t01);
+      const nB = lerpN(tri.n0, tri.n2, t20);
+      pushTri(left, tri.p0, A, B, tri.n0, nA, nB);
+      pushTri(right, tri.p1, B, A, tri.n1, nB, nA);
+      pushTri(right, tri.p1, tri.p2, B, tri.n1, tri.n2, nB);
+    } else if (d0 >= 0 && d1 < 0 && d2 >= 0) {
+      const A = lerp(tri.p0, tri.p1, t01);
+      const B = lerp(tri.p1, tri.p2, t12);
+      const nA = lerpN(tri.n0, tri.n1, t01);
+      const nB = lerpN(tri.n1, tri.n2, t12);
+      pushTri(left, tri.p1, A, B, tri.n1, nA, nB);
+      pushTri(right, tri.p0, A, tri.p2, tri.n0, nA, tri.n2);
+      pushTri(right, A, B, tri.p2, nA, nB, tri.n2);
+    } else if (d0 >= 0 && d1 >= 0 && d2 < 0) {
+      const A = lerp(tri.p1, tri.p2, t12);
+      const B = lerp(tri.p0, tri.p2, t20);
+      const nA = lerpN(tri.n1, tri.n2, t12);
+      const nB = lerpN(tri.n0, tri.n2, t20);
+      pushTri(left, tri.p2, B, A, tri.n2, nB, nA);
+      pushTri(right, tri.p0, tri.p1, A, tri.n0, tri.n1, nA);
+      pushTri(right, tri.p0, A, B, tri.n0, nA, nB);
+    }
+    return { left, right };
+  }
+
+  /**
+   * 글자 로컬 x 기준 평면으로 실제 클리핑 → 칼로 썬 것처럼 깔끔한 절단면. 캡 없음.
+   */
+  function partitionTrianglesOneSlice(triangles, group, fraction) {
+    group.updateMatrixWorld(true);
+    const invWorld = new THREE.Matrix4().copy(group.matrixWorld).invert();
+    const matrixWorld = group.matrixWorld;
+    const toWorld = (p) => p.clone().applyMatrix4(matrixWorld);
+    const _triLocal = {
+      p0: new THREE.Vector3(),
+      p1: new THREE.Vector3(),
+      p2: new THREE.Vector3(),
+      n0: new THREE.Vector3(),
+      n1: new THREE.Vector3(),
+      n2: new THREE.Vector3(),
+    };
+    let minX = Infinity;
+    let maxX = -Infinity;
+    const localTris = [];
+    for (const tri of triangles) {
+      _triLocal.p0.copy(tri.p0).applyMatrix4(invWorld);
+      _triLocal.p1.copy(tri.p1).applyMatrix4(invWorld);
+      _triLocal.p2.copy(tri.p2).applyMatrix4(invWorld);
+      _triLocal.n0.copy(tri.n0).transformDirection(invWorld);
+      _triLocal.n1.copy(tri.n1).transformDirection(invWorld);
+      _triLocal.n2.copy(tri.n2).transformDirection(invWorld);
+      const x = (_triLocal.p0.x + _triLocal.p1.x + _triLocal.p2.x) / 3;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      localTris.push({
+        p0: _triLocal.p0.clone(),
+        p1: _triLocal.p1.clone(),
+        p2: _triLocal.p2.clone(),
+        n0: _triLocal.n0.clone(),
+        n1: _triLocal.n1.clone(),
+        n2: _triLocal.n2.clone(),
+      });
+    }
+    const range = maxX - minX;
+    if (range < 1e-6)
+      return {
+        remaining: triangles,
+        fragments: [],
+        cutX: null,
+        fromLeft: false,
+      };
+    const fromLeft = Math.random() < 0.5;
+    const cutXLocal = fromLeft
+      ? minX + range * fraction
+      : maxX - range * fraction;
+    const allLeft = [];
+    const allRight = [];
+    for (const tri of localTris) {
+      const { left, right } = clipTriangleByPlane(tri, cutXLocal);
+      allLeft.push(...left);
+      allRight.push(...right);
+    }
+    const toWorldTri = (t) => ({
+      p0: toWorld(t.p0),
+      p1: toWorld(t.p1),
+      p2: toWorld(t.p2),
+      n0: t.n0.clone().transformDirection(matrixWorld),
+      n1: t.n1.clone().transformDirection(matrixWorld),
+      n2: t.n2.clone().transformDirection(matrixWorld),
+    });
+    const toFly = (fromLeft ? allLeft : allRight).map(toWorldTri);
+    const remaining = (fromLeft ? allRight : allLeft).map(toWorldTri);
+    if (toFly.length === 0)
+      return {
+        remaining: triangles,
+        fragments: [],
+        cutX: null,
+        fromLeft: false,
+      };
+    return { remaining, fragments: [toFly], cutX: null, fromLeft };
   }
 
   /** 삼각형 배열 → 중심 기준 로컬 BufferGeometry */
@@ -375,31 +509,6 @@ export function Stage3() {
     return geom;
   }
 
-  /** 그룹의 월드 중심 (자식 메시 기준) */
-  function getGroupWorldCenter(group) {
-    const c = new THREE.Vector3(0, 0, 0);
-    let n = 0;
-    group.traverse((child) => {
-      if (!child.isMesh || !child.geometry) return;
-      child.updateMatrixWorld(true);
-      const pos = child.geometry.getAttribute("position");
-      if (!pos) return;
-      const index = child.geometry.getIndex();
-      const matrix = child.matrixWorld;
-      _v3.set(0, 0, 0);
-      const count = index ? index.count : pos.count;
-      for (let i = 0; i < count; i++) {
-        const j = index ? index.getX(i) : i;
-        _v3b.fromBufferAttribute(pos, j).applyMatrix4(matrix);
-        _v3.add(_v3b);
-      }
-      n += count;
-      c.add(_v3);
-    });
-    if (n > 0) c.multiplyScalar(1 / n);
-    return c;
-  }
-
   function onEnterHit() {
     if (
       !letterState ||
@@ -410,13 +519,12 @@ export function Stage3() {
     if (!sceneRef) return;
 
     const group = letterState.group;
-    const centerWorld = getGroupWorldCenter(group);
     const triangles = collectTrianglesFromGroup(group);
     if (triangles.length === 0) return;
 
     const { remaining, fragments: fragTriangles } = partitionTrianglesOneSlice(
       triangles,
-      centerWorld,
+      group,
       FRACTION_PER_HIT,
     );
 
@@ -456,9 +564,9 @@ export function Stage3() {
         Math.random() * Math.PI,
       );
       const velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 2,
-        Math.random() * 1.2 + 0.6,
-        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 5,
+        Math.random() * 2.2 + 1.4,
+        (Math.random() - 0.5) * 5,
       );
       const angularVelocity = new THREE.Vector3(
         (Math.random() - 0.5) * 6,
