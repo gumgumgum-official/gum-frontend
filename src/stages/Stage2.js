@@ -24,7 +24,8 @@ const ISLAND_BOUNDS = {
   maxZ: 6.89,
 };
 const GROUND_Y = 0.7;
-const MIN_DISTANCE_BETWEEN = 0.75;
+/** 글자끼리 최소 거리(m). 이 값보다 가깝게 스폰되지 않음. */
+const MIN_DISTANCE_BETWEEN = 5.2;
 const SPAWN_INSET_RATIO = 0.15; // 위·앞 15% 안쪽
 const SPAWN_INSET_SIDE_RATIO = 0.28; // 왼쪽·오른쪽 여유 더 줌 (튀어나오지 않게)
 const SPAWN_INSET_BOTTOM_RATIO = 0.45; // 아래(세모 부분)는 더 많이 빼서 중간·위 위주로 스폰
@@ -675,8 +676,11 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
 }
 
 /**
- * 착지/누적 시 정면이 카메라를 보게: 메시의 읽는 면(+Z)이 카메라 방향을 정확히 보도록.
+ * 착지/누적 시: 읽는 면이 카메라 쪽을 보게 한 뒤, 위에서 내려다보는 각도로 고정 기울임.
+ * TILT_DEGREES: 글자 면을 뒤로 기울이는 각도(도). 클수록 더 위에서 보는 느낌.
  */
+const TILT_DEGREES = 32;
+
 function setReadableRotationTowardCamera(group, camera, groundY) {
   const dir = new THREE.Vector3(
     camera.position.x - group.position.x,
@@ -688,6 +692,8 @@ function setReadableRotationTowardCamera(group, camera, groundY) {
   dir.normalize();
 
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+  // 로컬 X축 기준으로 뒤로 기울이기 → 위에서 내려다보는 각도
+  group.rotateX(-(TILT_DEGREES * Math.PI) / 180);
 }
 
 /**
@@ -709,25 +715,45 @@ function getSpawnBounds() {
 }
 
 /**
- * 글자끼리 겹치지 않도록 x,z 선택. 이미 착지한 글자 + 아직 떨어지는 글자 전부와 거리 유지
+ * 글자끼리 겹치지 않도록 x,z 선택. 이미 착지한 글자 + 떨어지는 글자 전부와 MIN_DISTANCE_BETWEEN 이상 유지.
+ * 자리가 없으면 랜덤 겹침 반환하지 않고, "가장 가까운 글자와의 거리가 최대인" 지점을 반환.
  */
 function pickSpawnXZ(fallingTextsArr, _isInitial, _bounds) {
   const spawn = getSpawnBounds();
   const { minX, maxX, minZ, maxZ } = spawn;
-
   const allTexts = fallingTextsArr || [];
-  for (let tryCount = 0; tryCount < 80; tryCount++) {
-    const x = minX + Math.random() * (maxX - minX);
-    const z = minZ + Math.random() * (maxZ - minZ);
-    const tooClose = allTexts.some((f) => {
+
+  const minDist = (x, z) => {
+    if (allTexts.length === 0) return Infinity;
+    let d = Infinity;
+    for (const f of allTexts) {
       const dx = f.group.position.x - x;
       const dz = f.group.position.z - z;
-      return Math.sqrt(dx * dx + dz * dz) < MIN_DISTANCE_BETWEEN;
-    });
-    if (!tooClose) return { x, z };
-  }
-  return {
-    x: minX + Math.random() * (maxX - minX),
-    z: minZ + Math.random() * (maxZ - minZ),
+      d = Math.min(d, Math.sqrt(dx * dx + dz * dz));
+    }
+    return d;
   };
+
+  for (let tryCount = 0; tryCount < 120; tryCount++) {
+    const x = minX + Math.random() * (maxX - minX);
+    const z = minZ + Math.random() * (maxZ - minZ);
+    if (minDist(x, z) >= MIN_DISTANCE_BETWEEN) return { x, z };
+  }
+
+  // 실패 시: 그리드 후보 중 "가장 가까운 글자와의 거리"가 최대인 점 선택 (겹침 최소화)
+  const steps = 12;
+  let best = { x: minX + (maxX - minX) / 2, z: minZ + (maxZ - minZ) / 2 };
+  let bestD = minDist(best.x, best.z);
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const x = minX + (i / steps) * (maxX - minX);
+      const z = minZ + (j / steps) * (maxZ - minZ);
+      const d = minDist(x, z);
+      if (d > bestD) {
+        bestD = d;
+        best = { x, z };
+      }
+    }
+  }
+  return best;
 }
