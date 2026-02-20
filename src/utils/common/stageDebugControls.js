@@ -25,6 +25,7 @@ import { DragControls } from "three/examples/jsm/controls/DragControls.js";
  * @param {boolean} [params.options.enableDrag=true]
  * @param {string} [params.options.stageName='stage']
  * @param {() => { position?: {x,y,z}, lookAt?: {x,y,z}, fov?, near?, far? }} [params.options.getInitialCameraConfig] - 있으면 적용. lookAt 있으면 Orbit 미생성(고정)
+ * @param {(roots: THREE.Object3D[]) => void} [params.options.onConfigChange] - 오브제 위치/회전/스케일 변경 시 호출 (Transform/Drag 끝날 때)
  */
 export function createStageDebugControls(params) {
   const {
@@ -41,6 +42,7 @@ export function createStageDebugControls(params) {
     enableDrag = true,
     stageName = "stage",
     getInitialCameraConfig,
+    onConfigChange,
   } = options;
 
   const mouse = new THREE.Vector2();
@@ -177,6 +179,7 @@ export function createStageDebugControls(params) {
   /** 콘솔에 카메라 + 오브제 전체 config 출력 (복사용). 드래그 끝날 때마다 호출됨. */
   function logConfigToConsole() {
     const roots = getPropRoots();
+    if (typeof onConfigChange === "function") onConfigChange(roots);
     const target = getLookAtTarget();
     const cameraBlock = `  camera: {
     fov: ${camera.fov.toFixed(1)},
