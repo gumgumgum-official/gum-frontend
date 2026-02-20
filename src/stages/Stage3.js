@@ -1,7 +1,7 @@
 /**
  * Stage3: 부셔버리자 (밝은 초원, 스트레스 해소)
  * - 최신 handwriting 1개가 2배 크기로 낙하
- * - 엔터키로 타격 시 ~5조각 부서짐(튕김/회전), 8번 치면 사라짐. 조각은 3초 후 페이드아웃
+ * - 엔터키로 타격 시 큰 조각이 깔끔하게 부서짐, 4번 치면 사라짐. 조각은 3초 후 페이드아웃
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
@@ -22,9 +22,10 @@ const STAGE3_SPAWN_HEIGHT = 5;
 const STAGE3_GRAVITY = -22 * 0.15;
 const STAGE3_INITIAL_VY = -6 * 0.15;
 const TILT_DEGREES = 32;
-const HITS_TO_DESTROY = 8;
-/** 한 번 타격 시 잘려 나가는 비율 (1/8 → 8번에 걸쳐 부서짐) */
-const FRACTION_PER_HIT = 1 / 8;
+const HITS_TO_DESTROY = 4;
+/** 한 번 타격 시 잘려 나가는 비율 (1/4 → 큰 조각이 깔끔하게 떨어짐) */
+const FRACTION_PER_HIT = 1 / 4;
+const HIT_RANGE = 6; // ilbuni로부터 이 거리 이내만 타격 가능
 const FRAGMENT_GRAVITY_MUL = 2.8; // 조각은 중력 더 강하게
 const FRAGMENT_BOUNCE_RESTITUTION = 0.35;
 const FRAGMENT_GROUND_FRICTION = 0.82;
@@ -257,6 +258,7 @@ export function Stage3() {
   function collectTrianglesFromGroup(group) {
     group.updateMatrixWorld(true);
     const triangles = [];
+    let meshIndex = 0;
     group.traverse((child) => {
       if (!child.isMesh || !child.geometry) return;
       const geom = child.geometry;
@@ -285,7 +287,7 @@ export function Stage3() {
           _normal.fromBufferAttribute(normAttr, i2);
           _normal.transformDirection(matrix);
           const n2 = _normal.clone();
-          triangles.push({ p0, p1, p2, n0, n1, n2 });
+          triangles.push({ p0, p1, p2, n0, n1, n2, meshIndex });
         } else {
           triangles.push({
             p0,
@@ -294,9 +296,11 @@ export function Stage3() {
             n0: new THREE.Vector3(0, 1, 0),
             n1: new THREE.Vector3(0, 1, 0),
             n2: new THREE.Vector3(0, 1, 0),
+            meshIndex,
           });
         }
       };
+      meshIndex += 1;
       if (index) {
         for (let i = 0; i < index.count; i += 3) {
           addTri(index.getX(i), index.getX(i + 1), index.getX(i + 2));
@@ -310,7 +314,37 @@ export function Stage3() {
     return triangles;
   }
 
-  /** 한 삼각형을 평면 x = cutX 로 클리핑. 로컬 좌표. 반환: { left: tris, right: tris } */
+  /** 자음/모음(shape) 단위로 분할 — 한 번에 한 shape씩 떨어져 나감 (ㅇ, ㅡ, ㅏ 등) */
+  function partitionTrianglesByShape(triangles, _fraction) {
+    const byShape = new Map();
+    const _c = new THREE.Vector3();
+    for (const tri of triangles) {
+      const idx = tri.meshIndex ?? 0;
+      if (!byShape.has(idx)) byShape.set(idx, []);
+      byShape.get(idx).push(tri);
+    }
+    const shapeCenters = [];
+    for (const [, list] of byShape) {
+      _c.set(0, 0, 0);
+      for (const t of list) _c.add(t.p0).add(t.p1).add(t.p2);
+      _c.multiplyScalar(1 / (list.length * 3));
+      shapeCenters.push({ list, centroidX: _c.x });
+    }
+    shapeCenters.sort((a, b) => a.centroidX - b.centroidX);
+    const fromLeft = Math.random() < 0.5;
+    const takeIdx = fromLeft ? 0 : shapeCenters.length - 1;
+    const toFly = shapeCenters[takeIdx].list;
+    const remaining = shapeCenters
+      .filter((_, i) => i !== takeIdx)
+      .flatMap((s) => s.list);
+    if (toFly.length === 0) return { remaining: triangles, fragments: [] };
+    return { remaining, fragments: [toFly] };
+  }
+
+  /** 절단면 위 정점: x를 cutX로 고정, 노멀은 평면 법선(단무지 썬 것처럼 깔끔한 단면) */
+  const CUT_NORMAL_LEFT = new THREE.Vector3(1, 0, 0);
+  const CUT_NORMAL_RIGHT = new THREE.Vector3(-1, 0, 0);
+
   function clipTriangleByPlane(tri, cutX) {
     const d0 = tri.p0.x - cutX;
     const d1 = tri.p1.x - cutX;
@@ -327,9 +361,11 @@ export function Stage3() {
         n2: m2.clone(),
       });
     };
-    const lerp = (pA, pB, t) => new THREE.Vector3().lerpVectors(pA, pB, t);
-    const lerpN = (nA, nB, t) =>
-      new THREE.Vector3().lerpVectors(nA, nB, t).normalize();
+    const onPlane = (pA, pB, t) => {
+      const p = new THREE.Vector3().lerpVectors(pA, pB, t);
+      p.x = cutX;
+      return p;
+    };
     if (d0 <= 0 && d1 <= 0 && d2 <= 0) {
       pushTri(left, tri.p0, tri.p1, tri.p2, tri.n0, tri.n1, tri.n2);
       return { left, right };
@@ -342,53 +378,41 @@ export function Stage3() {
     const t12 = d1 - d2 !== 0 ? -d1 / (d2 - d1) : 0;
     const t20 = d2 - d0 !== 0 ? -d2 / (d0 - d2) : 0;
     if (d0 >= 0 && d1 < 0 && d2 < 0) {
-      const A = lerp(tri.p0, tri.p1, t01);
-      const B = lerp(tri.p0, tri.p2, t20);
-      const nA = lerpN(tri.n0, tri.n1, t01);
-      const nB = lerpN(tri.n0, tri.n2, t20);
-      pushTri(right, tri.p0, A, B, tri.n0, nA, nB);
-      pushTri(left, tri.p1, tri.p2, B, tri.n1, tri.n2, nB);
-      pushTri(left, tri.p1, B, A, tri.n1, nB, nA);
+      const A = onPlane(tri.p0, tri.p1, t01);
+      const B = onPlane(tri.p0, tri.p2, t20);
+      pushTri(right, tri.p0, A, B, tri.n0, CUT_NORMAL_RIGHT, CUT_NORMAL_RIGHT);
+      pushTri(left, tri.p1, tri.p2, B, tri.n1, tri.n2, CUT_NORMAL_LEFT);
+      pushTri(left, tri.p1, B, A, tri.n1, CUT_NORMAL_LEFT, CUT_NORMAL_LEFT);
     } else if (d0 < 0 && d1 >= 0 && d2 < 0) {
-      const A = lerp(tri.p0, tri.p1, t01);
-      const B = lerp(tri.p1, tri.p2, t12);
-      const nA = lerpN(tri.n0, tri.n1, t01);
-      const nB = lerpN(tri.n1, tri.n2, t12);
-      pushTri(right, tri.p1, A, B, tri.n1, nA, nB);
-      pushTri(left, tri.p0, A, tri.p2, tri.n0, nA, tri.n2);
-      pushTri(left, A, B, tri.p2, nA, nB, tri.n2);
+      const A = onPlane(tri.p0, tri.p1, t01);
+      const B = onPlane(tri.p1, tri.p2, t12);
+      pushTri(right, tri.p1, A, B, tri.n1, CUT_NORMAL_RIGHT, CUT_NORMAL_RIGHT);
+      pushTri(left, tri.p0, A, tri.p2, tri.n0, CUT_NORMAL_LEFT, tri.n2);
+      pushTri(left, A, B, tri.p2, CUT_NORMAL_LEFT, CUT_NORMAL_LEFT, tri.n2);
     } else if (d0 < 0 && d1 < 0 && d2 >= 0) {
-      const A = lerp(tri.p1, tri.p2, t12);
-      const B = lerp(tri.p0, tri.p2, t20);
-      const nA = lerpN(tri.n1, tri.n2, t12);
-      const nB = lerpN(tri.n0, tri.n2, t20);
-      pushTri(right, tri.p2, B, A, tri.n2, nB, nA);
-      pushTri(left, tri.p0, tri.p1, A, tri.n0, tri.n1, nA);
-      pushTri(left, tri.p0, A, B, tri.n0, nA, nB);
+      const A = onPlane(tri.p1, tri.p2, t12);
+      const B = onPlane(tri.p0, tri.p2, t20);
+      pushTri(right, tri.p2, B, A, tri.n2, CUT_NORMAL_RIGHT, CUT_NORMAL_RIGHT);
+      pushTri(left, tri.p0, tri.p1, A, tri.n0, tri.n1, CUT_NORMAL_LEFT);
+      pushTri(left, tri.p0, A, B, tri.n0, CUT_NORMAL_LEFT, CUT_NORMAL_LEFT);
     } else if (d0 < 0 && d1 >= 0 && d2 >= 0) {
-      const A = lerp(tri.p0, tri.p1, t01);
-      const B = lerp(tri.p0, tri.p2, t20);
-      const nA = lerpN(tri.n0, tri.n1, t01);
-      const nB = lerpN(tri.n0, tri.n2, t20);
-      pushTri(left, tri.p0, A, B, tri.n0, nA, nB);
-      pushTri(right, tri.p1, B, A, tri.n1, nB, nA);
-      pushTri(right, tri.p1, tri.p2, B, tri.n1, tri.n2, nB);
+      const A = onPlane(tri.p0, tri.p1, t01);
+      const B = onPlane(tri.p0, tri.p2, t20);
+      pushTri(left, tri.p0, A, B, tri.n0, CUT_NORMAL_LEFT, CUT_NORMAL_LEFT);
+      pushTri(right, tri.p1, B, A, tri.n1, CUT_NORMAL_RIGHT, CUT_NORMAL_RIGHT);
+      pushTri(right, tri.p1, tri.p2, B, tri.n1, tri.n2, CUT_NORMAL_RIGHT);
     } else if (d0 >= 0 && d1 < 0 && d2 >= 0) {
-      const A = lerp(tri.p0, tri.p1, t01);
-      const B = lerp(tri.p1, tri.p2, t12);
-      const nA = lerpN(tri.n0, tri.n1, t01);
-      const nB = lerpN(tri.n1, tri.n2, t12);
-      pushTri(left, tri.p1, A, B, tri.n1, nA, nB);
-      pushTri(right, tri.p0, A, tri.p2, tri.n0, nA, tri.n2);
-      pushTri(right, A, B, tri.p2, nA, nB, tri.n2);
+      const A = onPlane(tri.p0, tri.p1, t01);
+      const B = onPlane(tri.p1, tri.p2, t12);
+      pushTri(left, tri.p1, A, B, tri.n1, CUT_NORMAL_LEFT, CUT_NORMAL_LEFT);
+      pushTri(right, tri.p0, A, tri.p2, tri.n0, CUT_NORMAL_RIGHT, tri.n2);
+      pushTri(right, A, B, tri.p2, CUT_NORMAL_RIGHT, CUT_NORMAL_RIGHT, tri.n2);
     } else if (d0 >= 0 && d1 >= 0 && d2 < 0) {
-      const A = lerp(tri.p1, tri.p2, t12);
-      const B = lerp(tri.p0, tri.p2, t20);
-      const nA = lerpN(tri.n1, tri.n2, t12);
-      const nB = lerpN(tri.n0, tri.n2, t20);
-      pushTri(left, tri.p2, B, A, tri.n2, nB, nA);
-      pushTri(right, tri.p0, tri.p1, A, tri.n0, tri.n1, nA);
-      pushTri(right, tri.p0, A, B, tri.n0, nA, nB);
+      const A = onPlane(tri.p1, tri.p2, t12);
+      const B = onPlane(tri.p0, tri.p2, t20);
+      pushTri(left, tri.p2, B, A, tri.n2, CUT_NORMAL_LEFT, CUT_NORMAL_LEFT);
+      pushTri(right, tri.p0, tri.p1, A, tri.n0, tri.n1, CUT_NORMAL_RIGHT);
+      pushTri(right, tri.p0, A, B, tri.n0, CUT_NORMAL_RIGHT, CUT_NORMAL_RIGHT);
     }
     return { left, right };
   }
@@ -509,43 +533,33 @@ export function Stage3() {
     return geom;
   }
 
-  function onEnterHit() {
-    if (
-      !letterState ||
-      !letterState.landed ||
-      letterState.hitCount >= HITS_TO_DESTROY
-    )
-      return;
-    if (!sceneRef) return;
-
-    const group = letterState.group;
-    const triangles = collectTrianglesFromGroup(group);
-    if (triangles.length === 0) return;
-
-    const { remaining, fragments: fragTriangles } = partitionTrianglesOneSlice(
-      triangles,
-      group,
-      FRACTION_PER_HIT,
-    );
-
-    const letterMaterial = group.children.find(
-      (c) => c.isMesh && c.material,
-    )?.material;
-    const mat = letterMaterial
-      ? letterMaterial.clone()
-      : new THREE.MeshStandardMaterial({
-          color: 0x2e2e2e,
-          metalness: 0.1,
-          roughness: 0.8,
-        });
-    if (!mat.transparent) {
-      mat.transparent = true;
-      mat.opacity = 1;
+  function getHitTarget() {
+    const origin = ilbuniModel?.position ?? new THREE.Vector3(0, 0, 0);
+    let best = null;
+    let bestDist = HIT_RANGE;
+    if (letterState?.landed && letterState.hitCount < HITS_TO_DESTROY) {
+      const d = letterState.group.position.distanceTo(origin);
+      if (d < bestDist) {
+        bestDist = d;
+        best = {
+          type: "letter",
+          group: letterState.group,
+          groundY: letterState.groundY,
+        };
+      }
     }
+    for (let i = 0; i < fragments.length; i++) {
+      const d = fragments[i].group.position.distanceTo(origin);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { type: "fragment", index: i, groundY: fragments[i].groundY };
+      }
+    }
+    return best;
+  }
 
-    const groundY = letterState.groundY;
-    for (let i = 0; i < fragTriangles.length; i++) {
-      const triList = fragTriangles[i];
+  function createFragmentMeshes(fragTriangles, mat, groundY) {
+    for (const triList of fragTriangles) {
       if (triList.length === 0) continue;
       const fragCenter = new THREE.Vector3(0, 0, 0);
       for (const tri of triList) {
@@ -564,14 +578,14 @@ export function Stage3() {
         Math.random() * Math.PI,
       );
       const velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 5,
-        Math.random() * 2.2 + 1.4,
-        (Math.random() - 0.5) * 5,
+        (Math.random() - 0.5) * 6,
+        Math.random() * 2 + 3,
+        (Math.random() - 0.5) * 6,
       );
       const angularVelocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 6,
-        (Math.random() - 0.5) * 6,
-        (Math.random() - 0.5) * 6,
+        (Math.random() - 0.5) * 4,
+        (Math.random() - 0.5) * 4,
+        (Math.random() - 0.5) * 4,
       );
       sceneRef.add(mesh);
       fragments.push({
@@ -582,6 +596,78 @@ export function Stage3() {
         groundY,
       });
     }
+  }
+
+  function onEnterHit() {
+    if (!sceneRef) return;
+    const target = getHitTarget();
+    if (!target) return;
+
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x2e2e2e,
+      metalness: 0.1,
+      roughness: 0.8,
+      transparent: true,
+      opacity: 1,
+    });
+
+    if (target.type === "fragment") {
+      const fragIdx = target.index;
+      const frag = fragments[fragIdx];
+      const mesh = frag.group;
+      const tris = collectTrianglesFromGroup(mesh);
+      if (tris.length === 0) return;
+      const { remaining, fragments: fragTriangles } =
+        partitionTrianglesOneSlice(tris, mesh, FRACTION_PER_HIT);
+      sceneRef.remove(mesh);
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material) mesh.material.dispose();
+      fragments.splice(fragIdx, 1);
+      createFragmentMeshes(fragTriangles, mat, target.groundY);
+      if (remaining.length > 0) {
+        const fragCenter = new THREE.Vector3(0, 0, 0);
+        for (const tri of remaining) {
+          fragCenter.add(tri.p0).add(tri.p1).add(tri.p2);
+        }
+        fragCenter.multiplyScalar(1 / (remaining.length * 3));
+        const geom = trianglesToGeometry(remaining, fragCenter);
+        if (geom) {
+          const m = new THREE.Mesh(geom, mat.clone());
+          m.position.copy(fragCenter);
+          m.castShadow = true;
+          m.receiveShadow = true;
+          sceneRef.add(m);
+          fragments.push({
+            group: m,
+            velocity: new THREE.Vector3(
+              (Math.random() - 0.5) * 5,
+              Math.random() * 1.5 + 2.5,
+              (Math.random() - 0.5) * 5,
+            ),
+            angularVelocity: new THREE.Vector3(
+              (Math.random() - 0.5) * 3,
+              (Math.random() - 0.5) * 3,
+              (Math.random() - 0.5) * 3,
+            ),
+            age: 0,
+            groundY: target.groundY,
+          });
+        }
+      }
+      return;
+    }
+
+    const group = target.group;
+    const triangles = collectTrianglesFromGroup(group);
+    if (triangles.length === 0) return;
+
+    const hasMultipleShapes =
+      new Set(triangles.map((t) => t.meshIndex ?? 0)).size > 1;
+    const { remaining, fragments: fragTriangles } = hasMultipleShapes
+      ? partitionTrianglesByShape(triangles, FRACTION_PER_HIT)
+      : partitionTrianglesOneSlice(triangles, group, FRACTION_PER_HIT);
+
+    createFragmentMeshes(fragTriangles, mat, target.groundY);
 
     const hitCount = ++letterState.hitCount;
 
@@ -595,6 +681,15 @@ export function Stage3() {
       return;
     }
 
+    const letterMaterial = group.children.find(
+      (c) => c.isMesh && c.material,
+    )?.material;
+    const remMat = letterMaterial ? letterMaterial.clone() : mat.clone();
+    if (!remMat.transparent) {
+      remMat.transparent = true;
+      remMat.opacity = 1;
+    }
+
     const remainingCenter = new THREE.Vector3(0, 0, 0);
     for (const tri of remaining) {
       remainingCenter.add(tri.p0).add(tri.p1).add(tri.p2);
@@ -606,12 +701,9 @@ export function Stage3() {
       tri.p0.applyMatrix4(invWorld).sub(remainingCenterLocal);
       tri.p1.applyMatrix4(invWorld).sub(remainingCenterLocal);
       tri.p2.applyMatrix4(invWorld).sub(remainingCenterLocal);
-      const n0 = tri.n0.clone().transformDirection(invWorld);
-      const n1 = tri.n1.clone().transformDirection(invWorld);
-      const n2 = tri.n2.clone().transformDirection(invWorld);
-      tri.n0 = n0;
-      tri.n1 = n1;
-      tri.n2 = n2;
+      tri.n0 = tri.n0.clone().transformDirection(invWorld);
+      tri.n1 = tri.n1.clone().transformDirection(invWorld);
+      tri.n2 = tri.n2.clone().transformDirection(invWorld);
     }
     const remainingGeom = trianglesToGeometry(
       remaining,
@@ -621,7 +713,7 @@ export function Stage3() {
       letterState = null;
       return;
     }
-    const remainingMesh = new THREE.Mesh(remainingGeom, mat.clone());
+    const remainingMesh = new THREE.Mesh(remainingGeom, remMat);
     remainingMesh.castShadow = true;
     remainingMesh.receiveShadow = true;
     while (group.children.length > 0) {
@@ -808,10 +900,8 @@ export function Stage3() {
               const ilbuniMinY = ilbuniBox.min.y;
 
               // 배경 모델 위에 서도록 y 위치 설정
-              // ilbuni의 최하단(발)이 배경 모델의 최상단에 닿도록
               const { groundOffset } = config.ilbuni;
               ilbuniYPosition = backgroundModelMaxY - ilbuniMinY + groundOffset;
-
               ilbuniModel.position.set(0, ilbuniYPosition, 0);
 
               ilbuniModel.traverse((child) => {
@@ -827,7 +917,6 @@ export function Stage3() {
                 `✅ Stage3 ilbuni 모델 로드 완료 (y: ${ilbuniYPosition.toFixed(2)})`,
               );
 
-              // ilbuni 모델 구조 확인
               inspectGLTF(gltf, "ilbuni 모델");
             },
             onProgress: (xhr) => {
