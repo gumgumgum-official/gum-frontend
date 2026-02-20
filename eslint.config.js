@@ -33,6 +33,9 @@ export default [
         clearInterval: "readonly",
         clearTimeout: "readonly",
         import: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        fetch: "readonly",
       },
     },
     settings: {
