@@ -16,12 +16,16 @@ import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 
 // Phase 2: 고민 텍스트가 섬(collision.glb) 위에 떨어져 쌓이는 기준
-const ISLAND_CENTER = { x: 0, y: 0, z: 0 }; // collision.glb position
-const GROUND_Y = 3; // 땅 높이 (y=3.00에서 멈춤)
-const SPAWN_RADIUS = 4; // 섬 위 수평 범위 (x,z)
-const SPAWN_HEIGHT_ABOVE_GROUND = 50; // 더 높은 곳에서 떨어뜨림 (느리게 보이도록)
-const FALL_GRAVITY = -45; // 느리게 떨어짐 (보는 맛)
-const FALL_INITIAL_VY = -15; // 초기 낙하 속도 (느리게)
+const ISLAND_CENTER = { x: 0, y: 0, z: 0 };
+const GROUND_Y = 0.5; // y=1.00 에 도달하면 더 이상 떨어지지 않고 고정
+const SPAWN_RADIUS = 4;
+const MIN_DISTANCE_BETWEEN = 0.25;
+const SPAWN_HEIGHT_ABOVE_GROUND = 50;
+// 속도: 현재의 약 0.15배 (훨씬 느리게)
+const FALL_GRAVITY = -22 * 0.15; // 약 -3.3
+const FALL_INITIAL_VY = -6 * 0.15; // 약 -0.9
+const READABLE_ROTATION_X = -Math.PI / 2; // 멈출 때 카메라 시점에서 읽히게 (바닥에 눕힌 각도)
+const TUMBLE_SPEED = 1.4; // 빙글빙글 돌면서 떨어질 때 회전 속도
 
 export function Stage2() {
   const config = STAGE2_CONFIG;
@@ -109,9 +113,10 @@ export function Stage2() {
                 child.castShadow = true;
                 child.receiveShadow = true;
               }
-              child.raycast = () => {}; // 배경은 클릭 제외
+              child.raycast = () => {};
             }
           });
+
           objects.push(model);
           scene.add(model);
 
@@ -129,7 +134,8 @@ export function Stage2() {
             );
           }
 
-          // 떨어지는 글자는 Supabase Realtime으로만 생성됨 (new_handwriting 수신 시)
+          // 섬 땅 높이 적용된 뒤 누적 SVG 로드 (섬 위에 배치)
+          loadInitialHandwritings(scene, this.camera, fallingTexts);
         },
         onProgress: (xhr) => {
           if (xhr.total > 0) {
@@ -145,10 +151,7 @@ export function Stage2() {
       scene.add(axesHelper);
       objects.push(axesHelper);
 
-      // Handwriting: (1) 누적 로드 = 버킷에 있는 기존 SVG 전부 띄우기
-      loadInitialHandwritings(scene, this.camera, fallingTexts);
-
-      // Handwriting: (2) 실시간 수신 (태블릿 → Edge Function → broadcast)
+      // Handwriting: 실시간 수신 (누적 로드는 GLB 로드 후 섬 땅 높이 적용 뒤 호출)
       realtimeSubscription = subscribeHandwritingRealtime({
         onNewHandwriting: (metadata) => {
           console.log(
@@ -173,7 +176,14 @@ export function Stage2() {
           fallingTexts.forEach((ft) => {
             ft.group.position.y =
               GROUND_Y + SPAWN_HEIGHT_ABOVE_GROUND + Math.random() * 15;
-            ft.velocity.y = FALL_INITIAL_VY - Math.random() * 10;
+            ft.group.position.x =
+              ISLAND_CENTER.x + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
+            ft.group.position.z =
+              ISLAND_CENTER.z + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
+            ft.velocity.y = FALL_INITIAL_VY - Math.random() * 0.5;
+            ft.velocity.rotationX = (Math.random() - 0.5) * TUMBLE_SPEED;
+            ft.velocity.rotationY = (Math.random() - 0.5) * TUMBLE_SPEED;
+            ft.velocity.rotationZ = (Math.random() - 0.5) * TUMBLE_SPEED;
             ft.landed = false;
           });
         }
@@ -421,23 +431,29 @@ async function loadPathsFromTable(sessionId) {
       return [];
     }
 
-    if (!rows || rows.length === 0) return [];
+    const list = Array.isArray(rows)
+      ? rows.filter((r) => r && typeof r === "object")
+      : [];
+    if (list.length === 0) return [];
 
     console.log(
       "[Stage2] 테이블에서 경로 로드:",
       HANDWRITING_TABLE,
-      rows.length,
+      list.length,
       "개",
     );
 
-    return rows.map((r) => ({
-      path: r.storage_path || r.storagePath || "",
-      id: (r.storage_path || r.storagePath || "").replace(/\.svg$/i, ""),
-      createdAt: r.created_at ?? r.createdAt ?? null,
-      clientId: r.client_id ?? r.clientId ?? "",
-    }));
+    return list.map((r) => {
+      const path = (r.storage_path ?? r.storagePath ?? "").toString();
+      return {
+        path,
+        id: path.replace(/\.svg$/i, ""),
+        createdAt: r.created_at ?? r.createdAt ?? null,
+        clientId: (r.client_id ?? r.clientId ?? "").toString(),
+      };
+    });
   } catch (e) {
-    console.log("[Stage2] 테이블 조회 예외:", e);
+    console.warn("[Stage2] 테이블 조회 예외:", e);
     return [];
   }
 }
@@ -495,26 +511,25 @@ async function createFallingText(
       group.add(mesh);
     });
 
-    const startX = ISLAND_CENTER.x + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
-    const startZ = ISLAND_CENTER.z + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
+    const { x: startX, z: startZ } = pickSpawnXZ(fallingTextsArr, initial);
     const startY = initial
       ? GROUND_Y
       : GROUND_Y + SPAWN_HEIGHT_ABOVE_GROUND + Math.random() * 15;
 
     group.position.set(startX, startY, startZ);
 
-    // rotation 없이 똑바로 (위에서 볼 때 읽히도록)
-    group.rotation.set(0, 0, 0);
+    // 위에서 볼 때 읽히도록 바닥에 눕힌 각도 (고정 후). 떨어지는 동안은 살짝 굴러서 귀엽게
+    group.rotation.set(READABLE_ROTATION_X, 0, 0);
 
     scene.add(group);
 
     const fallingText = {
       group,
       velocity: {
-        y: initial ? 0 : FALL_INITIAL_VY - Math.random() * 10,
-        rotationX: 0,
-        rotationY: 0,
-        rotationZ: 0,
+        y: initial ? 0 : FALL_INITIAL_VY - Math.random() * 0.5,
+        rotationX: initial ? 0 : (Math.random() - 0.5) * TUMBLE_SPEED,
+        rotationY: initial ? 0 : (Math.random() - 0.5) * TUMBLE_SPEED,
+        rotationZ: initial ? 0 : (Math.random() - 0.5) * TUMBLE_SPEED,
       },
       gravity: FALL_GRAVITY,
       groundY: GROUND_Y,
@@ -548,17 +563,20 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
     const fallingText = fallingTextsArr[i];
     const { group, velocity, gravity, groundY, landed } = fallingText;
 
-    if (landed) continue; // 이미 바닥에 쌓인 것은 그대로 둠
+    if (landed) continue;
 
-    // 중력 적용
     velocity.y += gravity * delta;
-
-    // 위치 업데이트 (rotation 없음 - 똑바로 떨어짐)
     group.position.y += velocity.y * delta;
 
-    // 일정 y(groundY)에 도달하면 그만 둠 → 바닥에 멈춤
+    // 데굴데굴 귀엽게 굴리기 (떨어지는 동안만)
+    group.rotation.x += velocity.rotationX * delta;
+    group.rotation.y += velocity.rotationY * delta;
+    group.rotation.z += velocity.rotationZ * delta;
+
+    // 착지 → 읽기 각도로 고정 (위에서 보면 읽힘)
     if (group.position.y <= groundY) {
       group.position.y = groundY;
+      group.rotation.set(READABLE_ROTATION_X, 0, 0);
       velocity.y = 0;
       velocity.rotationX = 0;
       velocity.rotationY = 0;
@@ -569,4 +587,24 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
       );
     }
   }
+}
+
+/**
+ * 글자끼리 겹치지 않도록 x,z 위치 선택 (이미 착지한 글자와 최소 거리 유지)
+ */
+function pickSpawnXZ(fallingTextsArr, isInitial) {
+  const landed = (fallingTextsArr || []).filter((f) => f.landed);
+  for (let tryCount = 0; tryCount < 50; tryCount++) {
+    const x = ISLAND_CENTER.x + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
+    const z = ISLAND_CENTER.z + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
+    const tooClose = landed.some((f) => {
+      const dx = f.group.position.x - x;
+      const dz = f.group.position.z - z;
+      return Math.sqrt(dx * dx + dz * dz) < MIN_DISTANCE_BETWEEN;
+    });
+    if (!tooClose) return { x, z };
+  }
+  const x = ISLAND_CENTER.x + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
+  const z = ISLAND_CENTER.z + (Math.random() - 0.5) * 2 * SPAWN_RADIUS;
+  return { x, z };
 }
