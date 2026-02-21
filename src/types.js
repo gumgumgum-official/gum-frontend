@@ -75,8 +75,8 @@
  */
 
 /**
- * Stage3 ilbuni 캐릭터 이동·카메라 설정
- * @typedef {Object} Stage3IlbuniConfig
+ * Stage3 캐릭터 이동·카메라 설정
+ * @typedef {Object} Stage3CharacterConfig
  * @property {number} groundOffset - 배경 위 y 여유 공간
  * @property {number} moveSpeed - 이동 속도
  * @property {number} boundsPadding - 바운드 경계 여유 공간
@@ -87,7 +87,11 @@
 
 /**
  * Stage3 전체 설정
- * @typedef {StageBasicConfig & { model: Stage2ModelConfig, ilbuni: Stage3IlbuniConfig }} Stage3Config
+ * @typedef {Object} Stage3Config
+ * @property {StageCameraConfig} camera
+ * @property {{color: number}} background
+ * @property {Stage2ModelConfig} model
+ * @property {Stage3CharacterConfig} character
  */
 
 export {};
