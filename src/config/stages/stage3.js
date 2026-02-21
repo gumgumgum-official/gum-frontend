@@ -19,8 +19,8 @@ export const STAGE3_CONFIG = {
     castShadow: true,
     receiveShadow: true,
   },
-  /** ilbuni 캐릭터 이동·카메라 (Stage3 전용) */
-  ilbuni: {
+  /** 캐릭터 이동·카메라 (Stage3 전용) */
+  character: {
     groundOffset: 0.2, // 배경 위에 설 때 y 여유 공간
     moveSpeed: 5.0, // 이동 속도
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
