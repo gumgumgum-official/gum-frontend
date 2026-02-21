@@ -32,6 +32,13 @@ export function createCharacterController({
   let backgroundBounds = null;
   let stopOnNextLoop = false;
 
+  // 매 프레임 재사용할 Vector3 인스턴스 (GC 압박 방지)
+  const _moveVector = new THREE.Vector3();
+  const _direction = new THREE.Vector3();
+  const _cameraOffset = new THREE.Vector3();
+  const _targetPosition = new THREE.Vector3();
+  const _lookAtPosition = new THREE.Vector3();
+
   return {
     setup(backgroundMaxY, bounds) {
       backgroundBounds = bounds;
@@ -104,14 +111,14 @@ export function createCharacterController({
       } = config.character;
 
       const keys = getKeys();
-      const moveVector = new THREE.Vector3();
+      _moveVector.set(0, 0, 0);
 
-      if (keys.ArrowUp) moveVector.z -= 1;
-      if (keys.ArrowDown) moveVector.z += 1;
-      if (keys.ArrowLeft) moveVector.x -= 1;
-      if (keys.ArrowRight) moveVector.x += 1;
+      if (keys.ArrowUp) _moveVector.z -= 1;
+      if (keys.ArrowDown) _moveVector.z += 1;
+      if (keys.ArrowLeft) _moveVector.x -= 1;
+      if (keys.ArrowRight) _moveVector.x += 1;
 
-      const moving = moveVector.length() > 0;
+      const moving = _moveVector.length() > 0;
 
       if (characterWalkAction) {
         if (moving) {
@@ -129,11 +136,11 @@ export function createCharacterController({
       }
 
       if (moving) {
-        moveVector.normalize();
-        moveVector.multiplyScalar(moveSpeed * delta);
+        _direction.copy(_moveVector).normalize();
+        _moveVector.copy(_direction).multiplyScalar(moveSpeed * delta);
 
-        let newX = characterModel.position.x + moveVector.x;
-        let newZ = characterModel.position.z + moveVector.z;
+        let newX = characterModel.position.x + _moveVector.x;
+        let newZ = characterModel.position.z + _moveVector.z;
 
         newX = THREE.MathUtils.clamp(
           newX,
@@ -150,10 +157,8 @@ export function createCharacterController({
         characterModel.position.z = newZ;
         characterModel.position.y = characterYPosition;
 
-        if (moveVector.length() > 0.01) {
-          const angle = Math.atan2(moveVector.x, moveVector.z);
-          characterModel.rotation.y = angle;
-        }
+        const angle = Math.atan2(_direction.x, _direction.z);
+        characterModel.rotation.y = angle;
       }
 
       if (characterMixer) {
@@ -161,17 +166,13 @@ export function createCharacterController({
       }
 
       // 카메라가 캐릭터를 따라가도록 설정
-      const cameraOffset = new THREE.Vector3(
-        camOffset.x,
-        camOffset.y,
-        camOffset.z,
-      );
-      const targetPosition = characterModel.position.clone().add(cameraOffset);
-      camera.position.lerp(targetPosition, cameraLerpFactor);
+      _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
+      _targetPosition.copy(characterModel.position).add(_cameraOffset);
+      camera.position.lerp(_targetPosition, cameraLerpFactor);
 
-      const lookAtPosition = characterModel.position.clone();
-      lookAtPosition.y += lookAtHeightOffset;
-      camera.lookAt(lookAtPosition);
+      _lookAtPosition.copy(characterModel.position);
+      _lookAtPosition.y += lookAtHeightOffset;
+      camera.lookAt(_lookAtPosition);
     },
 
     cleanup() {
