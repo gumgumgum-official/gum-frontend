@@ -30,6 +30,7 @@ export function createCharacterController({
   let characterWalkAction = null;
   let isWalking = false;
   let backgroundBounds = null;
+  let stopOnNextLoop = false;
 
   return {
     setup(backgroundMaxY, bounds) {
@@ -59,6 +60,14 @@ export function createCharacterController({
             characterWalkAction.loop = THREE.LoopRepeat;
             characterWalkAction.play();
             characterWalkAction.paused = true;
+
+            characterMixer.addEventListener("loop", () => {
+              if (stopOnNextLoop) {
+                characterWalkAction.paused = true;
+                stopOnNextLoop = false;
+              }
+            });
+
             console.log(
               `🎬 애니메이션 클립 수: ${gltf.animations.length}, 첫 번째 클립: "${gltf.animations[0].name}"`,
             );
@@ -105,12 +114,17 @@ export function createCharacterController({
       const moving = moveVector.length() > 0;
 
       if (characterWalkAction) {
-        if (moving && !isWalking) {
-          characterWalkAction.paused = false;
-          isWalking = true;
-        } else if (!moving && isWalking) {
-          characterWalkAction.paused = true;
-          isWalking = false;
+        if (moving) {
+          if (!isWalking) {
+            stopOnNextLoop = false;
+            characterWalkAction.paused = false;
+            isWalking = true;
+          }
+        } else {
+          if (isWalking) {
+            stopOnNextLoop = true;
+            isWalking = false;
+          }
         }
       }
 
@@ -183,6 +197,7 @@ export function createCharacterController({
       }
       characterWalkAction = null;
       isWalking = false;
+      stopOnNextLoop = false;
       backgroundBounds = null;
     },
   };
