@@ -37,9 +37,9 @@ export function loadStage3Background({ scene, glbLoader, config, onReady }) {
       const center = box.getCenter(new THREE.Vector3());
 
       // island 객체 탐색 (캐릭터 이동 범위 제한용)
-      const islandObject =
-        model.children.find((child) => child.name === "island") ||
-        model.children[1];
+      const islandObject = model.children.find(
+        (child) => child.name === "island",
+      );
 
       let backgroundBounds;
       if (islandObject) {
@@ -55,19 +55,10 @@ export function loadStage3Background({ scene, glbLoader, config, onReady }) {
         backgroundBounds = box.clone();
       }
 
-      // 모든 메시를 순회하여 실제 최대 Y값 계산
-      let backgroundMaxY = box.max.y;
-      model.traverse((child) => {
-        if (child.isMesh && child.geometry) {
-          const meshBox = new THREE.Box3().setFromObject(child);
-          if (meshBox.max.y > backgroundMaxY) {
-            backgroundMaxY = meshBox.max.y;
-          }
-        }
-      });
+      const backgroundMaxY = box.max.y;
 
       console.log(
-        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), actualMaxY=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
+        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), backgroundMaxY=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
       );
 
       model.traverse((child) => {
