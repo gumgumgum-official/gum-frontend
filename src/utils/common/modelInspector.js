@@ -35,19 +35,17 @@ export function inspectModel(model, gltf = null, label = "모델") {
   // 모든 메시 정보 출력
   let meshCount = 0;
   model.traverse((child) => {
-    if (child.isMesh) {
+    const mesh = /** @type {THREE.Mesh} */ (child);
+    if (mesh.isMesh) {
       meshCount++;
       const meshInfo = {
-        name: child.name || "unnamed",
-        geometry: child.geometry?.type || "none",
-        material: child.material?.type || "none",
-        position: `(${child.position.x.toFixed(2)}, ${child.position.y.toFixed(2)}, ${child.position.z.toFixed(2)})`,
+        name: mesh.name || "unnamed",
+        geometry: mesh.geometry?.type || "none",
+        material: Array.isArray(mesh.material)
+          ? `Array[${mesh.material.length}]`
+          : mesh.material?.type || "none",
+        position: `(${mesh.position.x.toFixed(2)}, ${mesh.position.y.toFixed(2)}, ${mesh.position.z.toFixed(2)})`,
       };
-
-      // 배열 재질인 경우
-      if (Array.isArray(child.material)) {
-        meshInfo.material = `Array[${child.material.length}]`;
-      }
 
       console.log(`  - Mesh #${meshCount}:`, meshInfo);
     }
