@@ -7,6 +7,9 @@
 import * as THREE from "three";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
+import { createKeyboardInput } from "../utils/common/keyboardInput.js";
+import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
+import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import { inspectModel, inspectGLTF } from "../utils/common/modelInspector.js";
 import { loadSVGShapes } from "../lib/svg-loader.js";
@@ -33,7 +36,7 @@ const FRAGMENT_FADE_START = 3; // 땅에 떨어진 뒤 3초 뒤부터
 const FRAGMENT_FADE_END = 5;
 
 export function Stage3() {
-  const objects = [];
+  /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
   let debugControls = null;
@@ -72,13 +75,16 @@ export function Stage3() {
       resetLetterFall();
     }
   };
+  let backgroundModel = null;
 
-  const handleKeyUp = (event) => {
-    if (event.key in keys) {
-      keys[event.key] = false;
-      event.preventDefault();
-    }
-  };
+  const keyboard = createKeyboardInput([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+  ]);
+
+  let character = null;
 
   /** 최신 handwriting 메타데이터 1개 반환 (없으면 null) */
   async function getLatestHandwritingMetadata() {
@@ -770,6 +776,14 @@ export function Stage3() {
     setup(scene, renderer) {
       const canvas = renderer.domElement;
       sceneRef = scene;
+
+      character = createCharacterController({
+        scene,
+        glbLoader,
+        config,
+        getKeys: () => keyboard.keys,
+      });
+
       this.camera = new THREE.PerspectiveCamera(
         config.camera.fov,
         window.innerWidth / window.innerHeight,
@@ -793,15 +807,13 @@ export function Stage3() {
 
       scene.background = new THREE.Color(config.background.color);
 
-      // 키보드 이벤트 리스너 등록
-      window.addEventListener("keydown", handleKeyDown);
-      window.addEventListener("keyup", handleKeyUp);
+      keyboard.mount();
 
       debugControls = createStageDebugControls({
         scene,
         camera: this.camera,
         domElement: canvas,
-        getPropRoots: () => [], // Stage3에는 props 없음
+        getPropRoots: () => [],
         getPropPath: () => "",
         options: {
           stageName: "stage3",
@@ -809,78 +821,12 @@ export function Stage3() {
         },
       });
 
-      // 배경 GLB 로드
-      glbLoader.load(config.model.path, {
-        onLoad: (gltf) => {
-          const model = gltf.scene;
-
-          // 먼저 위치 설정
-          model.position.set(
-            config.model.position?.x ?? 0,
-            config.model.position?.y ?? 0,
-            config.model.position?.z ?? 0,
-          );
-
-          // 변환 행렬 업데이트
-          model.updateMatrixWorld(true);
-
-          // 위치 적용 후 바운딩 박스 재계산
-          const box = new THREE.Box3().setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
-
-          // island 객체 찾기 (children[1])
-          const islandObject =
-            model.children.find((child) => child.name === "island") ||
-            model.children[1];
-
-          if (islandObject) {
-            // island 객체의 바운딩 박스 계산 (캐릭터 이동 범위 제한용)
-            islandObject.updateMatrixWorld(true);
-            backgroundBounds = new THREE.Box3().setFromObject(islandObject);
-
-            console.log(
-              `🏝️ Island 바운딩 박스: min=(${backgroundBounds.min.x.toFixed(2)}, ${backgroundBounds.min.y.toFixed(2)}, ${backgroundBounds.min.z.toFixed(2)}), max=(${backgroundBounds.max.x.toFixed(2)}, ${backgroundBounds.max.y.toFixed(2)}, ${backgroundBounds.max.z.toFixed(2)})`,
-            );
-          } else {
-            // island를 찾을 수 없으면 전체 모델의 바운딩 박스 사용
-            console.warn(
-              "⚠️ Island 객체를 찾을 수 없습니다. 전체 모델의 바운딩 박스를 사용합니다.",
-            );
-            backgroundBounds = box.clone();
-          }
-
-          // 배경 모델의 최대 y값 계산 (위치 적용 후)
-          // 모든 메시를 순회하여 실제 최대 y값 찾기
-          let actualMaxY = box.max.y;
-          model.traverse((child) => {
-            if (child.isMesh && child.geometry) {
-              const meshBox = new THREE.Box3().setFromObject(child);
-              if (meshBox.max.y > actualMaxY) {
-                actualMaxY = meshBox.max.y;
-              }
-            }
-          });
-
-          backgroundModelMaxY = actualMaxY;
-
-          console.log(
-            `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), actualMaxY=${actualMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
-          );
-
-          model.traverse((child) => {
-            if (child.isMesh) {
-              if (config.model.castShadow !== undefined) {
-                child.castShadow = config.model.castShadow;
-              }
-              if (config.model.receiveShadow !== undefined) {
-                child.receiveShadow = config.model.receiveShadow;
-              }
-              child.raycast = () => {}; // 배경은 클릭 제외
-            }
-          });
-
-          objects.push(model);
-          scene.add(model);
+      loadStage3Background({
+        scene,
+        glbLoader,
+        config,
+        onReady: ({ model, center, backgroundMaxY, backgroundBounds }) => {
+          backgroundModel = model;
           debugControls.setOrbitTarget(center);
           console.log("✅ Stage3 배경 모델 로드 완료");
 
@@ -928,15 +874,8 @@ export function Stage3() {
             },
             onError: (err) => console.error("❌ Stage3 ilbuni 로드 에러:", err),
           });
+          character.setup(backgroundMaxY, backgroundBounds);
         },
-        onProgress: (xhr) => {
-          if (xhr.total > 0) {
-            console.log(
-              `Stage3 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-            );
-          }
-        },
-        onError: (err) => console.error("❌ Stage3 배경 로드 에러:", err),
       });
 
       console.log("✅ Stage3 생성 완료");
@@ -1015,6 +954,11 @@ export function Stage3() {
     cleanup(scene) {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      if (character) character.update(delta, this.camera);
+    },
+
+    cleanup(scene) {
+      keyboard.unmount();
 
       if (debugControls) {
         debugControls.dispose();
@@ -1039,6 +983,14 @@ export function Stage3() {
       objects.forEach((obj) => {
         scene.remove(obj);
         obj.traverse((child) => {
+      if (character) {
+        character.cleanup();
+        character = null;
+      }
+
+      if (backgroundModel) {
+        scene.remove(backgroundModel);
+        backgroundModel.traverse((child) => {
           if (child.isMesh) {
             if (child.geometry) child.geometry.dispose();
             if (child.material) {
@@ -1050,10 +1002,10 @@ export function Stage3() {
             }
           }
         });
-      });
-      objects.length = 0;
+        backgroundModel = null;
+      }
+
       scene.background = null;
-      ilbuniModel = null;
       console.log("🧹 Stage3 정리 완료");
     },
   };
