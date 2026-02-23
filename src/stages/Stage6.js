@@ -95,8 +95,10 @@ export function Stage6() {
       glbLoader.load(characterPath, {
         onLoad: (gltf) => {
           const source = gltf.scene;
+          const scale = config.characterScale ?? 1;
           for (let i = 0; i < 5; i++) {
             const model = i === 0 ? source : SkeletonUtils.clone(source);
+            model.scale.setScalar(scale);
             const pos = characterPositions[i]?.position ?? {};
             model.position.set(pos.x ?? 0, pos.y ?? 0, pos.z ?? 0);
             model.traverse((child) => {

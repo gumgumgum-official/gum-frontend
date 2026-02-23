@@ -1,6 +1,6 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, speechBubbleMessages?: string[], cheerSoundPath?: string, characterModelPath?: string, characters?: Array<{ position?: { x?: number, y?: number, z?: number } }> }} */
+/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, speechBubbleMessages?: string[], cheerSoundPath?: string, characterModelPath?: string, characterScale?: number, characters?: Array<{ position?: { x?: number, y?: number, z?: number } }> }} */
 export const STAGE6_CONFIG = {
   camera: {
     fov: 60.0,
@@ -31,6 +31,8 @@ export const STAGE6_CONFIG = {
   cheerSoundPath: "/static/cheer.mp3",
   /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
   characterModelPath: "/models/common/user_walking2.glb",
+  /** 캐릭터 스케일 (1 = 원본 크기) */
+  characterScale: 0.5,
   /** 5명 캐릭터 위치 (x, y, z) */
   characters: [
     { position: { x: -3, y: 0.3, z: 4 } },

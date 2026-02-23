@@ -7,7 +7,9 @@
  */
 
 import * as THREE from "three";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { createAutonomousCharacters } from "../utils/stages/stage2/autonomousCharacters.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE2_CONFIG } from "../config/stages/stage2.js";
 import { subscribeHandwritingRealtime } from "../utils/handwriting/handwritingRealtime.js";
@@ -43,6 +45,7 @@ export function Stage2() {
   const objects = [];
   const propRoots = [];
   let debugControls = null;
+  let autonomousCharacters = null;
   let realtimeSubscription = null;
   const fallingTexts = [];
   let _sceneRef = null;
@@ -153,7 +156,19 @@ export function Stage2() {
           objects.push(model);
           scene.add(model);
 
-          // 오브제(collision 등) 로드 후 범위 갱신 → 그 다음 누적 SVG 로드 (같은 범위로 스폰)
+          // 오브제(collision 등) 로드 후 범위 갱신 → 캐릭터 로드 → 누적 SVG 로드
+          const onReady = () => {
+            loadCharacters(glbLoader, config, scene, objects, (controller) => {
+              autonomousCharacters = controller;
+            });
+            loadInitialHandwritings(
+              scene,
+              this.camera,
+              fallingTexts,
+              () => islandBounds,
+            );
+          };
+
           if (config.props?.length) {
             loadPropsFromConfig(
               glbLoader,
@@ -164,21 +179,11 @@ export function Stage2() {
               () => {
                 debugControls.setDraggableObjects(propRoots);
                 updateIslandBoundsFromRoots(propRoots);
-                loadInitialHandwritings(
-                  scene,
-                  this.camera,
-                  fallingTexts,
-                  () => islandBounds,
-                );
+                onReady();
               },
             );
           } else {
-            loadInitialHandwritings(
-              scene,
-              this.camera,
-              fallingTexts,
-              () => islandBounds,
-            );
+            onReady();
           }
         },
         onProgress: (xhr) => {
@@ -253,6 +258,7 @@ export function Stage2() {
 
     update(delta) {
       if (debugControls) debugControls.update(delta);
+      if (autonomousCharacters) autonomousCharacters.update(delta);
 
       // 떨어지는 텍스트 애니메이션 업데이트
       updateFallingTexts(delta, cameraRef, fallingTexts);
@@ -281,6 +287,10 @@ export function Stage2() {
       });
       fallingTexts.length = 0;
 
+      if (autonomousCharacters) {
+        autonomousCharacters.cleanup();
+        autonomousCharacters = null;
+      }
       if (debugControls) {
         debugControls.dispose();
         debugControls = null;
@@ -306,6 +316,66 @@ export function Stage2() {
       console.log("🧹 Stage2 정리 완료");
     },
   };
+}
+
+/**
+ * 캐릭터 GLB 로드 후 자율 이동 컨트롤러 생성 (자유의지 랜덤 걷기, 걸을 때만 애니메이션)
+ * @param {{ load: function(string, { onLoad: function, onError?: function }): void }} loader
+ * @param {object} config - STAGE2_CONFIG
+ * @param {import("three").Scene} scene
+ * @param {import("three").Object3D[]} objects
+ * @param {(controller: { update: function, cleanup: function } | null) => void} onControllerReady
+ */
+function loadCharacters(loader, config, scene, objects, onControllerReady) {
+  const characterPath =
+    config.characterModelPath ?? "/models/common/user_walking2.glb";
+  const characterPositions = config.characters ?? [
+    { position: { x: -4, y: 0.7, z: 1 } },
+    { position: { x: -2, y: 0.7, z: 2 } },
+    { position: { x: 0, y: 0.7, z: 2 } },
+    { position: { x: 2, y: 0.7, z: 2 } },
+    { position: { x: 4, y: 0.7, z: 1 } },
+  ];
+
+  loader.load(characterPath, {
+    onLoad: (gltf) => {
+      const source = gltf.scene;
+      const count = characterPositions.length;
+      const scale = config.characterScale ?? 1;
+      const characterModels = [];
+      for (let i = 0; i < count; i++) {
+        const model = i === 0 ? source : SkeletonUtils.clone(source);
+        model.scale.setScalar(scale);
+        const pos = characterPositions[i]?.position ?? {};
+        model.position.set(pos.x ?? 0, pos.y ?? 0, pos.z ?? 0);
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        objects.push(model);
+        characterModels.push(model);
+        scene.add(model);
+      }
+      let controller = null;
+      if (gltf.animations?.length > 0) {
+        controller = createAutonomousCharacters({
+          models: characterModels,
+          walkClip: gltf.animations[0],
+          bounds: ISLAND_BOUNDS,
+          groundY: GROUND_Y,
+          options: { moveSpeed: 0.8, boundsPadding: 0.5 },
+        });
+      }
+      onControllerReady(controller);
+      console.log(`✅ Stage2 캐릭터 ${count}명 로드 완료`);
+    },
+    onError: (err) => {
+      console.error("❌ Stage2 캐릭터 로드 에러:", err);
+      onControllerReady(null);
+    },
+  });
 }
 
 /**

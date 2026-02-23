@@ -26,6 +26,18 @@ export const STAGE2_CONFIG = {
     castShadow: true,
     receiveShadow: true,
   },
+  /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
+  characterModelPath: "/models/common/user_walking2.glb",
+  /** 캐릭터 스케일 (1 = 원본 크기) */
+  characterScale: 0.5,
+  /** 5명 캐릭터 위치 (x, y, z) - 섬 위에 배치 */
+  characters: [
+    { position: { x: -4, y: 0.7, z: 1 } },
+    { position: { x: -2, y: 0.7, z: 2 } },
+    { position: { x: 0, y: 0.7, z: 2 } },
+    { position: { x: 2, y: 0.7, z: 2 } },
+    { position: { x: 4, y: 0.7, z: 1 } },
+  ],
   props: [
     {
       path: "/models/collision.glb",
