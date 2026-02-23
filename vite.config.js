@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  // Vercel 등 배포 시 루트 기준으로 asset/source 경로 해석
+  // 서브경로 배포 시 Vercel에서 VITE_BASE_URL=/gum-frontend/ 등으로 설정
+  base: process.env.VITE_BASE_URL || "/",
   plugins: [react()],
   build: {
     rollupOptions: {
