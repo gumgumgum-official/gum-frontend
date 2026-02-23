@@ -32,7 +32,7 @@ export const STAGE6_CONFIG = {
   /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
   characterModelPath: "/models/common/user_walking2.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
-  characterScale: 0.5,
+  characterScale: 1,
   /** 5명 캐릭터 위치 (x, y, z) */
   characters: [
     { position: { x: -3, y: 0.3, z: 4 } },
