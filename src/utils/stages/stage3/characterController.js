@@ -79,7 +79,7 @@ export function createCharacterController({
               `🎬 애니메이션 클립 수: ${gltf.animations.length}, 첫 번째 클립: "${gltf.animations[0].name}"`,
             );
           } else {
-            console.warn("⚠️ user_walking2.glb에 애니메이션 클립이 없습니다.");
+            console.warn("⚠️ 캐릭터 모델에 애니메이션 클립이 없습니다.");
           }
 
           scene.add(characterModel);

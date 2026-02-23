@@ -4,6 +4,7 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createSpeechBubbleHover } from "../utils/stages/stage6/speechBubbleHover.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
@@ -16,6 +17,7 @@ export function Stage6() {
   const config = STAGE6_CONFIG;
   const glbLoader = getGLBLoader();
   let speechBubbleHover = null;
+  let orbitControls = null;
 
   return {
     camera: null,
@@ -42,6 +44,13 @@ export function Stage6() {
       } else {
         this.camera.lookAt(0, 0, 0);
       }
+
+      orbitControls = new OrbitControls(this.camera, renderer.domElement);
+      orbitControls.target.set(
+        config.camera.lookAt?.x ?? 0,
+        config.camera.lookAt?.y ?? 0,
+        config.camera.lookAt?.z ?? 0,
+      );
 
       scene.background = new THREE.Color(config.background.color);
 
@@ -139,11 +148,15 @@ export function Stage6() {
       console.log("✅ Stage6 생성 완료");
     },
 
-    update(_delta) {
-      // TODO: 배웅 애니메이션
+    update(delta) {
+      if (orbitControls) orbitControls.update(delta);
     },
 
     cleanup(scene) {
+      if (orbitControls) {
+        orbitControls.dispose();
+        orbitControls = null;
+      }
       if (speechBubbleHover) {
         speechBubbleHover.cleanup();
         speechBubbleHover = null;
