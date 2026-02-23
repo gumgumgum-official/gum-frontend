@@ -64,6 +64,9 @@
  * @property {{color: number, near: number, far: number}} fog
  * @property {{color: number}} background
  * @property {Stage2ModelConfig} model
+ * @property {string} [characterModelPath] - 캐릭터 GLB 경로
+ * @property {number} [characterScale] - 캐릭터 스케일 (1 = 원본)
+ * @property {Array<{ position?: { x?: number, y?: number, z?: number } }>} [characters] - 캐릭터 위치 (5명)
  * @property {Stage2PropConfig[]} [props]
  */
 
@@ -90,6 +93,7 @@
  * @typedef {Object} Stage3Config
  * @property {StageCameraConfig} camera
  * @property {{color: number}} background
+ * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
  */

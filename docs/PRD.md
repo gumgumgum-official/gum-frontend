@@ -1,4 +1,4 @@
-# [PRD] 껌딱지 나라로의 여행 (가제)
+# [PRD] 껌딱지 월드
 
 ## 1. 프로젝트 개요 (Project Overview)
 
@@ -8,13 +8,13 @@
 
 ## 2. 기술 스택 (Technical Stack)
 
-| 구분         | 기술 스택                              | 비고                               |
-| :----------- | :------------------------------------- | :--------------------------------- |
-| **Core**     | Three.js, Cannon-es                    | 3D 렌더링 및 물리 엔진 연산        |
-| **Frontend** | React, React Router, Vite              | 라우팅 및 빌드 관리                |
-| **Quality**  | ESLint, Prettier, JSDoc (jsconfig)     | 코드 컨벤션 및 타입 검사           |
-| **Workflow** | Husky, lint-staged                     | Git 커밋 전 코드 검증              |
-| **Hardware** | Beam Projector, Computer(Kiosk), Enter | Phase 2(빔), Phase 3~6(컴퓨터)     |
+| 구분         | 기술 스택                              | 비고                           |
+| :----------- | :------------------------------------- | :----------------------------- |
+| **Core**     | Three.js, Cannon-es                    | 3D 렌더링 및 물리 엔진 연산    |
+| **Frontend** | React, React Router, Vite              | 라우팅 및 빌드 관리            |
+| **Quality**  | ESLint, Prettier, JSDoc (jsconfig)     | 코드 컨벤션 및 타입 검사       |
+| **Workflow** | Husky, lint-staged                     | Git 커밋 전 코드 검증          |
+| **Hardware** | Beam Projector, Computer(Kiosk), Enter | Phase 2(빔), Phase 3~6(컴퓨터) |
 
 ## 3. 사용자 여정 및 상세 요구사항 (User Journey & Requirements)
 
