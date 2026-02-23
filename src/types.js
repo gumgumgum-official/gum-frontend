@@ -93,6 +93,7 @@
  * @typedef {Object} Stage3Config
  * @property {StageCameraConfig} camera
  * @property {{color: number}} background
+ * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
  */
