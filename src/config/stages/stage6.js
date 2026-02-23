@@ -7,7 +7,7 @@ export const STAGE6_CONFIG = {
     near: 0.1,
     far: 1000,
     position: { x: 0.0, y: 4.0, z: 11.5 },
-    lookAt: { x: -0.0, y: 0.6, z: -0.4 },
+    //lookAt: { x: -0.0, y: 0.6, z: -0.4 },
   },
   background: {
     color: 0xdfe6e9, // 공항 하이앵글
@@ -30,7 +30,7 @@ export const STAGE6_CONFIG = {
   /** 호버 시 재생할 환호성 사운드 경로 (public 기준, 없으면 재생 안 함) */
   cheerSoundPath: "/static/cheer.mp3",
   /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
-  characterModelPath: "/models/common/user_walking2.glb",
+  characterModelPath: "/models/common/_user_walking_color.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
   characterScale: 1,
   /** 5명 캐릭터 위치 (x, y, z) */
