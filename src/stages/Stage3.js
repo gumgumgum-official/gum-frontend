@@ -11,6 +11,7 @@ import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
+import { inspectModel } from "../utils/common/modelInspector.js";
 import { loadSVGShapes } from "../lib/svg-loader.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
@@ -38,6 +39,7 @@ export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
+  const objects = [];
   let debugControls = null;
   let sceneRef = null;
   let cameraRef = null;
@@ -846,6 +848,8 @@ export function Stage3() {
           stage3GroundY = backgroundMaxY;
           loadLatestLetter(scene, this.camera, backgroundMaxY);
 
+          inspectModel(model, null, "배경 모델");
+
           character.setup(backgroundMaxY, backgroundBounds);
         },
       });
@@ -877,6 +881,23 @@ export function Stage3() {
         if (f.group.material) f.group.material.dispose();
       });
       fragments.length = 0;
+
+      objects.forEach((obj) => {
+        scene.remove(obj);
+        obj.traverse((child) => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
+            }
+          }
+        });
+      });
+      objects.length = 0;
 
       if (character) {
         character.cleanup();
