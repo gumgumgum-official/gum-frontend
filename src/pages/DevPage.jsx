@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
+import { APP_CONFIG } from "../config/appConfig.js";
 import styles from "./Page.module.css";
 
 const DEV_STAGES = [2, 3, 4, 5, 6];
@@ -12,7 +13,7 @@ export function DevPage() {
     <div className={styles.page}>
       <ThreeCanvas
         allowedStages={allowedStages}
-        initialStage={2}
+        initialStage={APP_CONFIG.initialStage}
         enableKeyboardSwitch
       />
     </div>

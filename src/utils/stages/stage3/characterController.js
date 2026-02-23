@@ -43,7 +43,7 @@ export function createCharacterController({
     setup(backgroundMaxY, bounds) {
       backgroundBounds = bounds;
 
-      glbLoader.load("/models/stage3/user_walking2.glb", {
+      glbLoader.load("/models/common/user_walking2.glb", {
         onLoad: (gltf) => {
           characterModel = gltf.scene;
 
