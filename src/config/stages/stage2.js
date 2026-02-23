@@ -27,7 +27,7 @@ export const STAGE2_CONFIG = {
     receiveShadow: true,
   },
   /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
-  characterModelPath: "/models/common/_user_walking_color.glb",
+  characterModelPath: "/models/common/user_walking_color.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
   characterScale: 0.5,
   /** 5명 캐릭터 위치 (x, y, z) - 섬 위에 배치 */

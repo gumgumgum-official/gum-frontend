@@ -13,7 +13,7 @@ export const STAGE3_CONFIG = {
     color: 0x98d8aa, // 밝은 초원
   },
   /** 캐릭터 GLB 경로 */
-  characterModelPath: "/models/common/_user_walking_color.glb",
+  characterModelPath: "/models/common/user_walking_color.glb",
   model: {
     path: "/models/stage3/part3_2.glb",
     position: { x: 0, y: 0, z: 0 },

@@ -48,7 +48,6 @@ export function Stage2() {
   let autonomousCharacters = null;
   let realtimeSubscription = null;
   const fallingTexts = [];
-  let _sceneRef = null;
   let cameraRef = null;
   /** 섬(collision) XZ 범위 (로깅용). 스폰은 ISLAND_BOUNDS 사용 */
   let islandBounds = null;
@@ -79,7 +78,6 @@ export function Stage2() {
 
     setup(scene, renderer) {
       const canvas = renderer.domElement;
-      _sceneRef = scene;
 
       scene.fog = new THREE.Fog(
         config.fog.color,
@@ -227,7 +225,13 @@ export function Stage2() {
       // 키보드 0키: 이미 있는 글자들만 다시 공중으로 올려서 재낙하 (디버그용)
       const handleKeyDown = (event) => {
         if (event.key === "0" || event.code === "Digit0") {
-          console.log("[Stage2] 0키: 재낙하");
+          if (fallingTexts.length === 0) {
+            console.warn(
+              "[Stage2] 0키: 재낙하할 글자가 없습니다. Supabase Storage/Realtime에서 필기 데이터가 들어와야 글자가 생성됩니다. (session 확인 또는 태블릿에서 필기 후 브로드캐스트)",
+            );
+            return;
+          }
+          console.log(`[Stage2] 0키: 재낙하 (${fallingTexts.length}개 글자)`);
           const spawn = getSpawnBounds();
           const { minX, maxX, minZ, maxZ } = spawn;
           fallingTexts.forEach((ft) => {
@@ -311,7 +315,6 @@ export function Stage2() {
       objects.length = 0;
       scene.fog = null;
       scene.background = null;
-      _sceneRef = null;
       cameraRef = null;
       console.log("🧹 Stage2 정리 완료");
     },
