@@ -16,6 +16,7 @@ import { inspectGLTF } from "../../common/modelInspector.js";
  *   setup: (backgroundMaxY: number, backgroundBounds: import("three").Box3) => void,
  *   update: (delta: number, camera: import("three").Camera) => void,
  *   cleanup: () => void,
+ *   getPosition: () => import("three").Vector3 | null,
  * }}
  */
 export function createCharacterController({
@@ -200,6 +201,10 @@ export function createCharacterController({
       isWalking = false;
       stopOnNextLoop = false;
       backgroundBounds = null;
+    },
+
+    getPosition() {
+      return characterModel?.position ?? null;
     },
   };
 }

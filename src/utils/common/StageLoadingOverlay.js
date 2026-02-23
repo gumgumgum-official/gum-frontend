@@ -51,8 +51,8 @@ export function createStageLoadingOverlay(options = {}) {
 
     videoEl = document.createElement("video");
     videoEl.setAttribute("playsinline", "");
-    videoEl.setAttribute("muted", "");
     videoEl.setAttribute("autoplay", "");
+    videoEl.volume = 0.01; // 볼륨 10%
     videoEl.src = videoSrc;
     Object.assign(videoEl.style, {
       position: "absolute",

@@ -11,7 +11,7 @@ import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
-import { inspectModel, inspectGLTF } from "../utils/common/modelInspector.js";
+import { inspectModel } from "../utils/common/modelInspector.js";
 import { loadSVGShapes } from "../lib/svg-loader.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
@@ -39,33 +39,19 @@ export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
+  const objects = [];
   let debugControls = null;
-  let backgroundModelMaxY = 0;
-  let backgroundBounds = null;
-  let ilbuniModel = null;
-  let ilbuniYPosition = 0;
   let sceneRef = null;
   let cameraRef = null;
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
+  let backgroundModel = null;
 
   // 낙하 글자 1개 (최신 것만)
   let letterState = null; // { group, velocity: { y }, gravity, groundY, landed, hitCount }
   const fragments = []; // { group, velocity, angularVelocity, age } — 조각은 글자 메시 클론
 
-  // 키보드 입력 상태
-  const keys = {
-    ArrowUp: false,
-    ArrowDown: false,
-    ArrowLeft: false,
-    ArrowRight: false,
-  };
-
-  const handleKeyDown = (event) => {
-    if (event.key in keys) {
-      keys[event.key] = true;
-      event.preventDefault();
-    }
+  const handleStageKeyDown = (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       onEnterHit();
@@ -75,7 +61,6 @@ export function Stage3() {
       resetLetterFall();
     }
   };
-  let backgroundModel = null;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -166,6 +151,16 @@ export function Stage3() {
   }
 
   async function loadLatestLetter(scene, camera, groundY) {
+    // 기존 글자 하나 제거 (중복 호출 시 천장에 남는 현상 방지)
+    if (letterState) {
+      scene.remove(letterState.group);
+      letterState.group.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
+      letterState = null;
+    }
+
     const metadata = await getLatestHandwritingMetadata();
     if (!metadata?.url) {
       console.log("[Stage3] 표시할 handwriting 없음");
@@ -540,7 +535,9 @@ export function Stage3() {
   }
 
   function getHitTarget() {
-    const origin = ilbuniModel?.position ?? new THREE.Vector3(0, 0, 0);
+    const origin = (
+      character?.getPosition?.() ?? new THREE.Vector3(0, 0, 0)
+    ).clone();
     let best = null;
     let bestDist = HIT_RANGE;
     if (letterState?.landed && letterState.hitCount < HITS_TO_DESTROY) {
@@ -808,6 +805,7 @@ export function Stage3() {
       scene.background = new THREE.Color(config.background.color);
 
       keyboard.mount();
+      window.addEventListener("keydown", handleStageKeyDown);
 
       debugControls = createStageDebugControls({
         scene,
@@ -831,49 +829,11 @@ export function Stage3() {
           console.log("✅ Stage3 배경 모델 로드 완료");
 
           cameraRef = this.camera;
-          stage3GroundY = actualMaxY;
-          loadLatestLetter(scene, this.camera, actualMaxY);
+          stage3GroundY = backgroundMaxY;
+          loadLatestLetter(scene, this.camera, backgroundMaxY);
 
           inspectModel(model, null, "배경 모델");
 
-          // 배경 모델 로드 완료 후 ilbuni 로드
-          glbLoader.load("/models/stage3/ilbuni.glb", {
-            onLoad: (gltf) => {
-              ilbuniModel = gltf.scene;
-
-              // ilbuni 모델의 바운딩 박스 계산
-              const ilbuniBox = new THREE.Box3().setFromObject(ilbuniModel);
-              const ilbuniMinY = ilbuniBox.min.y;
-
-              // 배경 모델 위에 서도록 y 위치 설정
-              const { groundOffset } = config.ilbuni;
-              ilbuniYPosition = backgroundModelMaxY - ilbuniMinY + groundOffset;
-              ilbuniModel.position.set(0, ilbuniYPosition, 0);
-
-              ilbuniModel.traverse((child) => {
-                if (child.isMesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-
-              objects.push(ilbuniModel);
-              scene.add(ilbuniModel);
-              console.log(
-                `✅ Stage3 ilbuni 모델 로드 완료 (y: ${ilbuniYPosition.toFixed(2)})`,
-              );
-
-              inspectGLTF(gltf, "ilbuni 모델");
-            },
-            onProgress: (xhr) => {
-              if (xhr.total > 0) {
-                console.log(
-                  `Stage3 ilbuni: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-                );
-              }
-            },
-            onError: (err) => console.error("❌ Stage3 ilbuni 로드 에러:", err),
-          });
           character.setup(backgroundMaxY, backgroundBounds);
         },
       });
@@ -886,78 +846,11 @@ export function Stage3() {
       updateLetter(delta, this.camera);
       updateFragments(delta);
 
-      // ilbuni 캐릭터 이동 처리: 로드 순서와 관계없이 ilbuni와 배경 바운드가 모두 준비된 경우에만 실행
-      if (ilbuniModel && backgroundBounds) {
-        const {
-          moveSpeed,
-          boundsPadding,
-          cameraOffset: camOffset,
-          cameraLerpFactor,
-          lookAtHeightOffset,
-        } = config.ilbuni;
-        const moveVector = new THREE.Vector3();
-
-        // 방향키 입력에 따른 이동 벡터 계산
-        if (keys.ArrowUp) moveVector.z -= 1;
-        if (keys.ArrowDown) moveVector.z += 1;
-        if (keys.ArrowLeft) moveVector.x -= 1;
-        if (keys.ArrowRight) moveVector.x += 1;
-
-        // 정규화하여 대각선 이동 시 속도 일정하게 유지
-        if (moveVector.length() > 0) {
-          moveVector.normalize();
-          moveVector.multiplyScalar(moveSpeed * delta);
-
-          // y 위치는 유지하고 x, z만 이동
-          let newX = ilbuniModel.position.x + moveVector.x;
-          let newZ = ilbuniModel.position.z + moveVector.z;
-
-          // 배경 모델의 바운딩 박스 범위 내로 제한 (backgroundBounds는 위 조건으로 항상 유효)
-          newX = THREE.MathUtils.clamp(
-            newX,
-            backgroundBounds.min.x + boundsPadding,
-            backgroundBounds.max.x - boundsPadding,
-          );
-          newZ = THREE.MathUtils.clamp(
-            newZ,
-            backgroundBounds.min.z + boundsPadding,
-            backgroundBounds.max.z - boundsPadding,
-          );
-
-          ilbuniModel.position.x = newX;
-          ilbuniModel.position.z = newZ;
-          ilbuniModel.position.y = ilbuniYPosition; // y 위치 고정
-
-          // 이동 방향에 따라 캐릭터 회전
-          if (moveVector.length() > 0.01) {
-            const angle = Math.atan2(moveVector.x, moveVector.z);
-            ilbuniModel.rotation.y = angle;
-          }
-        }
-
-        // 카메라가 캐릭터를 따라가도록 설정
-        const cameraOffset = new THREE.Vector3(
-          camOffset.x,
-          camOffset.y,
-          camOffset.z,
-        );
-        const targetPosition = ilbuniModel.position.clone().add(cameraOffset);
-
-        this.camera.position.lerp(targetPosition, cameraLerpFactor);
-
-        const lookAtPosition = ilbuniModel.position.clone();
-        lookAtPosition.y += lookAtHeightOffset;
-        this.camera.lookAt(lookAtPosition);
-      }
-    },
-
-    cleanup(scene) {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
       if (character) character.update(delta, this.camera);
     },
 
     cleanup(scene) {
+      window.removeEventListener("keydown", handleStageKeyDown);
       keyboard.unmount();
 
       if (debugControls) {
@@ -983,6 +876,20 @@ export function Stage3() {
       objects.forEach((obj) => {
         scene.remove(obj);
         obj.traverse((child) => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
+            }
+          }
+        });
+      });
+      objects.length = 0;
+
       if (character) {
         character.cleanup();
         character = null;
