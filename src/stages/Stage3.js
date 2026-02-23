@@ -49,6 +49,7 @@ export function Stage3() {
 
   // 낙하 글자 1개 (최신 것만)
   let letterState = null; // { group, velocity: { y }, gravity, groundY, landed, hitCount }
+  let letterLoadInProgress = false; // 동시에 여러 번 호출되면 한 번만 실행
   const fragments = []; // { group, velocity, angularVelocity, age } — 조각은 글자 메시 클론
 
   const handleStageKeyDown = (event) => {
@@ -150,26 +151,39 @@ export function Stage3() {
     group.rotateX(-(TILT_DEGREES * Math.PI) / 180);
   }
 
-  async function loadLatestLetter(scene, camera, groundY) {
-    // 기존 글자 하나 제거 (중복 호출 시 천장에 남는 현상 방지)
-    if (letterState) {
-      scene.remove(letterState.group);
-      letterState.group.traverse((child) => {
+  /** 씬에서 Stage3 글자 그룹만 모두 제거 (떠 있는 것 포함) */
+  function removeAllLetterGroupsFromScene(scene) {
+    const toRemove = [];
+    scene.traverse((obj) => {
+      if (obj.userData?.isStage3Letter) toRemove.push(obj);
+    });
+    toRemove.forEach((obj) => {
+      scene.remove(obj);
+      obj.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) child.material.dispose();
       });
-      letterState = null;
-    }
+    });
+    letterState = null;
+  }
 
-    const metadata = await getLatestHandwritingMetadata();
-    if (!metadata?.url) {
-      console.log("[Stage3] 표시할 handwriting 없음");
-      return;
-    }
+  async function loadLatestLetter(scene, camera, groundY) {
+    if (letterLoadInProgress) return;
+    letterLoadInProgress = true;
+
+    removeAllLetterGroupsFromScene(scene);
+
     try {
+      const metadata = await getLatestHandwritingMetadata();
+      if (!metadata?.url) {
+        console.log("[Stage3] 표시할 handwriting 없음");
+        return;
+      }
       const shapes = await loadSVGShapes(metadata.url);
       if (shapes.length === 0) return;
+
       const group = new THREE.Group();
+      group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
       const extrudeSettings = {
         depth: 0.05,
         bevelEnabled: true,
@@ -211,6 +225,8 @@ export function Stage3() {
       console.log("[Stage3] 최신 글자 1개 낙하 시작 (2배 크기)");
     } catch (e) {
       console.warn("[Stage3] 글자 로드 실패:", e);
+    } finally {
+      letterLoadInProgress = false;
     }
   }
 
@@ -858,14 +874,7 @@ export function Stage3() {
         debugControls = null;
       }
 
-      if (letterState) {
-        scene.remove(letterState.group);
-        letterState.group.traverse((child) => {
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) child.material.dispose();
-        });
-        letterState = null;
-      }
+      removeAllLetterGroupsFromScene(scene);
       fragments.forEach((f) => {
         scene.remove(f.group);
         if (f.group.geometry) f.group.geometry.dispose();
