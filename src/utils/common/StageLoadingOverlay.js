@@ -6,7 +6,7 @@
  */
 
 /**
- * @param {{ videoSrc: string }} options
+ * @param {{ videoSrc?: string }} [options]
  * @returns {{ show: () => void, hide: () => void }}
  */
 export function createStageLoadingOverlay(options = {}) {

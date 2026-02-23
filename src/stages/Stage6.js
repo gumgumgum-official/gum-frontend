@@ -5,23 +5,23 @@
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
-import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
+import { createSpeechBubbleHover } from "../utils/stages/stage6/speechBubbleHover.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 
-const CHARACTER_GLB_PATH = "/models/common/user_walking2.glb";
+const DEFAULT_CHARACTER_PATH = "/models/common/user_walking2.glb";
 
 export function Stage6() {
   const objects = [];
-  const propRoots = [];
+  const characterModels = [];
   const config = STAGE6_CONFIG;
   const glbLoader = getGLBLoader();
-  let debugControls = null;
+  let speechBubbleHover = null;
 
   return {
     camera: null,
 
     setup(scene, renderer) {
-      const canvas = renderer.domElement;
+      const stage = this;
       this.camera = new THREE.PerspectiveCamera(
         config.camera.fov,
         window.innerWidth / window.innerHeight,
@@ -45,18 +45,6 @@ export function Stage6() {
 
       scene.background = new THREE.Color(config.background.color);
 
-      debugControls = createStageDebugControls({
-        scene,
-        camera: this.camera,
-        domElement: canvas,
-        getPropRoots: () => propRoots,
-        getPropPath: (index) => `${CHARACTER_GLB_PATH}#${index}`,
-        options: {
-          stageName: "stage6",
-          getInitialCameraConfig: () => config.camera,
-        },
-      });
-
       // 배경 GLB 로드
       glbLoader.load(config.model.path, {
         onLoad: (gltf) => {
@@ -69,9 +57,6 @@ export function Stage6() {
           );
           model.updateMatrixWorld(true);
 
-          const box = new THREE.Box3().setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
-
           model.traverse((child) => {
             if (child.isMesh) {
               if (config.model.castShadow !== undefined) {
@@ -80,13 +65,11 @@ export function Stage6() {
               if (config.model.receiveShadow !== undefined) {
                 child.receiveShadow = config.model.receiveShadow;
               }
-              child.raycast = () => {}; // 배경은 클릭 제외 (디버그 선택 불가)
             }
           });
 
           objects.push(model);
           scene.add(model);
-          debugControls.setOrbitTarget(center);
 
           console.log("✅ Stage6 배경 로드 완료");
         },
@@ -100,7 +83,7 @@ export function Stage6() {
         onError: (err) => console.error("❌ Stage6 배경 로드 에러:", err),
       });
 
-      // 캐릭터 5명 GLB 로드 (config.characters 위치 적용, 드래그로 조정 가능)
+      // 캐릭터 5명 GLB 로드 (config.characters 위치 적용)
       const characterPositions = config.characters ?? [
         { position: { x: 0, y: 0, z: 0 } },
         { position: { x: 1.2, y: 0, z: 0 } },
@@ -108,7 +91,8 @@ export function Stage6() {
         { position: { x: 3.6, y: 0, z: 0 } },
         { position: { x: 4.8, y: 0, z: 0 } },
       ];
-      glbLoader.load(CHARACTER_GLB_PATH, {
+      const characterPath = config.characterModelPath ?? DEFAULT_CHARACTER_PATH;
+      glbLoader.load(characterPath, {
         onLoad: (gltf) => {
           const source = gltf.scene;
           for (let i = 0; i < 5; i++) {
@@ -122,13 +106,23 @@ export function Stage6() {
               }
             });
             objects.push(model);
-            propRoots.push(model);
+            const messages = config.speechBubbleMessages ?? [];
+            characterModels.push({
+              model,
+              message: messages[i % messages.length],
+            });
             scene.add(model);
           }
-          debugControls.setDraggableObjects(propRoots);
-          console.log(
-            "✅ Stage6 캐릭터 5명 로드 완료 (마우스로 드래그하여 이동, 클릭 후 T/R/E 키로 위치·회전·크기 조정)",
-          );
+          speechBubbleHover = createSpeechBubbleHover({
+            camera: stage.camera,
+            renderer,
+            characterModels,
+            options: {
+              cheerSoundPath: config.cheerSoundPath,
+              bubbleOffsetY: 0.7,
+            },
+          });
+          console.log("✅ Stage6 캐릭터 5명 로드 완료");
         },
         onProgress: (xhr) => {
           if (xhr.total > 0) {
@@ -143,17 +137,16 @@ export function Stage6() {
       console.log("✅ Stage6 생성 완료");
     },
 
-    update(delta) {
-      if (debugControls) debugControls.update(delta);
-      // TODO: 배웅 애니메이션, 말풍선 호버
+    update(_delta) {
+      // TODO: 배웅 애니메이션
     },
 
     cleanup(scene) {
-      if (debugControls) {
-        debugControls.dispose();
-        debugControls = null;
+      if (speechBubbleHover) {
+        speechBubbleHover.cleanup();
+        speechBubbleHover = null;
       }
-      propRoots.length = 0;
+      characterModels.length = 0;
 
       objects.forEach((obj) => {
         scene.remove(obj);
