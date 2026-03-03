@@ -5,13 +5,16 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
-import { STAGE3_CONFIG } from "../config/stages/stage3.js";
-import { inspectModel } from "../utils/common/modelInspector.js";
+import {
+  STAGE3_CONFIG,
+  loadIceCreamSpawnModels,
+} from "../config/stages/stage3.js";
 import { loadSVGShapes } from "../lib/svg-loader.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
@@ -43,14 +46,31 @@ export function Stage3() {
   let debugControls = null;
   let sceneRef = null;
   let cameraRef = null;
+  let canvasRef = null;
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
 
   // 낙하 글자 1개 (최신 것만)
-  let letterState = null; // { group, velocity: { y }, gravity, groundY, landed, hitCount }
-  let letterLoadInProgress = false; // 동시에 여러 번 호출되면 한 번만 실행
-  const fragments = []; // { group, velocity, angularVelocity, age } — 조각은 글자 메시 클론
+  let letterState = null;
+  let letterLoadInProgress = false;
+  const fragments = [];
+
+  // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰
+  let iceCreamCartRef = null;
+  const iceCreamTemplates = []; // [{ scene }, { scene }]
+  const spawnedIceCreams = []; // { group, velocity, groundY }
+  const ICE_CREAM_SPAWN_GRAVITY = -18;
+  const _icePointer = new THREE.Vector2();
+  const _iceRaycaster = new THREE.Raycaster();
+
+  const keyboard = createKeyboardInput([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+  ]);
+  let character = null;
 
   const handleStageKeyDown = (event) => {
     if (event.key === "Enter") {
@@ -63,14 +83,123 @@ export function Stage3() {
     }
   };
 
-  const keyboard = createKeyboardInput([
-    "ArrowUp",
-    "ArrowDown",
-    "ArrowLeft",
-    "ArrowRight",
-  ]);
+  /** 마우스가 아이스크림 카트 위에 있는지 여부 (레이캐스트) */
+  function isPointerOverIceCreamCart(clientX, clientY) {
+    if (!iceCreamCartRef || !cameraRef || !canvasRef || !sceneRef) return false;
+    const rect = canvasRef.getBoundingClientRect();
+    _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    _iceRaycaster.setFromCamera(_icePointer, cameraRef);
+    const hits = _iceRaycaster.intersectObjects(sceneRef.children, true);
+    if (hits.length === 0) return false;
+    let obj = hits[0].object;
+    while (obj && obj !== sceneRef) {
+      if (obj === iceCreamCartRef) return true;
+      obj = obj.parent;
+    }
+    return false;
+  }
 
-  let character = null;
+  function handleIceCreamCartPointerMove(event) {
+    if (!canvasRef) return;
+    canvasRef.style.cursor = isPointerOverIceCreamCart(
+      event.clientX,
+      event.clientY,
+    )
+      ? "pointer"
+      : "default";
+  }
+
+  function handleIceCreamCartPointerLeave() {
+    if (canvasRef) canvasRef.style.cursor = "default";
+  }
+
+  /** 아이스크림 카트 클릭 시 랜덤 아이스크림 스폰 */
+  function handleIceCreamCartPointerDown(event) {
+    if (!iceCreamCartRef || !cameraRef || !canvasRef || !sceneRef) return;
+    if (iceCreamTemplates.length === 0) return;
+
+    const rect = canvasRef.getBoundingClientRect();
+    _icePointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    _icePointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    _iceRaycaster.setFromCamera(_icePointer, cameraRef);
+
+    // 장면 전체 레이캐스트 → 첫 번째 히트가 카트(또는 그 자식)인지 확인 (배경은 raycast 비활성화됨)
+    const hits = _iceRaycaster.intersectObjects(sceneRef.children, true);
+    if (hits.length === 0) return;
+
+    let obj = hits[0].object;
+    while (obj && obj !== sceneRef) {
+      if (obj === iceCreamCartRef) {
+        event.preventDefault();
+        event.stopPropagation();
+        spawnIceCreamFromCart();
+        return;
+      }
+      obj = obj.parent;
+    }
+  }
+
+  function spawnIceCreamFromCart() {
+    if (!iceCreamCartRef) {
+      console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
+      return;
+    }
+    if (!sceneRef) return;
+    if (iceCreamTemplates.length === 0) {
+      console.warn(
+        "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
+      );
+      return;
+    }
+    const template =
+      iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
+    const clone = SkeletonUtils.clone(template.scene);
+    const cartPos = iceCreamCartRef.position;
+    const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
+    clone.position.set(
+      cartPos.x + (Math.random() - 0.5) * 1.5,
+      cartPos.y + 0.5 + Math.random() * 0.5,
+      cartPos.z + (Math.random() - 0.5) * 1.5,
+    );
+    clone.scale.setScalar(spawnScale);
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    // 카트 중심에서 바깥 방향으로 튀어나가도록 속도 설정 (카트 범위 안에 떨어지지 않되, 너무 멀리 나가지 않음)
+    const angle = Math.random() * Math.PI * 2;
+    const horizontalSpeed = 2.5 + Math.random() * 2;
+    const velocity = new THREE.Vector3(
+      Math.cos(angle) * horizontalSpeed,
+      3 + Math.random() * 2,
+      Math.sin(angle) * horizontalSpeed,
+    );
+    sceneRef.add(clone);
+    spawnedIceCreams.push({
+      group: clone,
+      velocity,
+      groundY: stage3GroundY,
+    });
+    console.log("[Stage3] 아이스크림 스폰");
+  }
+
+  function updateSpawnedIceCreams(delta) {
+    const g = ICE_CREAM_SPAWN_GRAVITY;
+    for (let i = 0; i < spawnedIceCreams.length; i++) {
+      const s = spawnedIceCreams[i];
+      s.group.position.x += s.velocity.x * delta;
+      s.group.position.y += s.velocity.y * delta;
+      s.group.position.z += s.velocity.z * delta;
+      s.velocity.y += g * delta;
+      if (s.group.position.y <= s.groundY) {
+        s.group.position.y = s.groundY;
+        s.velocity.set(0, 0, 0);
+      }
+    }
+  }
 
   /** 최신 handwriting 메타데이터 1개 반환 (없으면 null) */
   async function getLatestHandwritingMetadata() {
@@ -332,7 +461,7 @@ export function Stage3() {
   }
 
   /** 자음/모음(shape) 단위로 분할 — 한 번에 한 shape씩 떨어져 나감 (ㅇ, ㅡ, ㅏ 등) */
-  function partitionTrianglesByShape(triangles, _fraction) {
+  function partitionTrianglesByShape(triangles) {
     const byShape = new Map();
     const _c = new THREE.Vector3();
     for (const tri of triangles) {
@@ -552,7 +681,9 @@ export function Stage3() {
 
   function getHitTarget() {
     const origin = (
-      character?.getPosition?.() ?? new THREE.Vector3(0, 0, 0)
+      character?.getPosition?.() ??
+      cameraRef?.position ??
+      new THREE.Vector3(0, 0, 0)
     ).clone();
     let best = null;
     let bestDist = HIT_RANGE;
@@ -683,7 +814,7 @@ export function Stage3() {
     const hasMultipleShapes =
       new Set(triangles.map((t) => t.meshIndex ?? 0)).size > 1;
     const { remaining, fragments: fragTriangles } = hasMultipleShapes
-      ? partitionTrianglesByShape(triangles, FRACTION_PER_HIT)
+      ? partitionTrianglesByShape(triangles)
       : partitionTrianglesOneSlice(triangles, group, FRACTION_PER_HIT);
 
     createFragmentMeshes(fragTriangles, mat, target.groundY);
@@ -789,6 +920,7 @@ export function Stage3() {
     setup(scene, renderer) {
       const canvas = renderer.domElement;
       sceneRef = scene;
+      canvasRef = canvas;
 
       character = createCharacterController({
         scene,
@@ -821,7 +953,12 @@ export function Stage3() {
       scene.background = new THREE.Color(config.background.color);
 
       keyboard.mount();
-      window.addEventListener("keydown", handleStageKeyDown);
+      window.addEventListener("keydown", handleStageKeyDown, { capture: true });
+      canvas.addEventListener("pointerdown", handleIceCreamCartPointerDown, {
+        capture: true,
+      });
+      canvas.addEventListener("pointermove", handleIceCreamCartPointerMove);
+      canvas.addEventListener("pointerleave", handleIceCreamCartPointerLeave);
 
       debugControls = createStageDebugControls({
         scene,
@@ -832,6 +969,8 @@ export function Stage3() {
         options: {
           stageName: "stage3",
           getInitialCameraConfig: () => config.camera,
+          forceOrbit: true, // OrbitControls 활성화 (마우스 드래그로 회전/줌)
+          manageCursor: false, // 아이스크림 카트 호버 시 pointer 커서 직접 처리
         },
       });
 
@@ -839,7 +978,12 @@ export function Stage3() {
         scene,
         glbLoader,
         config,
-        onReady: ({ model, center, backgroundMaxY, backgroundBounds }) => {
+        onReady: async ({
+          model,
+          center,
+          backgroundMaxY,
+          backgroundBounds,
+        }) => {
           backgroundModel = model;
           debugControls.setOrbitTarget(center);
           console.log("✅ Stage3 배경 모델 로드 완료");
@@ -848,9 +992,88 @@ export function Stage3() {
           stage3GroundY = backgroundMaxY;
           loadLatestLetter(scene, this.camera, backgroundMaxY);
 
-          inspectModel(model, null, "배경 모델");
-
           character.setup(backgroundMaxY, backgroundBounds);
+
+          const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+
+          // 13. 아이스크림 카트 배치
+          const iceCart = config.icecreamCart;
+          if (iceCart) {
+            const modelPath = base + iceCart.path;
+            try {
+              const iceCreamCartGltf = await glbLoader.loadAsync(modelPath);
+              const iceCreamCart = iceCreamCartGltf.scene;
+              iceCreamCart.position.set(
+                iceCart.position?.x ?? 0,
+                backgroundMaxY + (iceCart.position?.y ?? 0),
+                iceCart.position?.z ?? 0,
+              );
+              iceCreamCart.rotation.set(
+                (iceCart.rotation?.x ?? 0) * (Math.PI / 180),
+                (iceCart.rotation?.y ?? 0) * (Math.PI / 180),
+                (iceCart.rotation?.z ?? 0) * (Math.PI / 180),
+              );
+              iceCreamCart.scale.setScalar(iceCart.scale ?? 1);
+              iceCreamCart.traverse((child) => {
+                if (child.isMesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
+              });
+              iceCreamCart.userData.isIceCreamCart = true;
+              scene.add(iceCreamCart);
+              objects.push(iceCreamCart);
+              iceCreamCartRef = iceCreamCart;
+
+              // 스폰용 아이스크림 모델 프리로드 (icecream, rainbow_icecream) - assetLoaders 사용
+              const loaded = await loadIceCreamSpawnModels();
+              iceCreamTemplates.push(...loaded);
+              console.log(
+                "✅ Stage3 아이스크림 카트 로드 완료 (클릭 시 스폰, 템플릿",
+                iceCreamTemplates.length,
+                "개):",
+                modelPath,
+              );
+            } catch (err) {
+              console.warn(
+                "❌ Stage3 아이스크림 카트 로드 실패:",
+                modelPath,
+                err,
+              );
+            }
+          }
+
+          // tree1 모델 배치
+          const tree1Prop = config.tree1;
+          if (tree1Prop) {
+            const modelPath = base + tree1Prop.path;
+            try {
+              const tree1Gltf = await glbLoader.loadAsync(modelPath);
+              const tree1Model = tree1Gltf.scene;
+              tree1Model.position.set(
+                tree1Prop.position?.x ?? 0,
+                backgroundMaxY + (tree1Prop.position?.y ?? 0),
+                tree1Prop.position?.z ?? 0,
+              );
+              tree1Model.rotation.set(
+                (tree1Prop.rotation?.x ?? 0) * (Math.PI / 180),
+                (tree1Prop.rotation?.y ?? 0) * (Math.PI / 180),
+                (tree1Prop.rotation?.z ?? 0) * (Math.PI / 180),
+              );
+              tree1Model.scale.setScalar(tree1Prop.scale ?? 1);
+              tree1Model.traverse((child) => {
+                if (child.isMesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
+              });
+              scene.add(tree1Model);
+              objects.push(tree1Model);
+              console.log("✅ Stage3 tree1 로드 완료:", modelPath);
+            } catch (err) {
+              console.warn("❌ Stage3 tree1 로드 실패:", modelPath, err);
+            }
+          }
         },
       });
 
@@ -861,13 +1084,56 @@ export function Stage3() {
       if (debugControls) debugControls.update(delta);
       updateLetter(delta, this.camera);
       updateFragments(delta);
-
-      if (character) character.update(delta, this.camera);
+      updateSpawnedIceCreams(delta);
+      if (character) {
+        character.update(delta, this.camera, { skipCameraFollow: true });
+      }
     },
 
     cleanup(scene) {
-      window.removeEventListener("keydown", handleStageKeyDown);
       keyboard.unmount();
+      window.removeEventListener("keydown", handleStageKeyDown, {
+        capture: true,
+      });
+
+      if (character) {
+        character.cleanup();
+        character = null;
+      }
+      if (canvasRef) {
+        canvasRef.removeEventListener(
+          "pointerdown",
+          handleIceCreamCartPointerDown,
+          { capture: true },
+        );
+        canvasRef.removeEventListener(
+          "pointermove",
+          handleIceCreamCartPointerMove,
+        );
+        canvasRef.removeEventListener(
+          "pointerleave",
+          handleIceCreamCartPointerLeave,
+        );
+        canvasRef.style.cursor = "default";
+        canvasRef = null;
+      }
+
+      spawnedIceCreams.forEach((s) => {
+        scene.remove(s.group);
+        s.group.traverse((child) => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              const m = child.material;
+              if (Array.isArray(m)) m.forEach((x) => x.dispose());
+              else m.dispose();
+            }
+          }
+        });
+      });
+      spawnedIceCreams.length = 0;
+      iceCreamCartRef = null;
+      iceCreamTemplates.length = 0;
 
       if (debugControls) {
         debugControls.dispose();
@@ -898,11 +1164,6 @@ export function Stage3() {
         });
       });
       objects.length = 0;
-
-      if (character) {
-        character.cleanup();
-        character = null;
-      }
 
       if (backgroundModel) {
         scene.remove(backgroundModel);

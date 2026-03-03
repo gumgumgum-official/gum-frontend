@@ -1,4 +1,6 @@
-// Phase 3: 부셔버리자 (밝은 초원, 스트레스 해소)
+// Phase 3: 부셔버리자
+
+import { getGLBLoader } from "../../utils/common/assetLoaders.js";
 
 /** @type {import("../../types.js").Stage3Config} */
 export const STAGE3_CONFIG = {
@@ -30,4 +32,47 @@ export const STAGE3_CONFIG = {
     cameraLerpFactor: 0.1, // 카메라 부드러운 추적 강도
     lookAtHeightOffset: 1, // lookAt 시 캐릭터 머리 높이
   },
+  /** 13. 아이스크림 카트 (클릭 시 아이스크림 랜덤 스폰) */
+  icecreamCart: {
+    path: "/models/stage3/icecream_cart.glb",
+    position: { x: 5, y: 0.4, z: 7.5 },
+    rotation: { x: 0, y: -40, z: 0 },
+    scale: 1,
+    /** 클릭 시 랜덤 스폰될 아이스크림 모델 경로 */
+    spawnPaths: [
+      "/models/stage3/flowers/blue2.glb",
+      "/models/stage3/flowers/red.glb",
+    ],
+    spawnScale: 0.5,
+  },
+  /** tree1 모델 */
+  tree1: {
+    path: "/models/stage3/tree1.glb",
+    position: { x: -5.5, y: -0.4, z: -8 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 4,
+  },
 };
+
+/**
+ * icecream.glb, rainbow_icecream.glb 모델을 assetLoaders로 로드
+ * @returns {Promise<Array<{ scene: import("three").Group }>>} [{ scene }, { scene }]
+ */
+export async function loadIceCreamSpawnModels() {
+  const spawnPaths = STAGE3_CONFIG.icecreamCart?.spawnPaths ?? [
+    "/models/stage3/icecream.glb",
+    "/models/stage3/rainbow_icecream.glb",
+  ];
+  const glbLoader = getGLBLoader();
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  const templates = [];
+  for (const p of spawnPaths) {
+    try {
+      const gltf = await glbLoader.loadAsync(base + p);
+      templates.push({ scene: gltf.scene });
+    } catch (e) {
+      console.warn("[Stage3] 아이스크림 스폰 모델 로드 실패:", p, e);
+    }
+  }
+  return templates;
+}
