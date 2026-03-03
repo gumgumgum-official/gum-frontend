@@ -1074,6 +1074,45 @@ export function Stage3() {
               console.warn("❌ Stage3 tree1 로드 실패:", modelPath, err);
             }
           }
+
+          // notice, portal_bright, statue, well 모델 배치
+          const stage3Props = [
+            { key: "notice", name: "notice" },
+            { key: "portal_bright", name: "portal_bright" },
+            { key: "statue", name: "statue" },
+            { key: "well", name: "well" },
+          ];
+          for (const { key, name } of stage3Props) {
+            const prop = config[key];
+            if (!prop) continue;
+            const modelPath = base + prop.path;
+            try {
+              const gltf = await glbLoader.loadAsync(modelPath);
+              const model = gltf.scene;
+              model.position.set(
+                prop.position?.x ?? 0,
+                backgroundMaxY + (prop.position?.y ?? 0),
+                prop.position?.z ?? 0,
+              );
+              model.rotation.set(
+                (prop.rotation?.x ?? 0) * (Math.PI / 180),
+                (prop.rotation?.y ?? 0) * (Math.PI / 180),
+                (prop.rotation?.z ?? 0) * (Math.PI / 180),
+              );
+              model.scale.setScalar(prop.scale ?? 1);
+              model.traverse((child) => {
+                if (child.isMesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
+              });
+              scene.add(model);
+              objects.push(model);
+              console.log(`✅ Stage3 ${name} 로드 완료:`, modelPath);
+            } catch (err) {
+              console.warn(`❌ Stage3 ${name} 로드 실패:`, modelPath, err);
+            }
+          }
         },
       });
 

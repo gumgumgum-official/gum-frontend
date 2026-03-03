@@ -108,6 +108,10 @@
  * @property {Stage3CharacterConfig} character
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
  * @property {Stage3IcecreamCartConfig} [tree1]
+ * @property {Stage3IcecreamCartConfig} [notice]
+ * @property {Stage3IcecreamCartConfig} [portal_bright]
+ * @property {Stage3IcecreamCartConfig} [statue]
+ * @property {Stage3IcecreamCartConfig} [well]
  */
 
 export {};

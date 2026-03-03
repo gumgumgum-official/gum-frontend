@@ -53,6 +53,34 @@ export const STAGE3_CONFIG = {
     rotation: { x: 0, y: 0, z: 0 },
     scale: 4,
   },
+  /** 게시판 */
+  notice: {
+    path: "/models/stage3/notice.glb",
+    position: { x: -4, y: 0, z: -4 },
+    rotation: { x: 0, y: 20, z: 0 },
+    scale: 1.8,
+  },
+  /** 마법 포탈 */
+  portal_bright: {
+    path: "/models/stage3/portal_bright.glb",
+    position: { x: -2, y: 0, z: 10 },
+    rotation: { x: 0, y: 40, z: 0 },
+    scale: 2,
+  },
+  /** 껌딱지 동상 */
+  statue: {
+    path: "/models/stage3/statue.glb",
+    position: { x: 0, y: 0, z: -6 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 3,
+  },
+  /** 우물 */
+  well: {
+    path: "/models/stage3/well.glb",
+    position: { x: -10, y: 0, z: 0 },
+    rotation: { x: 0, y: 50, z: 0 },
+    scale: 2,
+  },
 };
 
 /**
