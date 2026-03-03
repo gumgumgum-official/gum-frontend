@@ -39,15 +39,16 @@ export const STAGE3_CONFIG = {
     rotation: { x: 0, y: -40, z: 0 },
     scale: 1,
     /** 클릭 시 랜덤 스폰될 아이스크림 모델 경로 */
+    /**TODO: 모델 수정 필요 아이스크림으로!~!! */
     spawnPaths: [
-      "/models/stage3/flowers/blue2.glb",
-      "/models/stage3/flowers/red.glb",
+      "/models/common/flowers/blue3.glb",
+      "/models/common/flowers/red2.glb",
     ],
     spawnScale: 0.5,
   },
   /** tree1 모델 */
   tree1: {
-    path: "/models/stage3/tree1.glb",
+    path: "/models/common/trees/tree1.glb",
     position: { x: -5.5, y: -0.4, z: -8 },
     rotation: { x: 0, y: 0, z: 0 },
     scale: 4,
