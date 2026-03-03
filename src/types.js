@@ -90,12 +90,24 @@
 
 /**
  * Stage3 전체 설정
+ * @typedef {Object} Stage3IcecreamCartConfig
+ * @property {string} path
+ * @property {{x?: number, y?: number, z?: number}} [position]
+ * @property {{x?: number, y?: number, z?: number}} [rotation]
+ * @property {number} [scale]
+ * @property {string[]} [spawnPaths] - 클릭 시 랜덤 스폰될 아이스크림 GLB 경로
+ * @property {number} [spawnScale] - 스폰 아이스크림 스케일
+ */
+
+/**
  * @typedef {Object} Stage3Config
  * @property {StageCameraConfig} camera
  * @property {{color: number}} background
  * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
+ * @property {Stage3IcecreamCartConfig} [icecreamCart]
+ * @property {Stage3IcecreamCartConfig} [tree1]
  */
 
 export {};
