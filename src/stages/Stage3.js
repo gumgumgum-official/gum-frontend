@@ -11,6 +11,7 @@ import { createStageDebugControls } from "../utils/common/stageDebugControls.js"
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
+import * as CANNON from "cannon-es";
 import {
   STAGE3_CONFIG,
   loadIceCreamSpawnModels,
@@ -56,11 +57,12 @@ export function Stage3() {
   let letterLoadInProgress = false;
   const fragments = [];
 
-  // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰
+  // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
   let iceCreamCartRef = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
-  const spawnedIceCreams = []; // { group, velocity, groundY }
-  const ICE_CREAM_SPAWN_GRAVITY = -18;
+  const spawnedIceCreams = []; // { group, body }
+  let iceCreamPhysicsWorld = null;
+  let iceCreamGroundBody = null;
   const _icePointer = new THREE.Vector2();
   const _iceRaycaster = new THREE.Raycaster();
 
@@ -140,6 +142,31 @@ export function Stage3() {
     }
   }
 
+  const _iceCreamGroundMat = new CANNON.Material("icecreamGround");
+  const _iceCreamMat = new CANNON.Material("icecream");
+
+  /** 아이스크림용 물리 월드 초기화 (지면, 중력) */
+  function initIceCreamPhysics() {
+    if (iceCreamPhysicsWorld) return;
+    iceCreamPhysicsWorld = new CANNON.World({
+      gravity: new CANNON.Vec3(0, -18, 0),
+    });
+    iceCreamGroundBody = new CANNON.Body({
+      type: CANNON.Body.STATIC,
+      shape: new CANNON.Plane(),
+      material: _iceCreamGroundMat,
+    });
+    iceCreamGroundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    iceCreamGroundBody.position.set(0, stage3GroundY, 0);
+    iceCreamPhysicsWorld.addBody(iceCreamGroundBody);
+    iceCreamPhysicsWorld.addContactMaterial(
+      new CANNON.ContactMaterial(_iceCreamGroundMat, _iceCreamMat, {
+        friction: 0.4,
+        restitution: 0.25,
+      }),
+    );
+  }
+
   function spawnIceCreamFromCart() {
     if (!iceCreamCartRef) {
       console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
@@ -152,16 +179,18 @@ export function Stage3() {
       );
       return;
     }
+    initIceCreamPhysics();
+
     const template =
       iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
     const clone = SkeletonUtils.clone(template.scene);
     const cartPos = iceCreamCartRef.position;
     const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
-    clone.position.set(
-      cartPos.x + (Math.random() - 0.5) * 1.5,
-      cartPos.y + 0.5 + Math.random() * 0.5,
-      cartPos.z + (Math.random() - 0.5) * 1.5,
-    );
+    const sx = cartPos.x + (Math.random() - 0.5) * 1.5;
+    const sy = cartPos.y + 0.5 + Math.random() * 0.5;
+    const sz = cartPos.z + (Math.random() - 0.5) * 1.5;
+
+    clone.position.set(sx, sy, sz);
     clone.scale.setScalar(spawnScale);
     clone.traverse((child) => {
       if (child.isMesh) {
@@ -169,35 +198,47 @@ export function Stage3() {
         child.receiveShadow = true;
       }
     });
-    // 카트 중심에서 바깥 방향으로 튀어나가도록 속도 설정 (카트 범위 안에 떨어지지 않되, 너무 멀리 나가지 않음)
+
+    // 물리 바디: Box로 근사 (아이스크림 콘 형태)
+    const halfExtents = 0.15 * spawnScale;
+    const boxShape = new CANNON.Box(
+      new CANNON.Vec3(halfExtents, halfExtents * 1.2, halfExtents),
+    );
+    const body = new CANNON.Body({
+      mass: 0.3,
+      shape: boxShape,
+      position: new CANNON.Vec3(sx, sy, sz),
+      material: _iceCreamMat,
+      linearDamping: 0.1,
+      angularDamping: 0.3,
+    });
+
     const angle = Math.random() * Math.PI * 2;
     const horizontalSpeed = 2.5 + Math.random() * 2;
-    const velocity = new THREE.Vector3(
+    body.velocity.set(
       Math.cos(angle) * horizontalSpeed,
       3 + Math.random() * 2,
       Math.sin(angle) * horizontalSpeed,
     );
+    body.angularVelocity.set(
+      (Math.random() - 0.5) * 4,
+      (Math.random() - 0.5) * 4,
+      (Math.random() - 0.5) * 4,
+    );
+
+    iceCreamPhysicsWorld.addBody(body);
     sceneRef.add(clone);
-    spawnedIceCreams.push({
-      group: clone,
-      velocity,
-      groundY: stage3GroundY,
-    });
+    spawnedIceCreams.push({ group: clone, body });
     console.log("[Stage3] 아이스크림 스폰");
   }
 
   function updateSpawnedIceCreams(delta) {
-    const g = ICE_CREAM_SPAWN_GRAVITY;
+    if (!iceCreamPhysicsWorld) return;
+    iceCreamPhysicsWorld.step(delta);
     for (let i = 0; i < spawnedIceCreams.length; i++) {
       const s = spawnedIceCreams[i];
-      s.group.position.x += s.velocity.x * delta;
-      s.group.position.y += s.velocity.y * delta;
-      s.group.position.z += s.velocity.z * delta;
-      s.velocity.y += g * delta;
-      if (s.group.position.y <= s.groundY) {
-        s.group.position.y = s.groundY;
-        s.velocity.set(0, 0, 0);
-      }
+      s.group.position.copy(s.body.position);
+      s.group.quaternion.copy(s.body.quaternion);
     }
   }
 
@@ -1075,12 +1116,14 @@ export function Stage3() {
             }
           }
 
-          // notice, portal_bright, statue, well 모델 배치
+          // notice, portal_bright, statue, well, bench, clock, water 모델 배치
           const stage3Props = [
             { key: "notice", name: "notice" },
             { key: "portal_bright", name: "portal_bright" },
             { key: "statue", name: "statue" },
             { key: "well", name: "well" },
+            { key: "clock", name: "clock" },
+            { key: "water", name: "water" },
           ];
           for (const { key, name } of stage3Props) {
             const prop = config[key];
@@ -1158,6 +1201,9 @@ export function Stage3() {
       }
 
       spawnedIceCreams.forEach((s) => {
+        if (iceCreamPhysicsWorld && s.body) {
+          iceCreamPhysicsWorld.removeBody(s.body);
+        }
         scene.remove(s.group);
         s.group.traverse((child) => {
           if (child.isMesh) {
@@ -1171,6 +1217,11 @@ export function Stage3() {
         });
       });
       spawnedIceCreams.length = 0;
+      if (iceCreamPhysicsWorld && iceCreamGroundBody) {
+        iceCreamPhysicsWorld.removeBody(iceCreamGroundBody);
+        iceCreamGroundBody = null;
+      }
+      iceCreamPhysicsWorld = null;
       iceCreamCartRef = null;
       iceCreamTemplates.length = 0;
 

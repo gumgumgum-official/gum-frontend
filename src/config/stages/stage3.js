@@ -39,12 +39,12 @@ export const STAGE3_CONFIG = {
     rotation: { x: 0, y: -40, z: 0 },
     scale: 1,
     /** 클릭 시 랜덤 스폰될 아이스크림 모델 경로 */
-    /**TODO: 모델 수정 필요 아이스크림으로!~!! */
     spawnPaths: [
-      "/models/common/flowers/blue3.glb",
-      "/models/common/flowers/red2.glb",
+      "/models/stage3/ice1.glb",
+      "/models/stage3/ice2_white.glb",
+      "/models/stage3/ice2_pink.glb",
     ],
-    spawnScale: 0.5,
+    spawnScale: 0.4,
   },
   /** tree1 모델 */
   tree1: {
@@ -63,7 +63,7 @@ export const STAGE3_CONFIG = {
   /** 마법 포탈 */
   portal_bright: {
     path: "/models/stage3/portal_bright.glb",
-    position: { x: -2, y: 0, z: 10 },
+    position: { x: -3, y: 0, z: 12 },
     rotation: { x: 0, y: 40, z: 0 },
     scale: 2,
   },
@@ -80,6 +80,20 @@ export const STAGE3_CONFIG = {
     position: { x: -10, y: 0, z: 0 },
     rotation: { x: 0, y: 50, z: 0 },
     scale: 2,
+  },
+  /** 시계 */
+  clock: {
+    path: "/models/stage3/clock.glb",
+    position: { x: 10, y: 0, z: -4 },
+    rotation: { x: 0, y: -30, z: 0 },
+    scale: 0.5,
+  },
+  /** 분수대 */
+  water: {
+    path: "/models/stage3/water.glb",
+    position: { x: 0, y: 0, z: 5 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 2.5,
   },
 };
 
