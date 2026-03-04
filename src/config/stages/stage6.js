@@ -33,6 +33,13 @@ export const STAGE6_CONFIG = {
   characterModelPath: "/models/common/user_walking_color.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
   characterScale: 1,
+  /** 벤치 */
+  bench: {
+    path: "/models/stage3/bench.glb",
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 3,
+  },
   /** 5명 캐릭터 위치 (x, y, z) */
   characters: [
     { position: { x: -3, y: 0.3, z: 4 } },

@@ -112,6 +112,8 @@
  * @property {Stage3IcecreamCartConfig} [portal_bright]
  * @property {Stage3IcecreamCartConfig} [statue]
  * @property {Stage3IcecreamCartConfig} [well]
+ * @property {Stage3IcecreamCartConfig} [clock]
+ * @property {Stage3IcecreamCartConfig} [water]
  */
 
 export {};

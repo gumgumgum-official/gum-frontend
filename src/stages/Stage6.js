@@ -145,6 +145,38 @@ export function Stage6() {
         onError: (err) => console.error("❌ Stage6 캐릭터 로드 에러:", err),
       });
 
+      // 벤치 로드 (config.bench 있을 때)
+      const benchConfig = config.bench;
+      if (benchConfig) {
+        glbLoader.load(benchConfig.path, {
+          onLoad: (gltf) => {
+            const model = gltf.scene;
+            model.position.set(
+              benchConfig.position?.x ?? 0,
+              benchConfig.position?.y ?? 0,
+              benchConfig.position?.z ?? 0,
+            );
+            model.rotation.set(
+              ((benchConfig.rotation?.x ?? 0) * Math.PI) / 180,
+              ((benchConfig.rotation?.y ?? 0) * Math.PI) / 180,
+              ((benchConfig.rotation?.z ?? 0) * Math.PI) / 180,
+            );
+            model.scale.setScalar(benchConfig.scale ?? 1);
+            model.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+            objects.push(model);
+            scene.add(model);
+            console.log("✅ Stage6 bench 로드 완료");
+          },
+          onError: (err) =>
+            console.warn("❌ Stage6 bench 로드 실패:", benchConfig.path, err),
+        });
+      }
+
       console.log("✅ Stage6 생성 완료");
     },
 
