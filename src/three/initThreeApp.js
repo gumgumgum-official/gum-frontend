@@ -79,9 +79,10 @@ export function initThreeApp(canvasElement, options = {}) {
   const scene = new THREE.Scene();
 
   // HDRI 환경광 (Blender Material Preview 스타일)
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
   const exrLoader = new EXRLoader();
   exrLoader.load(
-    "/hdri/sunny_rose_garden_1k.exr",
+    base + "/hdri/sunny_rose_garden_1k.exr",
     (texture) => {
       texture.mapping = THREE.EquirectangularReflectionMapping;
       scene.environment = texture;
@@ -239,6 +240,14 @@ export function initThreeApp(canvasElement, options = {}) {
         }
       } catch (err) {
         console.error("[initThreeApp] stage cleanup 오류:", err);
+      }
+      try {
+        if (scene.environment) {
+          scene.environment.dispose?.();
+          scene.environment = null;
+        }
+      } catch (err) {
+        console.error("[initThreeApp] environment dispose 오류:", err);
       }
       try {
         renderer?.dispose?.();

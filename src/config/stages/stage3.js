@@ -104,7 +104,6 @@ export const STAGE3_CONFIG = {
     scale: 2.5,
   },
   /** 게임기 */
-  /** 얘 혼자 좌표계가 이상함 좌측으로 치우쳐져 있음.. */
   gameMachine: {
     path: "/models/stage3/gameMachine.glb",
     position: { x: 10, y: -0.4, z: 1 },

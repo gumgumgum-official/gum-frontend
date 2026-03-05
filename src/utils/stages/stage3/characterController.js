@@ -44,7 +44,11 @@ export function createCharacterController({
     setup(backgroundMaxY, bounds) {
       backgroundBounds = bounds;
 
-      glbLoader.load("/models/common/user_walking_color.glb", {
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const characterPath =
+        base +
+        (config.characterModelPath ?? "/models/common/user_walking_color.glb");
+      glbLoader.load(characterPath, {
         onLoad: (gltf) => {
           characterModel = gltf.scene;
 
