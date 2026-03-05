@@ -11,7 +11,7 @@
 /** @type {AppConfig} */
 export const APP_CONFIG = {
   // 초기 시작 스테이지
-  initialStage: 2,
+  initialStage: 3,
 
   // 스테이지 전환 시 로딩 UI (2~6 키 전환 시 재생)
   stageTransition: {

@@ -22,7 +22,9 @@ import { DragControls } from "three/examples/jsm/controls/DragControls.js";
  * @param {(index: number) => string} params.getPropPath - prop index → 경로 (config 출력용)
  * @param {Object} [params.options]
  * @param {boolean} [params.options.enableOrbit=true] - false 또는 config에 lookAt 있으면 카메라 고정
+ * @param {boolean} [params.options.forceOrbit=false] - true면 lookAt 있어도 OrbitControls 사용
  * @param {boolean} [params.options.enableDrag=true]
+ * @param {boolean} [params.options.manageCursor=true] - false면 포인터 커서 관리 안 함 (스테이지가 직접 처리)
  * @param {string} [params.options.stageName='stage']
  * @param {() => { position?: {x,y,z}, lookAt?: {x,y,z}, fov?, near?, far? }} [params.options.getInitialCameraConfig] - 있으면 적용. lookAt 있으면 Orbit 미생성(고정)
  * @param {(roots: THREE.Object3D[]) => void} [params.options.onConfigChange] - 오브제 위치/회전/스케일 변경 시 호출 (Transform/Drag 끝날 때)
@@ -40,6 +42,8 @@ export function createStageDebugControls(params) {
   const {
     enableOrbit = true,
     enableDrag = true,
+    forceOrbit = false,
+    manageCursor = true,
     stageName = "stage",
     getInitialCameraConfig,
     onConfigChange,
@@ -81,9 +85,9 @@ export function createStageDebugControls(params) {
     }
   }
 
-  // ---- OrbitControls (고정 모드가 아닐 때만)
+  // ---- OrbitControls (고정 모드가 아닐 때만. forceOrbit이면 lookAt 있어도 사용)
   let orbitLogTimeout = null;
-  if (enableOrbit && !useFixedCamera) {
+  if (enableOrbit && (!useFixedCamera || forceOrbit)) {
     orbitControls = new OrbitControls(camera, domElement);
     orbitControls.enableDamping = true;
     orbitControls.target.set(0, 0, 0);
@@ -137,15 +141,17 @@ export function createStageDebugControls(params) {
   };
   domElement.addEventListener("pointerdown", onPointerDown);
 
-  // ---- 오브제 위에서만 포인터 커서
-  onPointerMove = (e) => {
-    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(getPropRoots(), true);
-    domElement.style.cursor = intersects.length > 0 ? "pointer" : "default";
-  };
-  domElement.addEventListener("pointermove", onPointerMove);
+  // ---- 오브제 위에서만 포인터 커서 (manageCursor가 false면 스테이지가 직접 처리)
+  if (manageCursor) {
+    onPointerMove = (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(getPropRoots(), true);
+      domElement.style.cursor = intersects.length > 0 ? "pointer" : "default";
+    };
+    domElement.addEventListener("pointermove", onPointerMove);
+  }
 
   // ---- C/G/S/T/R/E 키: config 출력 (1,2,3은 main에서 스테이지 전환용이라 T/R/E 사용)
   function getLookAtTarget() {
@@ -309,7 +315,9 @@ export function createStageDebugControls(params) {
       }
       window.removeEventListener("keydown", onKeyDown, useCapture);
       domElement.removeEventListener("pointerdown", onPointerDown);
-      domElement.removeEventListener("pointermove", onPointerMove);
+      if (manageCursor && onPointerMove) {
+        domElement.removeEventListener("pointermove", onPointerMove);
+      }
       if (transformControls) {
         transformControls.detach();
         // @ts-expect-error - TransformControls extends Object3D but TypeScript types may not reflect this
