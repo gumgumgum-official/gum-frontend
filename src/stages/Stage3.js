@@ -59,6 +59,9 @@ export function Stage3() {
 
   // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
   let iceCreamCartRef = null;
+  /** 게시판 클릭 → 모달 */
+  let noticeRef = null;
+  let noticeModalEl = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
   const spawnedIceCreams = []; // { group, body }
   let iceCreamPhysicsWorld = null;
@@ -85,60 +88,121 @@ export function Stage3() {
     }
   };
 
-  /** 마우스가 아이스크림 카트 위에 있는지 여부 (레이캐스트) */
-  function isPointerOverIceCreamCart(clientX, clientY) {
-    if (!iceCreamCartRef || !cameraRef || !canvasRef || !sceneRef) return false;
+  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | null */
+  function getPointerHitTarget(clientX, clientY) {
+    if (!cameraRef || !canvasRef || !sceneRef) return null;
     const rect = canvasRef.getBoundingClientRect();
     _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     _iceRaycaster.setFromCamera(_icePointer, cameraRef);
     const hits = _iceRaycaster.intersectObjects(sceneRef.children, true);
-    if (hits.length === 0) return false;
+    if (hits.length === 0) return null;
     let obj = hits[0].object;
     while (obj && obj !== sceneRef) {
-      if (obj === iceCreamCartRef) return true;
+      if (iceCreamCartRef && obj === iceCreamCartRef) return "icecream";
+      if (noticeRef && obj === noticeRef) return "notice";
       obj = obj.parent;
     }
-    return false;
+    return null;
   }
 
-  function handleIceCreamCartPointerMove(event) {
+  function handlePointerMove(event) {
     if (!canvasRef) return;
-    canvasRef.style.cursor = isPointerOverIceCreamCart(
-      event.clientX,
-      event.clientY,
-    )
-      ? "pointer"
-      : "default";
+    const target = getPointerHitTarget(event.clientX, event.clientY);
+    canvasRef.style.cursor = target ? "pointer" : "default";
   }
 
-  function handleIceCreamCartPointerLeave() {
+  function handlePointerLeave() {
     if (canvasRef) canvasRef.style.cursor = "default";
   }
 
-  /** 아이스크림 카트 클릭 시 랜덤 아이스크림 스폰 */
-  function handleIceCreamCartPointerDown(event) {
-    if (!iceCreamCartRef || !cameraRef || !canvasRef || !sceneRef) return;
-    if (iceCreamTemplates.length === 0) return;
+  /** 게시판 모달 생성 및 표시 */
+  function showNoticeModal() {
+    const paperPaths = config.notice?.paperSoundPaths ?? [];
+    if (paperPaths.length > 0) {
+      const path = paperPaths[Math.floor(Math.random() * paperPaths.length)];
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const audio = new window.Audio(base + path);
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+    }
+    if (noticeModalEl) {
+      noticeModalEl.style.display = "flex";
+      return;
+    }
+    noticeModalEl = document.createElement("div");
+    noticeModalEl.className = "stage3-notice-modal-backdrop";
+    noticeModalEl.innerHTML = `
+      <div class="stage3-notice-modal">
+        <button type="button" class="stage3-notice-modal-close" aria-label="닫기">×</button>
+        <div class="stage3-notice-modal-content">게시판</div>
+      </div>
+    `;
+    Object.assign(noticeModalEl.style, {
+      position: "fixed",
+      inset: "0",
+      background: "rgba(0,0,0,0.35)",
+      backdropFilter: "blur(6px)",
+      WebkitBackdropFilter: "blur(6px)",
+      zIndex: "9999",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "16px",
+    });
+    const modalBox = noticeModalEl.querySelector(".stage3-notice-modal");
+    if (modalBox && "style" in modalBox)
+      Object.assign(modalBox.style, {
+        background: "#fff",
+        borderRadius: "12px",
+        padding: "24px 28px",
+        maxWidth: "400px",
+        width: "100%",
+        position: "relative",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
+      });
+    const closeBtn = noticeModalEl.querySelector(".stage3-notice-modal-close");
+    if (closeBtn && "style" in closeBtn)
+      Object.assign(closeBtn.style, {
+        position: "absolute",
+        top: "12px",
+        right: "12px",
+        width: "32px",
+        height: "32px",
+        border: "none",
+        background: "transparent",
+        fontSize: "24px",
+        lineHeight: "1",
+        cursor: "pointer",
+        color: "#666",
+      });
+    closeBtn.addEventListener("click", closeNoticeModal);
+    noticeModalEl.addEventListener("click", (e) => {
+      if (e.target === noticeModalEl) closeNoticeModal();
+    });
+    document.body.appendChild(noticeModalEl);
+  }
 
-    const rect = canvasRef.getBoundingClientRect();
-    _icePointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    _icePointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    _iceRaycaster.setFromCamera(_icePointer, cameraRef);
+  function closeNoticeModal() {
+    if (noticeModalEl) noticeModalEl.style.display = "none";
+  }
 
-    // 장면 전체 레이캐스트 → 첫 번째 히트가 카트(또는 그 자식)인지 확인 (배경은 raycast 비활성화됨)
-    const hits = _iceRaycaster.intersectObjects(sceneRef.children, true);
-    if (hits.length === 0) return;
+  /** 아이스크림 카트 / 게시판 클릭 핸들러 */
+  function handlePointerDown(event) {
+    if (!cameraRef || !canvasRef || !sceneRef) return;
+    const target = getPointerHitTarget(event.clientX, event.clientY);
+    if (!target) return;
 
-    let obj = hits[0].object;
-    while (obj && obj !== sceneRef) {
-      if (obj === iceCreamCartRef) {
-        event.preventDefault();
-        event.stopPropagation();
-        spawnIceCreamFromCart();
-        return;
-      }
-      obj = obj.parent;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (target === "icecream") {
+      if (iceCreamTemplates.length === 0) return;
+      spawnIceCreamFromCart();
+      return;
+    }
+    if (target === "notice") {
+      showNoticeModal();
     }
   }
 
@@ -997,11 +1061,11 @@ export function Stage3() {
 
       keyboard.mount();
       window.addEventListener("keydown", handleStageKeyDown, { capture: true });
-      canvas.addEventListener("pointerdown", handleIceCreamCartPointerDown, {
+      canvas.addEventListener("pointerdown", handlePointerDown, {
         capture: true,
       });
-      canvas.addEventListener("pointermove", handleIceCreamCartPointerMove);
-      canvas.addEventListener("pointerleave", handleIceCreamCartPointerLeave);
+      canvas.addEventListener("pointermove", handlePointerMove);
+      canvas.addEventListener("pointerleave", handlePointerLeave);
 
       debugControls = createStageDebugControls({
         scene,
@@ -1153,6 +1217,7 @@ export function Stage3() {
               });
               scene.add(model);
               objects.push(model);
+              if (key === "notice") noticeRef = model;
               console.log(`✅ Stage3 ${name} 로드 완료:`, modelPath);
             } catch (err) {
               console.warn(`❌ Stage3 ${name} 로드 실패:`, modelPath, err);
@@ -1185,22 +1250,20 @@ export function Stage3() {
         character = null;
       }
       if (canvasRef) {
-        canvasRef.removeEventListener(
-          "pointerdown",
-          handleIceCreamCartPointerDown,
-          { capture: true },
-        );
-        canvasRef.removeEventListener(
-          "pointermove",
-          handleIceCreamCartPointerMove,
-        );
-        canvasRef.removeEventListener(
-          "pointerleave",
-          handleIceCreamCartPointerLeave,
-        );
+        canvasRef.removeEventListener("pointerdown", handlePointerDown, {
+          capture: true,
+        });
+        canvasRef.removeEventListener("pointermove", handlePointerMove);
+        canvasRef.removeEventListener("pointerleave", handlePointerLeave);
         canvasRef.style.cursor = "default";
         canvasRef = null;
       }
+      closeNoticeModal();
+      if (noticeModalEl && noticeModalEl.parentNode) {
+        noticeModalEl.parentNode.removeChild(noticeModalEl);
+        noticeModalEl = null;
+      }
+      noticeRef = null;
 
       spawnedIceCreams.forEach((s) => {
         if (iceCreamPhysicsWorld && s.body) {

@@ -61,6 +61,11 @@ export const STAGE3_CONFIG = {
     position: { x: -4, y: 0, z: -4 },
     rotation: { x: 0, y: 20, z: 0 },
     scale: 1.8,
+    /** 클릭 시 재생할 종이 소리 경로 (랜덤 1개) */
+    paperSoundPaths: [
+      "/static/sounds/paper/PaperMovement_fNAyV_01-2.mp3",
+      "/static/sounds/paper/PaperMovement_fNAyV_01-3.mp3",
+    ],
   },
   /** 마법 포탈 */
   portal_bright: {
