@@ -44,7 +44,11 @@ export function createCharacterController({
     setup(backgroundMaxY, bounds) {
       backgroundBounds = bounds;
 
-      glbLoader.load("/models/common/user_walking_color.glb", {
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const characterPath =
+        base +
+        (config.characterModelPath ?? "/models/common/user_walking_color.glb");
+      glbLoader.load(characterPath, {
         onLoad: (gltf) => {
           characterModel = gltf.scene;
 
@@ -100,7 +104,12 @@ export function createCharacterController({
       });
     },
 
-    update(delta, camera) {
+    /**
+     * @param {number} delta
+     * @param {THREE.Camera} camera
+     * @param {{ skipCameraFollow?: boolean }} [options] - skipCameraFollow: true면 카메라 추적 생략 (OrbitControls 사용 시)
+     */
+    update(delta, camera, options = {}) {
       if (!characterModel || !backgroundBounds) return;
 
       const {
@@ -166,14 +175,16 @@ export function createCharacterController({
         characterMixer.update(delta);
       }
 
-      // 카메라가 캐릭터를 따라가도록 설정
-      _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
-      _targetPosition.copy(characterModel.position).add(_cameraOffset);
-      camera.position.lerp(_targetPosition, cameraLerpFactor);
+      // 카메라 추적 (OrbitControls 사용 시에는 스킵)
+      if (!options.skipCameraFollow) {
+        _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
+        _targetPosition.copy(characterModel.position).add(_cameraOffset);
+        camera.position.lerp(_targetPosition, cameraLerpFactor);
 
-      _lookAtPosition.copy(characterModel.position);
-      _lookAtPosition.y += lookAtHeightOffset;
-      camera.lookAt(_lookAtPosition);
+        _lookAtPosition.copy(characterModel.position);
+        _lookAtPosition.y += lookAtHeightOffset;
+        camera.lookAt(_lookAtPosition);
+      }
     },
 
     cleanup() {
