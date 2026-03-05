@@ -62,6 +62,7 @@ export function Stage3() {
   /** 게시판 클릭 → 모달 */
   let noticeRef = null;
   let noticeModalEl = null;
+  let noticePaperAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
   const spawnedIceCreams = []; // { group, body }
   let iceCreamPhysicsWorld = null;
@@ -122,9 +123,15 @@ export function Stage3() {
     if (paperPaths.length > 0) {
       const path = paperPaths[Math.floor(Math.random() * paperPaths.length)];
       const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-      const audio = new window.Audio(base + path);
-      audio.volume = 0.5;
-      audio.play().catch(() => {});
+      const src = base + path;
+      if (!noticePaperAudio) {
+        noticePaperAudio = new window.Audio();
+        noticePaperAudio.volume = 0.5;
+      }
+      noticePaperAudio.pause();
+      noticePaperAudio.currentTime = 0;
+      noticePaperAudio.src = src;
+      noticePaperAudio.play().catch(() => {});
     }
     if (noticeModalEl) {
       noticeModalEl.style.display = "flex";
@@ -206,12 +213,14 @@ export function Stage3() {
     }
   }
 
-  const _iceCreamGroundMat = new CANNON.Material("icecreamGround");
-  const _iceCreamMat = new CANNON.Material("icecream");
+  let _iceCreamGroundMat = null;
+  let _iceCreamMat = null;
 
   /** 아이스크림용 물리 월드 초기화 (지면, 중력) */
   function initIceCreamPhysics() {
     if (iceCreamPhysicsWorld) return;
+    _iceCreamGroundMat = new CANNON.Material("icecreamGround");
+    _iceCreamMat = new CANNON.Material("icecream");
     iceCreamPhysicsWorld = new CANNON.World({
       gravity: new CANNON.Vec3(0, -18, 0),
     });
@@ -258,6 +267,7 @@ export function Stage3() {
 
     clone.position.set(sx, sy, sz);
     clone.scale.setScalar(spawnScale);
+    clone.updateMatrixWorld(true);
     clone.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
@@ -265,11 +275,16 @@ export function Stage3() {
       }
     });
 
-    // 물리 바디: Box로 근사 (아이스크림 콘 형태)
-    const halfExtents = 0.15 * spawnScale;
-    const boxShape = new CANNON.Box(
-      new CANNON.Vec3(halfExtents, halfExtents * 1.2, halfExtents),
+    // 물리 바디: 모델 바운딩 박스 기반
+    const box = new THREE.Box3().setFromObject(clone);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const halfExtents = new CANNON.Vec3(
+      size.x * 0.5,
+      size.y * 0.5,
+      size.z * 0.5,
     );
+    const boxShape = new CANNON.Box(halfExtents);
     const body = new CANNON.Body({
       mass: 0.3,
       shape: boxShape,
@@ -295,7 +310,6 @@ export function Stage3() {
     iceCreamPhysicsWorld.addBody(body);
     sceneRef.add(clone);
     spawnedIceCreams.push({ group: clone, body });
-    console.log("[Stage3] 아이스크림 스폰");
   }
 
   function updateSpawnedIceCreams(delta) {
@@ -1273,6 +1287,11 @@ export function Stage3() {
         noticeModalEl = null;
       }
       noticeRef = null;
+      if (noticePaperAudio) {
+        noticePaperAudio.pause();
+        noticePaperAudio.src = "";
+        noticePaperAudio = null;
+      }
 
       spawnedIceCreams.forEach((s) => {
         if (iceCreamPhysicsWorld && s.body) {
