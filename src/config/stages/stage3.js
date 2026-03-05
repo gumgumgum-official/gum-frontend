@@ -45,6 +45,8 @@ export const STAGE3_CONFIG = {
       "/models/stage3/ice2_pink.glb",
     ],
     spawnScale: 0.4,
+    /** 스폰 최대 개수 (이 이상 클릭해도 생성 안 됨) */
+    maxSpawns: 15,
   },
   /** tree1 모델 */
   tree1: {

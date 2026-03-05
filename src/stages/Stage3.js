@@ -173,6 +173,8 @@ export function Stage3() {
       return;
     }
     if (!sceneRef) return;
+    const maxSpawns = config.icecreamCart?.maxSpawns ?? 15;
+    if (spawnedIceCreams.length >= maxSpawns) return;
     if (iceCreamTemplates.length === 0) {
       console.warn(
         "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
