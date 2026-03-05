@@ -35,7 +35,7 @@ export const STAGE6_CONFIG = {
   characterScale: 1,
   /** 벤치 */
   bench: {
-    path: "/models/stage3/bench.glb",
+    path: "/models/stage6/bench.glb",
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
     scale: 3,

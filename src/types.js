@@ -89,7 +89,17 @@
  */
 
 /**
- * Stage3 전체 설정
+ * Stage3 오브제 공통 설정 (tree1, notice, water 등)
+ * @typedef {Object} Stage3PropConfig
+ * @property {string} path
+ * @property {{x?: number, y?: number, z?: number}} [position]
+ * @property {{x?: number, y?: number, z?: number}} [rotation]
+ * @property {number} [scale]
+ * @property {string[]} [paperSoundPaths] - 게시판 등 클릭 시 재생할 사운드 경로
+ */
+
+/** Stage3 아이스크림 카트 전용 설정 */
+/**
  * @typedef {Object} Stage3IcecreamCartConfig
  * @property {string} path
  * @property {{x?: number, y?: number, z?: number}} [position]
@@ -98,7 +108,6 @@
  * @property {string[]} [spawnPaths] - 클릭 시 랜덤 스폰될 아이스크림 GLB 경로
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxSpawns] - 스폰 최대 개수
- * @property {string[]} [paperSoundPaths] - 게시판 클릭 시 재생할 종이 소리 경로
  */
 
 /**
@@ -109,16 +118,16 @@
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
- * @property {Stage3IcecreamCartConfig} [tree1]
- * @property {Stage3IcecreamCartConfig} [notice]
- * @property {Stage3IcecreamCartConfig} [portal_bright]
- * @property {Stage3IcecreamCartConfig} [statue]
- * @property {Stage3IcecreamCartConfig} [well]
- * @property {Stage3IcecreamCartConfig} [clock]
- * @property {Stage3IcecreamCartConfig} [water]
- * @property {Stage3IcecreamCartConfig} [gameMachine]
- * @property {Stage3IcecreamCartConfig} [bench]
- * @property {Stage3IcecreamCartConfig} [signs]
+ * @property {Stage3PropConfig} [tree1]
+ * @property {Stage3PropConfig} [notice]
+ * @property {Stage3PropConfig} [portal_bright]
+ * @property {Stage3PropConfig} [statue]
+ * @property {Stage3PropConfig} [well]
+ * @property {Stage3PropConfig} [clock]
+ * @property {Stage3PropConfig} [water]
+ * @property {Stage3PropConfig} [gameMachine]
+ * @property {Stage3PropConfig} [bench]
+ * @property {Stage3PropConfig} [signs]
  */
 
 export {};

@@ -300,7 +300,7 @@ export function Stage3() {
 
   function updateSpawnedIceCreams(delta) {
     if (!iceCreamPhysicsWorld) return;
-    iceCreamPhysicsWorld.step(delta);
+    iceCreamPhysicsWorld.step(1 / 60, delta, 3);
     for (let i = 0; i < spawnedIceCreams.length; i++) {
       const s = spawnedIceCreams[i];
       s.group.position.copy(s.body.position);
@@ -1102,88 +1102,8 @@ export function Stage3() {
           character.setup(backgroundMaxY, backgroundBounds);
 
           const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-
-          // 13. 아이스크림 카트 배치
-          const iceCart = config.icecreamCart;
-          if (iceCart) {
-            const modelPath = base + iceCart.path;
-            try {
-              const iceCreamCartGltf = await glbLoader.loadAsync(modelPath);
-              const iceCreamCart = iceCreamCartGltf.scene;
-              iceCreamCart.position.set(
-                iceCart.position?.x ?? 0,
-                backgroundMaxY + (iceCart.position?.y ?? 0),
-                iceCart.position?.z ?? 0,
-              );
-              iceCreamCart.rotation.set(
-                (iceCart.rotation?.x ?? 0) * (Math.PI / 180),
-                (iceCart.rotation?.y ?? 0) * (Math.PI / 180),
-                (iceCart.rotation?.z ?? 0) * (Math.PI / 180),
-              );
-              iceCreamCart.scale.setScalar(iceCart.scale ?? 1);
-              iceCreamCart.traverse((child) => {
-                if (child.isMesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-              iceCreamCart.userData.isIceCreamCart = true;
-              scene.add(iceCreamCart);
-              objects.push(iceCreamCart);
-              iceCreamCartRef = iceCreamCart;
-
-              // 스폰용 아이스크림 모델 프리로드 (icecream, rainbow_icecream) - assetLoaders 사용
-              const loaded = await loadIceCreamSpawnModels();
-              iceCreamTemplates.push(...loaded);
-              console.log(
-                "✅ Stage3 아이스크림 카트 로드 완료 (클릭 시 스폰, 템플릿",
-                iceCreamTemplates.length,
-                "개):",
-                modelPath,
-              );
-            } catch (err) {
-              console.warn(
-                "❌ Stage3 아이스크림 카트 로드 실패:",
-                modelPath,
-                err,
-              );
-            }
-          }
-
-          // tree1 모델 배치
-          const tree1Prop = config.tree1;
-          if (tree1Prop) {
-            const modelPath = base + tree1Prop.path;
-            try {
-              const tree1Gltf = await glbLoader.loadAsync(modelPath);
-              const tree1Model = tree1Gltf.scene;
-              tree1Model.position.set(
-                tree1Prop.position?.x ?? 0,
-                backgroundMaxY + (tree1Prop.position?.y ?? 0),
-                tree1Prop.position?.z ?? 0,
-              );
-              tree1Model.rotation.set(
-                (tree1Prop.rotation?.x ?? 0) * (Math.PI / 180),
-                (tree1Prop.rotation?.y ?? 0) * (Math.PI / 180),
-                (tree1Prop.rotation?.z ?? 0) * (Math.PI / 180),
-              );
-              tree1Model.scale.setScalar(tree1Prop.scale ?? 1);
-              tree1Model.traverse((child) => {
-                if (child.isMesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-              scene.add(tree1Model);
-              objects.push(tree1Model);
-              console.log("✅ Stage3 tree1 로드 완료:", modelPath);
-            } catch (err) {
-              console.warn("❌ Stage3 tree1 로드 실패:", modelPath, err);
-            }
-          }
-
-          // notice, portal_bright, statue, well, clock, water, gameMachine, bench, signs 모델 배치
           const stage3Props = [
+            { key: "tree1", name: "tree1" },
             { key: "notice", name: "notice" },
             { key: "portal_bright", name: "portal_bright" },
             { key: "statue", name: "statue" },
@@ -1194,24 +1114,112 @@ export function Stage3() {
             { key: "bench", name: "bench" },
             { key: "signs", name: "signs" },
           ];
+
+          // 병렬 로드: 아이스크림 카트, 스폰 템플릿, props (tree1 포함)
+          const loadTasks = [];
+          const iceCart = config.icecreamCart;
+          if (iceCart) {
+            loadTasks.push({
+              type: "iceCart",
+              promise: glbLoader.loadAsync(base + iceCart.path),
+              data: iceCart,
+            });
+          }
+          loadTasks.push({
+            type: "spawn",
+            promise: loadIceCreamSpawnModels(),
+            data: null,
+          });
           for (const { key, name } of stage3Props) {
             const prop = config[key];
             if (!prop) continue;
-            const modelPath = base + prop.path;
-            try {
-              const gltf = await glbLoader.loadAsync(modelPath);
-              const model = gltf.scene;
+            loadTasks.push({
+              type: "prop",
+              key,
+              name,
+              promise: glbLoader.loadAsync(base + prop.path),
+              data: prop,
+            });
+          }
+
+          const results = await Promise.allSettled(
+            loadTasks.map((t) => t.promise),
+          );
+
+          loadTasks.forEach((task, i) => {
+            const result = results[i];
+            if (result.status === "rejected") {
+              if (task.type === "iceCart") {
+                console.warn(
+                  "❌ Stage3 아이스크림 카트 로드 실패:",
+                  base + task.data.path,
+                  result.reason,
+                );
+              } else if (task.type === "spawn") {
+                console.warn(
+                  "[Stage3] 아이스크림 스폰 모델 로드 실패:",
+                  result.reason,
+                );
+              } else {
+                console.warn(
+                  `❌ Stage3 ${task.name} 로드 실패:`,
+                  base + task.data.path,
+                  result.reason,
+                );
+              }
+              return;
+            }
+            const value = result.value;
+
+            if (task.type === "iceCart") {
+              const iceCreamCart = value.scene;
+              const d = task.data;
+              iceCreamCart.position.set(
+                d.position?.x ?? 0,
+                backgroundMaxY + (d.position?.y ?? 0),
+                d.position?.z ?? 0,
+              );
+              iceCreamCart.rotation.set(
+                ((d.rotation?.x ?? 0) * Math.PI) / 180,
+                ((d.rotation?.y ?? 0) * Math.PI) / 180,
+                ((d.rotation?.z ?? 0) * Math.PI) / 180,
+              );
+              iceCreamCart.scale.setScalar(d.scale ?? 1);
+              iceCreamCart.traverse((child) => {
+                if (child.isMesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
+              });
+              iceCreamCart.userData.isIceCreamCart = true;
+              scene.add(iceCreamCart);
+              objects.push(iceCreamCart);
+              iceCreamCartRef = iceCreamCart;
+              console.log(
+                "✅ Stage3 아이스크림 카트 로드 완료:",
+                base + d.path,
+              );
+            } else if (task.type === "spawn") {
+              iceCreamTemplates.push(...value);
+              console.log(
+                "✅ Stage3 아이스크림 스폰 템플릿 로드 완료:",
+                value.length,
+                "개",
+              );
+            } else {
+              const model = value.scene;
+              const d = task.data;
               model.position.set(
-                prop.position?.x ?? 0,
-                backgroundMaxY + (prop.position?.y ?? 0),
-                prop.position?.z ?? 0,
+                d.position?.x ?? 0,
+                backgroundMaxY + (d.position?.y ?? 0),
+                d.position?.z ?? 0,
               );
               model.rotation.set(
-                (prop.rotation?.x ?? 0) * (Math.PI / 180),
-                (prop.rotation?.y ?? 0) * (Math.PI / 180),
-                (prop.rotation?.z ?? 0) * (Math.PI / 180),
+                ((d.rotation?.x ?? 0) * Math.PI) / 180,
+                ((d.rotation?.y ?? 0) * Math.PI) / 180,
+                ((d.rotation?.z ?? 0) * Math.PI) / 180,
               );
-              model.scale.setScalar(prop.scale ?? 1);
+              model.scale.setScalar(d.scale ?? 1);
               model.traverse((child) => {
                 if (child.isMesh) {
                   child.castShadow = true;
@@ -1220,12 +1228,10 @@ export function Stage3() {
               });
               scene.add(model);
               objects.push(model);
-              if (key === "notice") noticeRef = model;
-              console.log(`✅ Stage3 ${name} 로드 완료:`, modelPath);
-            } catch (err) {
-              console.warn(`❌ Stage3 ${name} 로드 실패:`, modelPath, err);
+              if (task.key === "notice") noticeRef = model;
+              console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
             }
-          }
+          });
         },
       });
 
