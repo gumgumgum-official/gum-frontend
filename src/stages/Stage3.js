@@ -1182,7 +1182,7 @@ export function Stage3() {
             }
           }
 
-          // notice, portal_bright, statue, well, bench, clock, water 모델 배치
+          // notice, portal_bright, statue, well, clock, water, gameMachine, bench, signs 모델 배치
           const stage3Props = [
             { key: "notice", name: "notice" },
             { key: "portal_bright", name: "portal_bright" },
@@ -1190,6 +1190,9 @@ export function Stage3() {
             { key: "well", name: "well" },
             { key: "clock", name: "clock" },
             { key: "water", name: "water" },
+            { key: "gameMachine", name: "gameMachine" },
+            { key: "bench", name: "bench" },
+            { key: "signs", name: "signs" },
           ];
           for (const { key, name } of stage3Props) {
             const prop = config[key];

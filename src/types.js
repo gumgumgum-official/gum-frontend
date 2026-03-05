@@ -116,6 +116,9 @@
  * @property {Stage3IcecreamCartConfig} [well]
  * @property {Stage3IcecreamCartConfig} [clock]
  * @property {Stage3IcecreamCartConfig} [water]
+ * @property {Stage3IcecreamCartConfig} [gameMachine]
+ * @property {Stage3IcecreamCartConfig} [bench]
+ * @property {Stage3IcecreamCartConfig} [signs]
  */
 
 export {};
