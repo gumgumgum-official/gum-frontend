@@ -1,4 +1,5 @@
 // Phase 3: 부셔버리자
+/// <reference path="../../types.js" />
 
 import { getGLBLoader } from "../../utils/common/assetLoaders.js";
 
@@ -35,7 +36,7 @@ export const STAGE3_CONFIG = {
   /** 13. 아이스크림 카트 (클릭 시 아이스크림 랜덤 스폰) */
   icecreamCart: {
     path: "/models/stage3/icecream_cart.glb",
-    position: { x: 5, y: 0.4, z: 7.5 },
+    position: { x: 6, y: 0.4, z: 8 },
     rotation: { x: 0, y: -40, z: 0 },
     scale: 1,
     /** 클릭 시 랜덤 스폰될 아이스크림 모델 경로 */
@@ -58,7 +59,7 @@ export const STAGE3_CONFIG = {
   /** 게시판 */
   notice: {
     path: "/models/stage3/notice.glb",
-    position: { x: -4, y: 0, z: -4 },
+    position: { x: -4, y: -0.4, z: -4 },
     rotation: { x: 0, y: 20, z: 0 },
     scale: 1.8,
     /** 클릭 시 재생할 종이 소리 경로 (랜덤 1개) */
@@ -70,37 +71,59 @@ export const STAGE3_CONFIG = {
   /** 마법 포탈 */
   portal_bright: {
     path: "/models/stage3/portal_bright.glb",
-    position: { x: -3, y: 0, z: 12 },
+    position: { x: -3, y: -0.3, z: 12 },
     rotation: { x: 0, y: 40, z: 0 },
     scale: 2,
   },
   /** 껌딱지 동상 */
   statue: {
     path: "/models/stage3/statue.glb",
-    position: { x: 0, y: 0, z: -6 },
+    position: { x: 0, y: -0.4, z: -6 },
     rotation: { x: 0, y: 0, z: 0 },
     scale: 3,
   },
   /** 우물 */
   well: {
     path: "/models/stage3/well.glb",
-    position: { x: -10, y: 0, z: 0 },
+    position: { x: -10, y: -0.4, z: 0 },
     rotation: { x: 0, y: 50, z: 0 },
-    scale: 2,
+    scale: 2.8,
   },
   /** 시계 */
   clock: {
     path: "/models/stage3/clock.glb",
-    position: { x: 10, y: 0, z: -4 },
-    rotation: { x: 0, y: -30, z: 0 },
+    position: { x: 10.4, y: -0.2, z: -6.1 },
+    rotation: { x: 0, y: -10, z: 0 },
     scale: 0.5,
   },
   /** 분수대 */
   water: {
     path: "/models/stage3/water.glb",
-    position: { x: 0, y: 0, z: 5 },
+    position: { x: 0, y: -0.4, z: 5 },
     rotation: { x: 0, y: 0, z: 0 },
     scale: 2.5,
+  },
+  /** 게임기 */
+  /** 얘 혼자 좌표계가 이상함 좌측으로 치우쳐져 있음.. */
+  gameMachine: {
+    path: "/models/stage3/gameMachine.glb",
+    position: { x: 10, y: -0.4, z: 1 },
+    rotation: { x: 0, y: -70, z: 0 },
+    scale: 0.8,
+  },
+  /** 벤치 */
+  bench: {
+    path: "/models/stage3/bench.glb",
+    position: { x: 8, y: 0.4, z: -8 },
+    rotation: { x: 0, y: -15, z: 0 },
+    scale: 1,
+  },
+  /** 간판 */
+  signs: {
+    path: "/models/stage3/Signs.glb",
+    position: { x: -2.8, y: -0.4, z: 7.5 },
+    rotation: { x: 0, y: -60, z: 0 },
+    scale: 0.8,
   },
 };
 
