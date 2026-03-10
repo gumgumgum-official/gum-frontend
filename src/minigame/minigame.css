@@ -1,0 +1,85 @@
+/* Animal Crossing-inspired theme for WeedGame - tmp-v0 design */
+.minigame-theme {
+  /* Warm palette */
+  --background: oklch(0.97 0.018 88);
+  --foreground: oklch(0.28 0.04 60);
+  --card: oklch(0.99 0.012 85);
+  --card-foreground: oklch(0.28 0.04 60);
+  --secondary: oklch(0.88 0.04 85);
+  --secondary-foreground: oklch(0.28 0.04 60);
+  --muted: oklch(0.93 0.025 85);
+  --border: oklch(0.84 0.04 80);
+  --input: oklch(0.9 0.03 85);
+  /* Game-specific tokens */
+  --wood: oklch(0.62 0.09 60);
+  --wood-dark: oklch(0.45 0.08 55);
+  --gold: oklch(0.82 0.18 78);
+  --gold-glow: oklch(0.88 0.22 82);
+  --primary: oklch(0.52 0.17 145);
+}
+
+.minigame-theme .nickname-input::placeholder {
+  color: oklch(0.68 0.06 55);
+  font-weight: 400;
+}
+
+.minigame-theme .nickname-input:focus {
+  outline: none;
+  border-color: var(--wood) !important;
+  box-shadow: 0 0 0 3px oklch(0.62 0.09 60 / 0.18);
+}
+
+/* 피버 타임: 황금 잡초 제거 시 5초간 UI 테두리 골드 글로우 */
+.minigame-theme .weed-game-modal.fever-active {
+  border-color: var(--gold) !important;
+  box-shadow:
+    0 0 24px var(--gold-glow),
+    0 8px 40px rgba(0, 0, 0, 0.18) !important;
+  animation: fever-pulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes fever-pulse {
+  from {
+    box-shadow:
+      0 0 16px var(--gold-glow),
+      0 8px 40px rgba(0, 0, 0, 0.18);
+  }
+  to {
+    box-shadow:
+      0 0 32px var(--gold-glow),
+      0 8px 40px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* 명예의 전당 스크롤바 스타일 */
+.ranking-list-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--wood-dark) var(--muted);
+}
+
+.ranking-list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ranking-list-scroll::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 3px;
+}
+
+.ranking-list-scroll::-webkit-scrollbar-thumb {
+  background: var(--wood-dark);
+  border-radius: 3px;
+}
+
+.ranking-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--wood);
+}
+
+/* 결과 모달 X 버튼 - 게시판 스타일, 나무 톤 */
+.minigame-theme .minigame-result-close-btn {
+  color: var(--wood-dark);
+}
+.minigame-theme .minigame-result-close-btn:hover {
+  color: var(--wood);
+  background-color: oklch(0.62 0.09 60 / 0.12);
+}
