@@ -10,6 +10,8 @@ import { loadRecords, saveRecord, isNewRecord } from "./lib/ScoreState.js";
 import { spawn, spawnInitial } from "./lib/WeedSpawner.js";
 import "./minigame.css";
 
+const INITIAL_WEED_COUNT = 4;
+
 const MEDAL_ICONS = [
   { icon: Trophy, color: "text-yellow-500", bg: "bg-yellow-100" },
   { icon: Medal, color: "text-slate-400", bg: "bg-slate-100" },
@@ -32,11 +34,6 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   const spawnTimerRef = useRef(null);
   const despawnTimeoutsRef = useRef(new Map());
 
-  const timer = useGameTimer(() => setGameState("result"));
-  const timeLeft = timer.timeLeft;
-
-  useEffect(() => setRecords(loadRecords()), []);
-
   const clearSpawnTimer = useCallback(() => {
     if (spawnTimerRef.current) {
       clearTimeout(spawnTimerRef.current);
@@ -48,6 +45,15 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     despawnTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
     despawnTimeoutsRef.current.clear();
   }, []);
+
+  const timer = useGameTimer(() => {
+    clearSpawnTimer();
+    clearDespawnTimeouts();
+    setGameState("result");
+  });
+  const timeLeft = timer.timeLeft;
+
+  useEffect(() => setRecords(loadRecords()), []);
 
   const scheduleDespawn = useCallback((weedId) => {
     const delay = 3000 + Math.random() * 5000;
@@ -99,8 +105,8 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     setFloatTexts([]);
     setTotalPulled(0);
     setGameState("playing");
-    weedIdRef.current = 4;
-    const initial = spawnInitial(4, 1);
+    weedIdRef.current = INITIAL_WEED_COUNT;
+    const initial = spawnInitial(INITIAL_WEED_COUNT, 1);
     setWeeds(initial);
     initial.forEach((w) => scheduleDespawn(w.id));
     scheduleNextSpawn();
@@ -156,9 +162,10 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
 
   const handleRegister = useCallback(() => {
     const name = nickname.trim() || "익명 껌딱지";
+    const newRecord = isNewRecord(score);
     saveRecord({ name, score, date: new Date().toLocaleDateString("ko-KR") });
     setRecords(loadRecords());
-    if (isNewRecord(score)) {
+    if (newRecord) {
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
     }
@@ -170,8 +177,6 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     setRecords(loadRecords());
     startGame();
   }, [startGame]);
-
-  const allRecords = records;
 
   return (
     <div className="w-full min-h-screen flex items-center justify-center p-4 font-sans">
@@ -341,7 +346,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
               />
             </div>
 
-            {allRecords.length === 0 ? (
+            {records.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-2 opacity-50">
                 <Sprout
                   className="w-10 h-10"
@@ -356,7 +361,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
               </div>
             ) : (
               <ul className="ranking-list-scroll flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
-                {allRecords.map((rec, i) => {
+                {records.map((rec, i) => {
                   const Medal_ = MEDAL_ICONS[i] ?? MEDAL_ICONS[1];
                   return (
                     <motion.li

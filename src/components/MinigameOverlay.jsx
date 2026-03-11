@@ -4,9 +4,10 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { WeedGameUI } from "../minigame";
-import { dispatchMinigameClose } from "../utils/stages/stage3/minigameLauncher.js";
-
-const EVENT_OPEN = "minigame:open";
+import {
+  dispatchMinigameClose,
+  EVENT_OPEN,
+} from "../utils/stages/stage3/minigameLauncher.js";
 
 export function MinigameOverlay() {
   const [visible, setVisible] = useState(false);
