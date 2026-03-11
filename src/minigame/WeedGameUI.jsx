@@ -33,6 +33,8 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   const floatIdRef = useRef(0);
   const spawnTimerRef = useRef(null);
   const despawnTimeoutsRef = useRef(new Map());
+  const floatTimerRef = useRef(new Map());
+  const playCountRef = useRef(0);
 
   const clearSpawnTimer = useCallback(() => {
     if (spawnTimerRef.current) {
@@ -46,9 +48,15 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     despawnTimeoutsRef.current.clear();
   }, []);
 
+  const clearFloatTimers = useCallback(() => {
+    floatTimerRef.current.forEach((tid) => clearTimeout(tid));
+    floatTimerRef.current.clear();
+  }, []);
+
   const timer = useGameTimer(() => {
     clearSpawnTimer();
     clearDespawnTimeouts();
+    clearFloatTimers();
     setGameState("result");
   });
   const timeLeft = timer.timeLeft;
@@ -81,7 +89,8 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     const delay = 300 + Math.random() * 400;
     spawnTimerRef.current = setTimeout(() => {
       spawnWeed();
-      if (spawnTimerRef.current !== null) scheduleNextSpawn();
+      scheduleNextSpawn();
+      // clearSpawnTimer 호출 시 이 콜백은 실행되지 않음(clearTimeout으로 취소됨)
     }, delay);
   }, [spawnWeed]);
 
@@ -90,6 +99,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
       timer.stop();
       clearSpawnTimer();
       clearDespawnTimeouts();
+      clearFloatTimers();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount
     [],
@@ -99,12 +109,14 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     timer.stop();
     clearSpawnTimer();
     clearDespawnTimeouts();
+    clearFloatTimers();
     setScore(0);
     timer.reset();
     setWeeds([]);
     setFloatTexts([]);
     setTotalPulled(0);
     setGameState("playing");
+    playCountRef.current += 1;
     weedIdRef.current = INITIAL_WEED_COUNT;
     const initial = spawnInitial(INITIAL_WEED_COUNT, 1);
     setWeeds(initial);
@@ -115,6 +127,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     timer,
     clearSpawnTimer,
     clearDespawnTimeouts,
+    clearFloatTimers,
     scheduleDespawn,
     scheduleNextSpawn,
   ]);
@@ -134,10 +147,11 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
         ...prev,
         { id: fid, x: fx, y: fy, value: `+${points}` },
       ]);
-      setTimeout(
-        () => setFloatTexts((prev) => prev.filter((ft) => ft.id !== fid)),
-        900,
-      );
+      const tid = setTimeout(() => {
+        setFloatTexts((prev) => prev.filter((ft) => ft.id !== fid));
+        floatTimerRef.current.delete(fid);
+      }, 900);
+      floatTimerRef.current.set(fid, tid);
     }
   }, []);
 
@@ -146,6 +160,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
       timer.stop();
       clearSpawnTimer();
       clearDespawnTimeouts();
+      clearFloatTimers();
       setGameState("idle");
       setScore(0);
       timer.reset();
@@ -157,7 +172,13 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
       setRecords(loadRecords());
       if (closeOverlay) onCloseProp?.();
     },
-    [timer, clearSpawnTimer, clearDespawnTimeouts, onCloseProp],
+    [
+      timer,
+      clearSpawnTimer,
+      clearDespawnTimeouts,
+      clearFloatTimers,
+      onCloseProp,
+    ],
   );
 
   const handleRegister = useCallback(() => {
@@ -365,7 +386,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
                   const Medal_ = MEDAL_ICONS[i] ?? MEDAL_ICONS[1];
                   return (
                     <motion.li
-                      key={i}
+                      key={`${rec.name}-${rec.score}-${rec.date}`}
                       initial={{ x: 20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
                       transition={{ delay: i * 0.1 }}
@@ -470,7 +491,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
                   className="text-xs font-bold opacity-60 mb-1"
                   style={{ color: "var(--foreground)" }}
                 >
-                  제 {records.length + 1}회
+                  제 {playCountRef.current}회
                 </p>
                 <h2
                   className="text-xl font-black leading-tight text-balance"
@@ -646,7 +667,7 @@ function NormalWeed() {
 function GoldenWeed() {
   return (
     <motion.div
-      className="flex flex-col items-center"
+      className="relative flex flex-col items-center"
       animate={{
         filter: [
           "drop-shadow(0 0 4px #fbbf24)",
