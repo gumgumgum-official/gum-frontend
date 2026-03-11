@@ -29,12 +29,12 @@ export function saveRecord(record) {
 
 /**
  * @param {number} score
- * @returns {boolean}
+ * @returns {boolean} 1등(최고점) 갱신 시에만 true
  */
 export function isNewRecord(score) {
   const records = loadRecords();
-  if (records.length < 3) return true;
-  return score > (records[2]?.score ?? 0);
+  if (records.length === 0) return true;
+  return score > (records[0]?.score ?? 0);
 }
 
 /**

@@ -69,7 +69,7 @@ export function openMinigame(opts) {
     });
   }
 
-  gsap.delayedCall(ANIM_DURATION * 0.6, () => {
+  gsap.delayedCall(ANIM_DURATION, () => {
     window.dispatchEvent(new CustomEvent(EVENT_OPEN));
   });
 }
