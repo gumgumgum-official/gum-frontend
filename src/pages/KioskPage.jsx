@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
+import { MinigameOverlay } from "../components/MinigameOverlay.jsx";
 import styles from "./Page.module.css";
 
 const KIOSK_STAGES = [3, 4, 5, 6];
@@ -11,6 +12,7 @@ export function KioskPage() {
   return (
     <div className={styles.page}>
       <ThreeCanvas allowedStages={allowedStages} initialStage={3} />
+      <MinigameOverlay />
     </div>
   );
 }
