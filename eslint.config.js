@@ -23,6 +23,8 @@ export default [
       globals: {
         window: "readonly",
         document: "readonly",
+        localStorage: "readonly",
+        CustomEvent: "readonly",
         console: "readonly",
         alert: "readonly",
         requestAnimationFrame: "readonly",

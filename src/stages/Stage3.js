@@ -16,6 +16,11 @@ import {
   STAGE3_CONFIG,
   loadIceCreamSpawnModels,
 } from "../config/stages/stage3.js";
+import {
+  openMinigame,
+  closeMinigame,
+  onMinigameClose,
+} from "../utils/stages/stage3/minigameLauncher.js";
 import { loadSVGShapes } from "../lib/svg-loader.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
@@ -61,6 +66,10 @@ export function Stage3() {
   let iceCreamCartRef = null;
   /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
   let noticeRef = null;
+  /** 게임기 클릭 → 미니게임 */
+  let gameMachineRef = null;
+  let unlistenMinigameClose = null;
+  let noticeModalEl = null;
   let noticePaperAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
   const spawnedIceCreams = []; // { group, body }
@@ -88,7 +97,7 @@ export function Stage3() {
     }
   };
 
-  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | null */
+  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
     const rect = canvasRef.getBoundingClientRect();
@@ -101,6 +110,7 @@ export function Stage3() {
     while (obj && obj !== sceneRef) {
       if (iceCreamCartRef && obj === iceCreamCartRef) return "icecream";
       if (noticeRef && obj === noticeRef) return "notice";
+      if (gameMachineRef && obj === gameMachineRef) return "gameMachine";
       obj = obj.parent;
     }
     return null;
@@ -151,6 +161,13 @@ export function Stage3() {
     }
     if (target === "notice") {
       showNoticeModal();
+    }
+    if (target === "gameMachine") {
+      openMinigame({
+        camera: cameraRef,
+        gameMachineRef,
+        orbitControls: debugControls?.getOrbitControls?.() ?? null,
+      });
     }
   }
 
@@ -1184,6 +1201,15 @@ export function Stage3() {
               scene.add(model);
               objects.push(model);
               if (task.key === "notice") noticeRef = model;
+              if (task.key === "gameMachine") {
+                gameMachineRef = model;
+                unlistenMinigameClose = onMinigameClose(() => {
+                  closeMinigame({
+                    camera: cameraRef,
+                    orbitControls: debugControls?.getOrbitControls?.() ?? null,
+                  });
+                });
+              }
               console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
             }
           });
@@ -1224,6 +1250,11 @@ export function Stage3() {
       }
       window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
       noticeRef = null;
+      if (unlistenMinigameClose) {
+        unlistenMinigameClose();
+        unlistenMinigameClose = null;
+      }
+      gameMachineRef = null;
       if (noticePaperAudio) {
         noticePaperAudio.pause();
         noticePaperAudio.src = "";
