@@ -36,6 +36,8 @@ export default [
         URL: "readonly",
         URLSearchParams: "readonly",
         fetch: "readonly",
+        localStorage: "readonly",
+        CustomEvent: "readonly",
       },
     },
     settings: {
