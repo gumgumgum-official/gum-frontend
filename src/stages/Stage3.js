@@ -117,6 +117,54 @@ export function Stage3() {
     if (canvasRef) canvasRef.style.cursor = "default";
   }
 
+  const wood = "oklch(0.62 0.09 60)";
+  const woodDark = "oklch(0.45 0.08 55)";
+  const card = "oklch(0.99 0.012 85)";
+  const amber50 = "#fffbeb";
+
+  /** 게시판 모달 스타일 적용 (생성 시 + 표시 시마다 호출하여 HMR 시에도 반영) */
+  function applyNoticeModalStyles(el) {
+    if (!el) return;
+    Object.assign(el.style, {
+      position: "fixed",
+      inset: "0",
+      background: "rgba(0,0,0,0.35)",
+      backdropFilter: "blur(6px)",
+      WebkitBackdropFilter: "blur(6px)",
+      zIndex: "9999",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "16px",
+    });
+    const modalBox = el.querySelector(".stage3-notice-modal");
+    if (modalBox && "style" in modalBox)
+      Object.assign(modalBox.style, {
+        background: card,
+        borderRadius: "24px",
+        maxWidth: "400px",
+        width: "100%",
+        position: "relative",
+        overflow: "hidden",
+        border: `3px solid ${wood}`,
+        boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+      });
+    const headerEl = el.querySelector(".stage3-notice-modal-header");
+    if (headerEl && "style" in headerEl)
+      Object.assign(headerEl.style, {
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "12px 24px",
+        background: wood,
+        borderBottom: `3px solid ${woodDark}`,
+        borderRadius: "24px 24px 0 0",
+        margin: "-3px -3px 0 -3px",
+        width: "calc(100% + 6px)",
+      });
+  }
+
   /** 게시판 모달 생성 및 표시 */
   function showNoticeModal() {
     const paperPaths = config.notice?.paperSoundPaths ?? [];
@@ -134,6 +182,7 @@ export function Stage3() {
       noticePaperAudio.play().catch(() => {});
     }
     if (noticeModalEl) {
+      applyNoticeModalStyles(noticeModalEl);
       noticeModalEl.style.display = "flex";
       return;
     }
@@ -141,35 +190,25 @@ export function Stage3() {
     noticeModalEl.className = "stage3-notice-modal-backdrop";
     noticeModalEl.innerHTML = `
       <div class="stage3-notice-modal">
-        <button type="button" class="stage3-notice-modal-close" aria-label="닫기">×</button>
+        <div class="stage3-notice-modal-header">
+          <h2 class="stage3-notice-modal-title">게시판</h2>
+          <button type="button" class="stage3-notice-modal-close" aria-label="닫기">×</button>
+        </div>
         <div class="stage3-notice-modal-content">게시판</div>
       </div>
     `;
-    Object.assign(noticeModalEl.style, {
-      position: "fixed",
-      inset: "0",
-      background: "rgba(0,0,0,0.35)",
-      backdropFilter: "blur(6px)",
-      WebkitBackdropFilter: "blur(6px)",
-      zIndex: "9999",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "16px",
-    });
-    const modalBox = noticeModalEl.querySelector(".stage3-notice-modal");
-    if (modalBox && "style" in modalBox)
-      Object.assign(modalBox.style, {
-        background: "#fff",
-        borderRadius: "12px",
-        padding: "24px 28px",
-        maxWidth: "400px",
-        width: "100%",
-        position: "relative",
-        boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
+    applyNoticeModalStyles(noticeModalEl);
+    const titleEl = noticeModalEl.querySelector(".stage3-notice-modal-title");
+    if (titleEl && "style" in titleEl)
+      Object.assign(titleEl.style, {
+        margin: 0,
+        fontSize: "1.25rem",
+        fontWeight: 600,
+        letterSpacing: "0.025em",
+        color: amber50,
       });
     const closeBtn = noticeModalEl.querySelector(".stage3-notice-modal-close");
-    if (closeBtn && "style" in closeBtn)
+    if (closeBtn && "style" in closeBtn) {
       Object.assign(closeBtn.style, {
         position: "absolute",
         top: "12px",
@@ -177,11 +216,33 @@ export function Stage3() {
         width: "32px",
         height: "32px",
         border: "none",
+        borderRadius: "50%",
         background: "transparent",
         fontSize: "24px",
         lineHeight: "1",
         cursor: "pointer",
-        color: "#666",
+        color: "rgba(255, 251, 235, 0.8)",
+        transition: "color 0.2s, background 0.2s",
+      });
+      if (closeBtn instanceof window.HTMLElement) {
+        closeBtn.addEventListener("mouseenter", () => {
+          closeBtn.style.color = amber50;
+          closeBtn.style.background = "rgba(255,255,255,0.1)";
+        });
+        closeBtn.addEventListener("mouseleave", () => {
+          closeBtn.style.color = "rgba(255, 251, 235, 0.8)";
+          closeBtn.style.background = "transparent";
+        });
+      }
+    }
+    const contentEl = noticeModalEl.querySelector(
+      ".stage3-notice-modal-content",
+    );
+    if (contentEl && "style" in contentEl)
+      Object.assign(contentEl.style, {
+        padding: "24px 28px",
+        background: card,
+        color: "oklch(0.28 0.04 60)",
       });
     closeBtn.addEventListener("click", closeNoticeModal);
     noticeModalEl.addEventListener("click", (e) => {
