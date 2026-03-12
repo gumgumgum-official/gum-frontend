@@ -58,7 +58,7 @@ export const STAGE3_CONFIG = {
   },
   /** 게시판 */
   notice: {
-    path: "/models/stage3/notice.glb",
+    path: "/models/stage3/notice_paper2.glb",
     position: { x: -4, y: -0.4, z: -4 },
     rotation: { x: 0, y: 20, z: 0 },
     scale: 1.8,
