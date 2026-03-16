@@ -3,7 +3,6 @@
 /**
  * @typedef {Object} AppConfig
  * @property {number} initialStage
- * @property {{ loadingVideoSrc: string }} [stageTransition] - 스테이지 전환 시 로딩 비디오 경로
  * @property {{antialias: boolean, pixelRatio: number}} renderer
  * @property {Object} lights
  * @property {string} canvasSelector
@@ -12,11 +11,6 @@
 export const APP_CONFIG = {
   // 초기 시작 스테이지
   initialStage: 2,
-
-  // 스테이지 전환 시 로딩 UI (2~6 키 전환 시 재생)
-  stageTransition: {
-    loadingVideoSrc: "/static/loading.mp4",
-  },
 
   // 렌더러 설정
   renderer: {

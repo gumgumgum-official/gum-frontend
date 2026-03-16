@@ -12,7 +12,7 @@ import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import { inspectModel } from "../utils/common/modelInspector.js";
-import { loadSVGShapes } from "../lib/svg-loader.js";
+import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 
@@ -22,9 +22,10 @@ const HANDWRITING_TABLE = "handwriting_files";
 /** Stage2 대비 4배 크기 (글자 일부도 크게 보이도록) */
 const STAGE3_LETTER_SCALE = 0.006 * 0.75 * 4;
 const STAGE3_SPAWN_HEIGHT = 5;
-const STAGE3_GRAVITY = -22 * 0.15;
-const STAGE3_INITIAL_VY = -6 * 0.15;
-const TILT_DEGREES = 32;
+// 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
+const STAGE3_GRAVITY = -35;
+const STAGE3_INITIAL_VY = -12;
+const LETTER_BOUNCE_RESTITUTION = 0.4;
 const HITS_TO_DESTROY = 4;
 /** 한 번 타격 시 잘려 나가는 비율 (1/4 → 큰 조각이 깔끔하게 떨어짐) */
 const FRACTION_PER_HIT = 1 / 4;
@@ -48,7 +49,7 @@ export function Stage3() {
   let backgroundModel = null;
 
   // 낙하 글자 1개 (최신 것만)
-  let letterState = null; // { group, velocity: { y }, gravity, groundY, landed, hitCount }
+  let letterState = null; // { group, velocity: { y, rotationX, rotationY, rotationZ }, gravity, groundY, landed, hitCount }
   let letterLoadInProgress = false; // 동시에 여러 번 호출되면 한 번만 실행
   const fragments = []; // { group, velocity, angularVelocity, age } — 조각은 글자 메시 클론
 
@@ -139,17 +140,19 @@ export function Stage3() {
     }
   }
 
-  function setReadableRotationTowardCamera(group, camera, groundY) {
+  function setReadableRotationTowardCamera(group, camera, _groundY) {
     const dir = new THREE.Vector3(
       camera.position.x - group.position.x,
-      camera.position.y - groundY,
+      0,
       camera.position.z - group.position.z,
     );
-    if (dir.length() < 1e-6) return;
+    if (dir.lengthSq() < 1e-6) return;
     dir.normalize();
-    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
-    group.rotateX(-(TILT_DEGREES * Math.PI) / 180);
+    const yaw = Math.atan2(dir.x, dir.z);
+    group.rotation.set(0, yaw, 0);
   }
+
+  // Stage3에서는 낙하 중 회전을 사용하지 않으므로, 회전 속도 계산 유틸은 제거.
 
   /** 씬에서 Stage3 글자 그룹만 모두 제거 (떠 있는 것 포함) */
   function removeAllLetterGroupsFromScene(scene) {
@@ -179,13 +182,15 @@ export function Stage3() {
         console.log("[Stage3] 표시할 handwriting 없음");
         return;
       }
-      const shapes = await loadSVGShapes(metadata.url);
+      let shapes = await loadSVGShapes(metadata.url);
       if (shapes.length === 0) return;
+      shapes = expandShapesStroke(shapes, 1.3);
 
       const group = new THREE.Group();
       group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
+      // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
       const extrudeSettings = {
-        depth: 0.05,
+        depth: 0.18,
         bevelEnabled: true,
         bevelThickness: 0.03,
         bevelSize: 0.02,
@@ -202,23 +207,35 @@ export function Stage3() {
         const mesh = new THREE.Mesh(geometry, material);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        mesh.scale.set(STAGE3_LETTER_SCALE, STAGE3_LETTER_SCALE, 1);
+        mesh.scale.set(STAGE3_LETTER_SCALE, STAGE3_LETTER_SCALE, 1.45);
         group.add(mesh);
         meshes.push(mesh);
       });
       centerGroupGeometries(meshes);
+      group.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(group);
+      const letterBottomOffset = Math.max(0, -box.min.y);
+      const landingY = groundY + letterBottomOffset;
+
       const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
       group.position.set(0, startY, 0);
-      group.rotation.set(-Math.PI / 2, 0, 0);
+      group.rotation.set(0, 0, 0);
       scene.add(group);
-      const speedFactor = 0.25 + Math.random() * 0.75;
+      const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0: 전반적으로 더 빠르게
+      const gravity = STAGE3_GRAVITY * speedFactor;
+      const initialVy = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
       letterState = {
         group,
         velocity: {
-          y: (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor,
+          y: initialVy,
+          rotationX: 0,
+          rotationY: 0,
+          rotationZ: 0,
         },
-        gravity: STAGE3_GRAVITY * speedFactor,
+        gravity,
         groundY,
+        landingY,
+        bounces: 0,
         landed: false,
         hitCount: 0,
       };
@@ -235,11 +252,21 @@ export function Stage3() {
     if (letterState) {
       const s = letterState;
       const speedFactor = 0.25 + Math.random() * 0.75;
-      s.group.position.y = s.groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
-      s.group.position.x = 0;
-      s.group.position.z = 0;
-      s.velocity.y = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
-      s.gravity = STAGE3_GRAVITY * speedFactor;
+      const startY = s.landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
+      const startX = 0;
+      const startZ = 0;
+      const gravity = STAGE3_GRAVITY * speedFactor;
+      const initialVy = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
+
+      s.group.position.set(startX, startY, startZ);
+      s.group.rotation.set(0, 0, 0);
+
+      s.velocity.y = initialVy;
+      s.velocity.rotationX = 0;
+      s.velocity.rotationY = 0;
+      s.velocity.rotationZ = 0;
+      s.gravity = gravity;
+      s.bounces = 0;
       s.landed = false;
       s.hitCount = 0;
       console.log("[Stage3] 0키: 글자 재낙하");
@@ -255,15 +282,29 @@ export function Stage3() {
     if (!letterState || letterState.landed) return;
     const s = letterState;
     const nextY = s.group.position.y + s.velocity.y * delta;
-    if (nextY <= s.groundY) {
-      s.group.position.y = s.groundY;
+    if (nextY <= s.landingY) {
+      // 첫 충돌 시 한 번만 가볍게 바운스해서 무게감을 표현
+      if ((s.bounces ?? 0) < 1 && Math.abs(s.velocity.y) > 2) {
+        s.group.position.y = s.landingY;
+        s.velocity.y = -s.velocity.y * LETTER_BOUNCE_RESTITUTION;
+        s.bounces = (s.bounces ?? 0) + 1;
+        return;
+      }
+
+      s.group.position.y = s.landingY;
       s.velocity.y = 0;
+      s.velocity.rotationX = 0;
+      s.velocity.rotationY = 0;
+      s.velocity.rotationZ = 0;
       setReadableRotationTowardCamera(s.group, camera, s.groundY);
       s.landed = true;
       return;
     }
     s.velocity.y += s.gravity * delta;
     s.group.position.y = nextY;
+    s.group.rotation.x += s.velocity.rotationX * delta;
+    s.group.rotation.y += s.velocity.rotationY * delta;
+    s.group.rotation.z += s.velocity.rotationZ * delta;
   }
 
   const _v3 = new THREE.Vector3();
@@ -831,7 +872,12 @@ export function Stage3() {
         getPropPath: () => "",
         options: {
           stageName: "stage3",
-          getInitialCameraConfig: () => config.camera,
+          // Stage3에서도 OrbitControls로 카메라를 돌려볼 수 있게,
+          // 초기 config는 쓰되 lookAt은 고정하지 않는다.
+          getInitialCameraConfig: () => ({
+            ...config.camera,
+            lookAt: undefined,
+          }),
         },
       });
 
@@ -862,7 +908,12 @@ export function Stage3() {
       updateLetter(delta, this.camera);
       updateFragments(delta);
 
-      if (character) character.update(delta, this.camera);
+      const orbitActive = debugControls?.getOrbitControls?.() != null;
+      if (character) {
+        character.update(delta, this.camera, {
+          updateCamera: !orbitActive,
+        });
+      }
     },
 
     cleanup(scene) {

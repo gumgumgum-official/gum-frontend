@@ -100,8 +100,14 @@ export function createCharacterController({
       });
     },
 
-    update(delta, camera) {
+    /**
+     * @param {number} delta
+     * @param {import("three").PerspectiveCamera} camera
+     * @param {{ updateCamera?: boolean }} [options] - updateCamera: false면 카메라 추적 생략 (OrbitControls 사용 시)
+     */
+    update(delta, camera, options = {}) {
       if (!characterModel || !backgroundBounds) return;
+      const updateCamera = options.updateCamera !== false;
 
       const {
         moveSpeed,
@@ -165,6 +171,8 @@ export function createCharacterController({
       if (characterMixer) {
         characterMixer.update(delta);
       }
+
+      if (!updateCamera) return;
 
       // 카메라가 캐릭터를 따라가도록 설정
       _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
