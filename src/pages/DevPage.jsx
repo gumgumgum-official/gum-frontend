@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
+import { MinigameOverlay } from "../components/MinigameOverlay.jsx";
 import { APP_CONFIG } from "../config/appConfig.js";
 import styles from "./Page.module.css";
 
@@ -16,6 +17,7 @@ export function DevPage() {
         initialStage={APP_CONFIG.initialStage}
         enableKeyboardSwitch
       />
+      <MinigameOverlay />
     </div>
   );
 }

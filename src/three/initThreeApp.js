@@ -4,6 +4,7 @@
  */
 
 import * as THREE from "three";
+import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { createStageManager } from "../utils/common/StageManager.js";
 import { Stage2 } from "../stages/Stage2.js";
 import { Stage3 } from "../stages/Stage3.js";
@@ -69,10 +70,25 @@ export function initThreeApp(canvasElement, options = {}) {
 
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(APP_CONFIG?.renderer?.pixelRatio ?? 2);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.4;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   // Scene
   const scene = new THREE.Scene();
+
+  // HDRI 환경광 (Blender Material Preview 스타일)
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  const exrLoader = new EXRLoader();
+  exrLoader.load(
+    base + "/hdri/sunny_rose_garden_1k.exr",
+    (texture) => {
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      scene.environment = texture;
+    },
+    undefined,
+    (err) => console.warn("[initThreeApp] HDRI 로드 실패:", err),
+  );
 
   // Lights (공통)
   const lights = APP_CONFIG?.lights ?? {};
@@ -211,6 +227,14 @@ export function initThreeApp(canvasElement, options = {}) {
         }
       } catch (err) {
         console.error("[initThreeApp] stage cleanup 오류:", err);
+      }
+      try {
+        if (scene.environment) {
+          scene.environment.dispose?.();
+          scene.environment = null;
+        }
+      } catch (err) {
+        console.error("[initThreeApp] environment dispose 오류:", err);
       }
       try {
         renderer?.dispose?.();
