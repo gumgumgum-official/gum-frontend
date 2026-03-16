@@ -45,6 +45,32 @@ export function parseSVGToShapes(svgString) {
 }
 
 /**
+ * 2D Shape를 중심 기준으로 확대해 획 두께를 키운 새 Shape 배열 반환.
+ * SVG에서 얇게 그려진 선도 두껍게 보이게 할 수 있음.
+ * @param {THREE.Shape[]} shapes
+ * @param {number} [factor=1.25] 확대 배율 (1보다 크면 획이 두꺼워짐)
+ * @returns {THREE.Shape[]}
+ */
+export function expandShapesStroke(shapes, factor = 1.25) {
+  if (factor <= 1.0) return shapes;
+
+  return shapes.map((shape) => {
+    const points = shape.getPoints(12);
+    if (!points || points.length < 3) return shape;
+
+    const center = new THREE.Vector2(0, 0);
+    points.forEach((p) => center.add(p));
+    center.divideScalar(points.length);
+
+    const scaled = points.map((p) => {
+      const v = p.clone().sub(center).multiplyScalar(factor).add(center);
+      return new THREE.Vector2(v.x, v.y);
+    });
+    return new THREE.Shape(scaled);
+  });
+}
+
+/**
  * SVG URL을 다운로드하고 Shape 배열로 변환
  * @param {string} url
  * @returns {Promise<THREE.Shape[]>}

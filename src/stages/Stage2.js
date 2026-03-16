@@ -13,30 +13,46 @@ import { createAutonomousCharacters } from "../utils/stages/stage2/autonomousCha
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE2_CONFIG } from "../config/stages/stage2.js";
 import { subscribeHandwritingRealtime } from "../utils/handwriting/handwritingRealtime.js";
-import { loadSVGShapes } from "../lib/svg-loader.js";
+import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 
 // Phase 2: 고민 텍스트가 섬 위에 떨어져 쌓이는 기준
-/** 섬 전체 XZ 범위 (위·아래·왼쪽·오른쪽 모서리 collision 기준) — 이 안에서만 스폰 */
-const ISLAND_BOUNDS = {
-  minX: -8.06,
-  maxX: 7.94,
-  minZ: -3.21,
-  maxZ: 6.89,
-};
+// ----------------------------------------
+// [검증용] 예전 수동 측정값 주석 처리 — island.glb 자동 계산만 사용하는지 검증하려면 아래 사용 안 함.
+// 검증 끝나면 주석 해제하고 getSpawnBounds/loadCharacters fallback 다시 ISLAND_BOUNDS로.
+// const ISLAND_BOUNDS = {
+//   minX: -8.06,
+//   maxX: 7.94,
+//   minZ: -3.21,
+//   maxZ: 6.89,
+// };
 const GROUND_Y = 0.7;
 /** 글자끼리 최소 거리(m). 이 값보다 가깝게 스폰되지 않음. */
 const MIN_DISTANCE_BETWEEN = 5.2;
-const SPAWN_INSET_RATIO = 0.15; // 위·앞 15% 안쪽
-const SPAWN_INSET_SIDE_RATIO = 0.28; // 왼쪽·오른쪽 여유 더 줌 (튀어나오지 않게)
-const SPAWN_INSET_BOTTOM_RATIO = 0.45; // 아래(세모 부분)는 더 많이 빼서 중간·위 위주로 스폰
+// island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
+/** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
+const ISLAND_BOUNDS_INSET_RATIO = 0.15;
+// 스폰 시 그 안에서 다시 앞·뒤·좌우 살짝만 더 빼기 (섬 전체에 퍼지도록 작게)
+const SPAWN_INSET_RATIO = 0.05;
+const SPAWN_INSET_SIDE_RATIO = 0.06;
+const SPAWN_INSET_BOTTOM_RATIO = 0.1;
 const SPAWN_HEIGHT_MIN = 3; // 낙하 시작 높이 하한 (빨리 보이게)
 const SPAWN_HEIGHT_MAX = 14; // 최대 시작 높이 (너무 높으면 오래 걸림)
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
 const FALL_GRAVITY_MAX = -22 * 0.15;
 const FALL_INITIAL_VY_MAX = -6 * 0.15;
-const TUMBLE_SPEED = 1.4;
+
+/** 자식/손자 중 name이 일치하는 첫 오브젝트 반환 (디자이너가 넣은 Walkable 등) */
+function findChildByName(obj, name) {
+  if (!obj) return null;
+  if (obj.name === name) return obj;
+  for (const child of obj.children) {
+    const found = findChildByName(child, name);
+    if (found) return found;
+  }
+  return null;
+}
 
 export function Stage2() {
   const config = STAGE2_CONFIG;
@@ -49,7 +65,7 @@ export function Stage2() {
   let realtimeSubscription = null;
   const fallingTexts = [];
   let cameraRef = null;
-  /** 섬(collision) XZ 범위 (로깅용). 스폰은 ISLAND_BOUNDS 사용 */
+  /** 섬 XZ 범위 — island.glb 로드 시 자동 계산됨 (검증: 예전 수치 fallback 없이 이 값만 사용) */
   let islandBounds = null;
 
   function updateIslandBoundsFromRoots(roots) {
@@ -122,77 +138,145 @@ export function Stage2() {
         },
       });
 
-      // 배경 GLB 로드
-      glbLoader.load(config.model.path, {
-        onLoad: (gltf) => {
-          const model = gltf.scene;
-          const box = new THREE.Box3().setFromObject(model);
-          const size = box.getSize(new THREE.Vector3());
-          const center = box.getCenter(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z);
-
-          // 카메라 고정 모드(config.camera.lookAt 있음): 위치/타깃 덮어쓰지 않음
-          // lookAt이 없으면 OrbitControls 활성화되므로 초기 위치 유지 (배경 로드 시 덮어쓰지 않음)
-          if (!config.camera.lookAt) {
-            // OrbitControls 활성화 상태에서는 초기 config 위치 유지
-            // 필요시 Orbit 타깃만 모델 중심으로 설정
-            debugControls.setOrbitTarget(center);
+      // 배경 GLB 로드 (단일 path 또는 island/sea/sky 분리)
+      const pos = config.model.position ?? { x: 0, y: 0, z: 0 };
+      const applyModel = (model) => {
+        model.position.set(pos.x ?? 0, pos.y ?? 0, pos.z ?? 0);
+        model.updateMatrixWorld(true);
+        model.traverse((child) => {
+          if (child.isMesh) {
+            if (config.model.castShadow !== undefined)
+              child.castShadow = config.model.castShadow;
+            if (config.model.receiveShadow !== undefined)
+              child.receiveShadow = config.model.receiveShadow;
+            child.raycast = () => {};
           }
-          this.camera.far = Math.max(config.camera.far ?? 10000, maxDim * 10);
-          this.camera.updateProjectionMatrix();
+        });
+        scene.add(model);
+        objects.push(model);
+      };
 
-          model.traverse((child) => {
-            if (child.isMesh) {
-              if (child.material) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-              }
-              child.raycast = () => {};
-            }
-          });
+      const onReady = () => {
+        loadCharacters(
+          glbLoader,
+          config,
+          scene,
+          objects,
+          (controller) => {
+            autonomousCharacters = controller;
+          },
+          islandBounds,
+        );
+        loadInitialHandwritings(
+          scene,
+          this.camera,
+          fallingTexts,
+          () => islandBounds,
+        );
+      };
 
-          objects.push(model);
-          scene.add(model);
-
-          // 오브제(collision 등) 로드 후 범위 갱신 → 캐릭터 로드 → 누적 SVG 로드
-          const onReady = () => {
-            loadCharacters(glbLoader, config, scene, objects, (controller) => {
-              autonomousCharacters = controller;
-            });
-            loadInitialHandwritings(
-              scene,
-              this.camera,
-              fallingTexts,
-              () => islandBounds,
-            );
-          };
-
-          if (config.props?.length) {
-            loadPropsFromConfig(
-              glbLoader,
-              config.props,
-              scene,
-              objects,
-              propRoots,
-              () => {
-                debugControls.setDraggableObjects(propRoots);
-                updateIslandBoundsFromRoots(propRoots);
-                onReady();
-              },
+      const finishBackground = (allModels, islandModel) => {
+        const box = new THREE.Box3();
+        allModels.forEach((m) => box.expandByObject(m));
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        if (!config.camera.lookAt) debugControls.setOrbitTarget(center);
+        this.camera.far = Math.max(config.camera.far ?? 10000, maxDim * 10);
+        this.camera.updateProjectionMatrix();
+        if (islandModel) {
+          islandModel.updateMatrixWorld(true);
+          // 디자이너가 "걸을 수 있는 영역" 메쉬를 Walkable 이름으로 넣어두면 그걸로만 사용 (inset 불필요)
+          const walkableObj = findChildByName(islandModel, "Walkable");
+          const boundsSource = walkableObj || islandModel;
+          boundsSource.updateMatrixWorld(true);
+          const box = new THREE.Box3().setFromObject(boundsSource);
+          if (walkableObj) {
+            islandBounds = {
+              minX: box.min.x,
+              maxX: box.max.x,
+              minZ: box.min.z,
+              maxZ: box.max.z,
+            };
+            console.log(
+              `📐 [Stage2] island.glb Walkable 사용 (디자이너 정의): minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
           } else {
-            onReady();
-          }
-        },
-        onProgress: (xhr) => {
-          if (xhr.total > 0) {
+            const w = box.max.x - box.min.x;
+            const d = box.max.z - box.min.z;
+            const inset = ISLAND_BOUNDS_INSET_RATIO;
+            islandBounds = {
+              minX: box.min.x + w * inset,
+              maxX: box.max.x - w * inset,
+              minZ: box.min.z + d * inset,
+              maxZ: box.max.z - d * inset,
+            };
             console.log(
-              `Stage2 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
+              `📐 [Stage2] island.glb Walkable 없음 → 전체 박스 + ${(inset * 100).toFixed(0)}% inset: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
           }
-        },
-        onError: (err) => console.error("❌ Stage2 배경 로드 에러:", err),
-      });
+        }
+        if (config.props?.length) {
+          loadPropsFromConfig(
+            glbLoader,
+            config.props,
+            scene,
+            objects,
+            propRoots,
+            () => {
+              debugControls.setDraggableObjects(propRoots);
+              if (!islandModel) updateIslandBoundsFromRoots(propRoots);
+              onReady();
+            },
+          );
+        } else {
+          onReady();
+        }
+      };
+
+      if (config.model.island || config.model.sea || config.model.sky) {
+        const parts = [
+          config.model.island && "island",
+          config.model.sea && "sea",
+          config.model.sky && "sky",
+        ].filter(Boolean);
+        const urls = [
+          config.model.island,
+          config.model.sea,
+          config.model.sky,
+        ].filter(Boolean);
+        Promise.all(urls.map((url) => glbLoader.loadAsync(url)))
+          .then((gltfs) => {
+            let islandModel = null;
+            gltfs.forEach((gltf, i) => {
+              const model = gltf.scene;
+              applyModel(model);
+              if (parts[i] === "island") islandModel = model;
+            });
+            finishBackground(
+              gltfs.map((g) => g.scene),
+              islandModel,
+            );
+            console.log("✅ Stage2 배경 로드 완료 (island/sea/sky)");
+          })
+          .catch((err) => console.error("❌ Stage2 배경 로드 에러:", err));
+      } else {
+        glbLoader.load(config.model.path, {
+          onLoad: (gltf) => {
+            const model = gltf.scene;
+            applyModel(model);
+            finishBackground([model], null);
+            console.log("✅ Stage2 배경 로드 완료 (단일)");
+          },
+          onProgress: (xhr) => {
+            if (xhr.total > 0)
+              console.log(
+                `Stage2 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
+              );
+          },
+          onError: (err) => console.error("❌ Stage2 배경 로드 에러:", err),
+        });
+      }
 
       const axesHelper = new THREE.AxesHelper(50);
       scene.add(axesHelper);
@@ -232,22 +316,35 @@ export function Stage2() {
             return;
           }
           console.log(`[Stage2] 0키: 재낙하 (${fallingTexts.length}개 글자)`);
-          const spawn = getSpawnBounds();
+          const spawn = getSpawnBounds(islandBounds);
           const { minX, maxX, minZ, maxZ } = spawn;
           fallingTexts.forEach((ft) => {
             const speedFactor = 0.25 + Math.random() * 0.75; // 0.25~1.0 (현재=맥시멈)
-            ft.group.position.y =
+            const startY =
               GROUND_Y +
               SPAWN_HEIGHT_MIN +
               Math.random() * (SPAWN_HEIGHT_MAX - SPAWN_HEIGHT_MIN);
-            ft.group.position.x = minX + Math.random() * (maxX - minX);
-            ft.group.position.z = minZ + Math.random() * (maxZ - minZ);
-            ft.velocity.y =
+            const startX = minX + Math.random() * (maxX - minX);
+            const startZ = minZ + Math.random() * (maxZ - minZ);
+            const gravity = FALL_GRAVITY_MAX * speedFactor;
+            const initialVy =
               (FALL_INITIAL_VY_MAX - Math.random() * 0.3) * speedFactor;
-            ft.velocity.rotationX = (Math.random() - 0.5) * TUMBLE_SPEED;
-            ft.velocity.rotationY = (Math.random() - 0.5) * TUMBLE_SPEED;
-            ft.velocity.rotationZ = (Math.random() - 0.5) * TUMBLE_SPEED;
-            ft.gravity = FALL_GRAVITY_MAX * speedFactor;
+            const rotationVelocity = computeFallRotationVelocities(
+              startY,
+              GROUND_Y,
+              initialVy,
+              gravity,
+            );
+
+            ft.group.position.set(startX, startY, startZ);
+            ft.group.rotation.set(0, 0, 0);
+
+            ft.velocity.y = initialVy;
+            ft.velocity.rotationX = rotationVelocity.x;
+            ft.velocity.rotationY = rotationVelocity.y;
+            ft.velocity.rotationZ = rotationVelocity.z;
+            ft.gravity = gravity;
+            ft.groundY = GROUND_Y;
             ft.landed = false;
           });
         }
@@ -328,8 +425,16 @@ export function Stage2() {
  * @param {import("three").Scene} scene
  * @param {import("three").Object3D[]} objects
  * @param {(controller: { update: function, cleanup: function } | null) => void} onControllerReady
+ * @param {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} [bounds] - 섬 XZ 범위 (island.glb 자동 계산값만 사용 중, 검증용)
  */
-function loadCharacters(loader, config, scene, objects, onControllerReady) {
+function loadCharacters(
+  loader,
+  config,
+  scene,
+  objects,
+  onControllerReady,
+  bounds,
+) {
   const characterPath =
     config.characterModelPath ?? "/models/common/user_walking2.glb";
   const characterPositions = config.characters ?? [
@@ -340,17 +445,36 @@ function loadCharacters(loader, config, scene, objects, onControllerReady) {
     { position: { x: 4, y: 0.7, z: 1 } },
   ];
 
+  // island.glb 기준 이동 범위 — 캐릭터는 이 안에서만 걸음 (초기 위치도 여기 안으로 클램프)
+  const walkBounds =
+    bounds ??
+    (() => {
+      console.warn(
+        "[Stage2] island bounds 없음 — island.glb 로드 후 자동 계산된 값만 사용 중. 단일 배경이면 bounds가 null일 수 있음.",
+      );
+      return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
+    })();
+  const padding = 0.5;
+
   loader.load(characterPath, {
     onLoad: (gltf) => {
       const source = gltf.scene;
       const count = characterPositions.length;
       const scale = config.characterScale ?? 1;
       const characterModels = [];
+      const minX = walkBounds.minX + padding;
+      const maxX = walkBounds.maxX - padding;
+      const minZ = walkBounds.minZ + padding;
+      const maxZ = walkBounds.maxZ - padding;
       for (let i = 0; i < count; i++) {
         const model = i === 0 ? source : SkeletonUtils.clone(source);
         model.scale.setScalar(scale);
         const pos = characterPositions[i]?.position ?? {};
-        model.position.set(pos.x ?? 0, pos.y ?? 0, pos.z ?? 0);
+        let x = pos.x ?? 0;
+        let z = pos.z ?? 0;
+        x = THREE.MathUtils.clamp(x, minX, maxX);
+        z = THREE.MathUtils.clamp(z, minZ, maxZ);
+        model.position.set(x, pos.y ?? GROUND_Y, z);
         model.traverse((child) => {
           if (child.isMesh) {
             child.castShadow = true;
@@ -366,13 +490,15 @@ function loadCharacters(loader, config, scene, objects, onControllerReady) {
         controller = createAutonomousCharacters({
           models: characterModels,
           walkClip: gltf.animations[0],
-          bounds: ISLAND_BOUNDS,
+          bounds: walkBounds,
           groundY: GROUND_Y,
-          options: { moveSpeed: 0.8, boundsPadding: 0.5 },
+          options: { moveSpeed: 0.8, boundsPadding: padding },
         });
       }
       onControllerReady(controller);
-      console.log(`✅ Stage2 캐릭터 ${count}명 로드 완료`);
+      console.log(
+        `✅ Stage2 캐릭터 ${count}명 로드 완료 (island.glb 범위 안에서만 이동)`,
+      );
     },
     onError: (err) => {
       console.error("❌ Stage2 캐릭터 로드 에러:", err);
@@ -633,14 +759,16 @@ async function createFallingText(
   const { initial = false } = options;
 
   try {
-    const shapes = await loadSVGShapes(metadata.url);
+    let shapes = await loadSVGShapes(metadata.url);
     if (shapes.length === 0) {
       console.warn("[Stage2] No shapes found in SVG:", metadata.id);
       return;
     }
+    shapes = expandShapesStroke(shapes, 1.3);
 
     const group = new THREE.Group();
     const scale = 0.006 * 0.75; // 현재 대비 75% 크기
+    // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
     const extrudeSettings = {
       depth: 0.05,
       bevelEnabled: true,
@@ -660,7 +788,7 @@ async function createFallingText(
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.scale.set(scale, scale, 1);
+      mesh.scale.set(scale, scale, 1.45);
       group.add(mesh);
       meshes.push(mesh);
     });
@@ -680,7 +808,7 @@ async function createFallingText(
         Math.random() * (SPAWN_HEIGHT_MAX - SPAWN_HEIGHT_MIN);
 
     group.position.set(startX, startY, startZ);
-    group.rotation.set(-Math.PI / 2, 0, 0);
+    group.rotation.set(0, 0, 0);
 
     if (initial) {
       setReadableRotationTowardCamera(group, camera, GROUND_Y);
@@ -689,6 +817,9 @@ async function createFallingText(
     const speedFactor = 0.25 + Math.random() * 0.75;
     const gravity = FALL_GRAVITY_MAX * speedFactor;
     const initialVy = (FALL_INITIAL_VY_MAX - Math.random() * 0.3) * speedFactor;
+    const rotationVelocity = initial
+      ? { x: 0, y: 0, z: 0 }
+      : computeFallRotationVelocities(startY, GROUND_Y, initialVy, gravity);
 
     scene.add(group);
 
@@ -696,9 +827,9 @@ async function createFallingText(
       group,
       velocity: {
         y: initial ? 0 : initialVy,
-        rotationX: initial ? 0 : (Math.random() - 0.5) * TUMBLE_SPEED,
-        rotationY: initial ? 0 : (Math.random() - 0.5) * TUMBLE_SPEED,
-        rotationZ: initial ? 0 : (Math.random() - 0.5) * TUMBLE_SPEED,
+        rotationX: rotationVelocity.x,
+        rotationY: rotationVelocity.y,
+        rotationZ: rotationVelocity.z,
       },
       gravity,
       groundY: GROUND_Y,
@@ -754,31 +885,78 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
 }
 
 /**
- * 착지/누적 시: 읽는 면이 카메라 쪽을 보게 한 뒤, 위에서 내려다보는 각도로 고정 기울임.
- * TILT_DEGREES: 글자 면을 뒤로 기울이는 각도(도). 클수록 더 위에서 보는 느낌.
+ * 착지/누적 시: 글자를 땅에 수직으로 세운 뒤, 카메라 쪽을 바라보도록 수평 회전만 맞춘다.
  */
-const TILT_DEGREES = 32;
-
-function setReadableRotationTowardCamera(group, camera, groundY) {
+function setReadableRotationTowardCamera(group, camera, _groundY) {
   const dir = new THREE.Vector3(
     camera.position.x - group.position.x,
-    camera.position.y - groundY,
+    0,
     camera.position.z - group.position.z,
   );
-  const len = dir.length();
-  if (len < 1e-6) return;
+  if (dir.lengthSq() < 1e-6) return;
   dir.normalize();
-
-  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
-  // 로컬 X축 기준으로 뒤로 기울이기 → 위에서 내려다보는 각도
-  group.rotateX(-(TILT_DEGREES * Math.PI) / 180);
+  const yaw = Math.atan2(dir.x, dir.z);
+  group.rotation.set(0, yaw, 0);
 }
 
 /**
- * 스폰용 XZ 범위: 중간·위쪽 위주. 아래(세모 부분)는 여유 있게 빼서 덜 떨어뜨림
+ * 낙하 시간에 맞춰 정수 바퀴만큼 회전하도록 각속도를 계산.
+ * - startY, groundY, initialVy, gravity로 낙하 시간 T를 근사 계산.
+ * - X/Z축은 0~1바퀴, Y축은 1~3바퀴 정도만 랜덤으로 돌도록 설정.
  */
-function getSpawnBounds() {
-  const b = ISLAND_BOUNDS;
+function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
+  const height = startY - groundY;
+  if (height <= 0) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  const a = 0.5 * gravity;
+  const b = initialVy;
+  const c = height;
+  if (Math.abs(a) < 1e-6) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant <= 0) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  const sqrtD = Math.sqrt(discriminant);
+  const t1 = (-b - sqrtD) / (2 * a);
+  const t2 = (-b + sqrtD) / (2 * a);
+  const T = Math.max(t1, t2);
+  if (!Number.isFinite(T) || T <= 0) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  const pickTurns = (min, max) => {
+    const n = min + Math.floor(Math.random() * (max - min + 1));
+    if (n === 0) return 0;
+    const sign = Math.random() < 0.5 ? -1 : 1;
+    return (sign * 2 * Math.PI * n) / T;
+  };
+
+  return {
+    x: pickTurns(0, 1),
+    y: pickTurns(1, 3),
+    z: pickTurns(0, 1),
+  };
+}
+
+/**
+ * 스폰용 XZ 범위 — island.glb 범위에서 inset만 적용 (inset 작으면 섬 전체에 고르게 퍼짐)
+ */
+function getSpawnBounds(bounds) {
+  // 검증: island.glb 계산값만 사용 (예전 수동 측정값 fallback 주석 처리)
+  const b =
+    bounds ??
+    (() => {
+      console.warn(
+        "[Stage2] getSpawnBounds: island bounds 없음 — island.glb 자동 계산만 사용 중.",
+      );
+      return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
+    })();
   const fullW = b.maxX - b.minX;
   const fullD = b.maxZ - b.minZ;
   const insetX = fullW * SPAWN_INSET_SIDE_RATIO;
@@ -797,7 +975,7 @@ function getSpawnBounds() {
  * 자리가 없으면 랜덤 겹침 반환하지 않고, "가장 가까운 글자와의 거리가 최대인" 지점을 반환.
  */
 function pickSpawnXZ(fallingTextsArr, _isInitial, _bounds) {
-  const spawn = getSpawnBounds();
+  const spawn = getSpawnBounds(_bounds);
   const { minX, maxX, minZ, maxZ } = spawn;
   const allTexts = fallingTextsArr || [];
 

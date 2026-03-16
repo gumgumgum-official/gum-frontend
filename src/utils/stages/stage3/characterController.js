@@ -111,6 +111,7 @@ export function createCharacterController({
      */
     update(delta, camera, options = {}) {
       if (!characterModel || !backgroundBounds) return;
+      const updateCamera = options.updateCamera !== false;
 
       const {
         moveSpeed,
