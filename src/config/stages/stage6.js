@@ -1,6 +1,6 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, speechBubbleMessages?: string[], cheerSoundPath?: string, characterModelPath?: string, characterScale?: number, characters?: Array<{ position?: { x?: number, y?: number, z?: number } }> }} */
+/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, speechBubbleMessages?: string[], cheerSoundPath?: string, characterModelPath?: string, characterScale?: number, characters?: Array<{ position?: { x?: number, y?: number, z?: number } }>, bench?: import("../../types.js").Stage3PropConfig }} */
 export const STAGE6_CONFIG = {
   camera: {
     fov: 60.0,

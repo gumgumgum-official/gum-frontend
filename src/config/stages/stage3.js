@@ -19,7 +19,7 @@ export const STAGE3_CONFIG = {
   /** 캐릭터 GLB 경로 */
   characterModelPath: "/models/common/user_walking_color.glb",
   model: {
-    path: "/models/stage3/part3_2.glb",
+    path: "/models/stage3/island.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
