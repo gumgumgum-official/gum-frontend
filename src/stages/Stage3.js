@@ -525,7 +525,7 @@ export function Stage3() {
       group.rotation.set(0, 0, 0);
       if (!isStage3Active) {
         group.traverse((child) => {
-          if (child.isMesh) {
+          if (child instanceof THREE.Mesh) {
             if (child.geometry) child.geometry.dispose();
             if (child.material) child.material.dispose();
           }
