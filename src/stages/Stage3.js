@@ -523,6 +523,15 @@ export function Stage3() {
       const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
       group.position.set(0, startY, 0);
       group.rotation.set(0, 0, 0);
+      if (!isStage3Active) {
+        group.traverse((child) => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          }
+        });
+        return;
+      }
       scene.add(group);
       const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0: 전반적으로 더 빠르게
       const gravity = STAGE3_GRAVITY * speedFactor;
