@@ -8,8 +8,6 @@ import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { createStageManager } from "../utils/common/StageManager.js";
 import { Stage2 } from "../stages/Stage2.js";
 import { Stage3 } from "../stages/Stage3.js";
-import { Stage4 } from "../stages/Stage4.js";
-import { Stage5 } from "../stages/Stage5.js";
 import { Stage6 } from "../stages/Stage6.js";
 import { APP_CONFIG } from "../config/appConfig.js";
 
@@ -17,8 +15,6 @@ import { APP_CONFIG } from "../config/appConfig.js";
 const STAGE_FACTORIES = {
   2: Stage2,
   3: Stage3,
-  4: Stage4,
-  5: Stage5,
   6: Stage6,
 };
 
@@ -188,11 +184,9 @@ export function initThreeApp(canvasElement, options = {}) {
   let keydownHandler = null;
   if (enableKeyboardSwitch) {
     keydownHandler = (e) => {
-      if (e.key >= "2" && e.key <= "6") {
-        const num = parseInt(e.key);
-        if (safeAllowedStages.includes(num)) {
-          stageManager.switchToStage(num);
-        }
+      const num = parseInt(e.key);
+      if ([2, 3, 6].includes(num) && safeAllowedStages.includes(num)) {
+        stageManager.switchToStage(num);
       }
     };
     window.addEventListener("keydown", keydownHandler);
