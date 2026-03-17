@@ -18,10 +18,17 @@ import { inspectModel } from "../../common/modelInspector.js";
  *   scene: import("three").Scene,
  *   glbLoader: ReturnType<import("../../common/assetLoaders.js").getGLBLoader>,
  *   config: import("../../../types.js").Stage3Config,
+ *   getIsActive?: () => boolean,
  *   onReady: (payload: BackgroundReadyPayload) => void,
  * }} params
  */
-export function loadStage3Background({ scene, glbLoader, config, onReady }) {
+export function loadStage3Background({
+  scene,
+  glbLoader,
+  config,
+  getIsActive,
+  onReady,
+}) {
   glbLoader.load(config.model.path, {
     onLoad: (gltf) => {
       const model = gltf.scene;
@@ -72,6 +79,22 @@ export function loadStage3Background({ scene, glbLoader, config, onReady }) {
           child.raycast = () => {};
         }
       });
+
+      if (getIsActive && !getIsActive()) {
+        model.traverse((child) => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
+            }
+          }
+        });
+        return;
+      }
 
       scene.add(model);
       console.log("✅ Stage3 배경 모델 로드 완료");

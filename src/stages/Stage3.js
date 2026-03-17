@@ -58,6 +58,8 @@ export function Stage3() {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
+  let isStage3Active = true;
 
   // 낙하 글자 1개 (최신 것만)
   let letterState = null;
@@ -1131,6 +1133,7 @@ export function Stage3() {
     camera: null,
 
     setup(scene, renderer) {
+      isStage3Active = true;
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
@@ -1209,6 +1212,7 @@ export function Stage3() {
         scene,
         glbLoader,
         config,
+        getIsActive: () => isStage3Active,
         onReady: async ({
           model,
           center,
@@ -1269,6 +1273,7 @@ export function Stage3() {
           const results = await Promise.allSettled(
             loadTasks.map((t) => t.promise),
           );
+          if (!isStage3Active) return;
 
           loadTasks.forEach((task, i) => {
             const result = results[i];
@@ -1383,6 +1388,7 @@ export function Stage3() {
     },
 
     cleanup(scene) {
+      isStage3Active = false;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,
