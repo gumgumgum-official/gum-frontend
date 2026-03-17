@@ -7,9 +7,17 @@ const card = "oklch(0.99 0.012 85)";
 const amber50 = "#fffbeb";
 
 const GUM_CANDIDATES = [
-  { id: "wink", src: "/models/stage3/gum_wink.png", label: "윙크 껌딱지" },
-  { id: "heart", src: "/models/stage3/gum_heart.png", label: "하트 껌딱지" },
-  { id: "rock", src: "/models/stage3/gum_rock.png", label: "락 껌딱지" },
+  {
+    id: "wink",
+    src: "/models/stage3/poster/gum_wink.png",
+    label: "윙크 껌딱지",
+  },
+  {
+    id: "heart",
+    src: "/models/stage3/poster/gum_heart.png",
+    label: "하트 껌딱지",
+  },
+  { id: "rock", src: "/models/stage3/poster/gum_rock.png", label: "락 껌딱지" },
 ];
 
 const STORAGE_KEY_VOTES = "gum_notice_votes";
@@ -251,7 +259,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src="/models/stage3/party_poster.png"
+                    src="/models/stage3/poster/party_poster.png"
                     alt="껌딱지 마을 잔치"
                     style={{
                       width: "100%",
@@ -263,7 +271,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 </div>
               </motion.div>
 
-              {/* 포스터 2: 분실물 찾기 (gum_rock) */}
+              {/* 포스터 2: vote_poster.svg */}
               <motion.div
                 role="button"
                 tabIndex={0}
@@ -277,68 +285,25 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   height: 320,
                   flexShrink: 0,
                   display: "flex",
-                  flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  padding: 14,
-                  background:
-                    "linear-gradient(180deg, #fefce8 0%, #fef9c3 100%)",
                   borderRadius: 12,
+                  overflow: "hidden",
                   border: "2px solid #fde047",
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
-                  position: "relative",
                 }}
               >
-                <div
-                  style={{
-                    position: "absolute",
-                    top: -6,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 14,
-                    height: 14,
-                    borderRadius: "50%",
-                    background:
-                      "radial-gradient(circle at 35% 35%, #f87171, #dc2626 40%, #991b1b)",
-                    boxShadow:
-                      "inset 0 1px 2px rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.3)",
-                    zIndex: 2,
-                  }}
-                />
                 <img
-                  src="/models/stage3/gum_rock.png"
-                  alt="껌딱지"
+                  src="/models/stage3/poster/vote_poster.svg"
+                  alt="투표 포스터"
                   style={{
-                    width: 72,
-                    height: 72,
-                    objectFit: "contain",
-                    flexShrink: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
                   }}
                 />
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: "0.95rem",
-                    color: "#713f12",
-                    textAlign: "center",
-                    marginTop: 8,
-                  }}
-                >
-                  분실물 찾기
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.7rem",
-                    color: "#a16207",
-                    lineHeight: 1.4,
-                    textAlign: "center",
-                    marginTop: 6,
-                  }}
-                >
-                  아이스크림 판매대 근처에서 분홍색 딸기 아이스크림을 잃어버린
-                  분을 찾습니다.
-                </div>
               </motion.div>
 
               {/* 포스터 3: 이번 달 제일 멋진 껌딱지 (보기만, 투표는 줌인 시) */}
@@ -512,7 +477,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       }}
                     >
                       <img
-                        src="/models/stage3/party_poster.png"
+                        src="/models/stage3/poster/party_poster.png"
                         alt="껌딱지 마을 잔치"
                         style={{
                           width: "100%",
@@ -527,51 +492,21 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   {zoomedPoster === "lost" && (
                     <div
                       style={{
-                        width: 320,
-                        padding: 24,
-                        background:
-                          "linear-gradient(180deg, #fefce8 0%, #fef9c3 100%)",
                         borderRadius: 16,
-                        border: "3px solid #fde047",
-                        boxShadow: "0 24px 60px rgba(0,0,0,0.3)",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 16,
+                        overflow: "hidden",
+                        boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
                       }}
                     >
                       <img
-                        src="/models/stage3/gum_rock.png"
-                        alt="껌딱지"
+                        src="/models/stage3/poster/vote_poster.svg"
+                        alt="투표 포스터"
                         style={{
-                          width: 100,
-                          height: 100,
+                          width: "100%",
+                          maxHeight: "80vh",
                           objectFit: "contain",
+                          display: "block",
                         }}
                       />
-                      <h3
-                        style={{
-                          margin: 0,
-                          fontSize: "1.25rem",
-                          fontWeight: 800,
-                          color: "#713f12",
-                        }}
-                      >
-                        분실물 찾기
-                      </h3>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: "0.95rem",
-                          color: "#a16207",
-                          lineHeight: 1.6,
-                          textAlign: "center",
-                        }}
-                      >
-                        아이스크림 판매대 근처에서 분홍색 딸기 아이스크림을
-                        잃어버린 분을 찾습니다. 발견하면 벤치에서 자는 친구에게
-                        알려주세요!
-                      </p>
                     </div>
                   )}
 
