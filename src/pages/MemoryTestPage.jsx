@@ -8,7 +8,7 @@ import { useState, useMemo } from "react";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
 import styles from "./Page.module.css";
 
-const TEST_STAGES = [2, 3, 4, 5, 6];
+const TEST_STAGES = [2, 3, 6];
 const CYCLE_COUNT = 10;
 const MOUNT_DURATION_MS = 3000;
 const UNMOUNT_DURATION_MS = 1500;

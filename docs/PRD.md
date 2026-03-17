@@ -79,8 +79,8 @@
 
 ## 5. 프로젝트 범위 (Scope)
 
-- **본 프로젝트(gum-frontend)**: Phase 2 ~ Phase 6 (Stage 2 ~ Stage 6)
-- **라우트**: `/beam`(Stage 2), `/kiosk`(Stage 3~6 순차), `/dev`(Stage 2~6 키보드 전환, 개발용)
+- **본 프로젝트(gum-frontend)**: Phase 2, 3, 6 (Stage 2, 3, 6) — Phase 4, 5 미구현
+- **라우트**: `/beam`(Stage 2), `/kiosk`(Stage 3→6 포탈), `/dev`(Stage 2/3/6 키보드 전환, 개발용)
 - **별도 프로젝트**: Phase 1 (입국 신고서 태블릿 UI) — `POST /api/worry` 등으로 연동
 
 ---
