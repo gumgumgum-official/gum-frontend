@@ -69,12 +69,17 @@ export const STAGE3_CONFIG = {
       "/static/sounds/paper/PaperMovement_fNAyV_01-3.mp3",
     ],
   },
-  /** 마법 포탈 */
+  /** 마법 포탈 (평면 통과 시 Stage 6로 전환) */
   portal_bright: {
     path: "/models/stage3/portal_bright.glb",
     position: { x: -3, y: -0.3, z: 12 },
     rotation: { x: 0, y: 40, z: 0 },
     scale: 2,
+    /** 평면 법선 (XZ, 정규화됨). 캐릭터가 이 방향→반대방향으로 평면을 가로지르면 전환 */
+    normal: { x: 0, z: 1 },
+    /** 포탈 중심으로부터 수평(법선에 수직) 허용 반거리. 이 거리 밖 통과는 무시 */
+    halfWidth: 2,
+    targetStage: 6,
   },
   /** 껌딱지 동상 */
   statue: {

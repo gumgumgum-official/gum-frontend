@@ -98,6 +98,19 @@
  * @property {string[]} [paperSoundPaths] - 게시판 등 클릭 시 재생할 사운드 경로
  */
 
+/**
+ * Stage3 포탈 전용 설정 (평면 통과 시 스테이지 전환)
+ * @typedef {Object} Stage3PortalConfig
+ * @extends Stage3PropConfig
+ * @property {string} path
+ * @property {{x?: number, y?: number, z?: number}} [position]
+ * @property {{x?: number, y?: number, z?: number}} [rotation]
+ * @property {number} [scale]
+ * @property {{x: number, z: number}} [normal] - 평면 법선 (XZ)
+ * @property {number} [halfWidth] - 포탈 반폭 (수평 허용 거리)
+ * @property {number} [targetStage] - 전환할 Stage 번호
+ */
+
 /** Stage3 아이스크림 카트 전용 설정 */
 /**
  * @typedef {Object} Stage3IcecreamCartConfig
@@ -120,7 +133,7 @@
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
  * @property {Stage3PropConfig} [tree1]
  * @property {Stage3PropConfig} [notice]
- * @property {Stage3PropConfig} [portal_bright]
+ * @property {Stage3PortalConfig} [portal_bright]
  * @property {Stage3PropConfig} [statue]
  * @property {Stage3PropConfig} [well]
  * @property {Stage3PropConfig} [clock]

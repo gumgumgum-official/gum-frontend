@@ -198,6 +198,17 @@ export function initThreeApp(canvasElement, options = {}) {
     window.addEventListener("keydown", keydownHandler);
   }
 
+  const handleStageSwitch = (e) => {
+    const { targetStage } = e.detail ?? {};
+    if (
+      typeof targetStage === "number" &&
+      safeAllowedStages.includes(targetStage)
+    ) {
+      stageManager.switchToStage(targetStage);
+    }
+  };
+  window.addEventListener("stage:switch", handleStageSwitch);
+
   return {
     dispose() {
       try {
@@ -219,6 +230,11 @@ export function initThreeApp(canvasElement, options = {}) {
         } catch (err) {
           console.error("[initThreeApp] keydown listener 제거 오류:", err);
         }
+      }
+      try {
+        window.removeEventListener("stage:switch", handleStageSwitch);
+      } catch (err) {
+        console.error("[initThreeApp] stage:switch listener 제거 오류:", err);
       }
       try {
         const currentStage = stageManager.getCurrentStage();

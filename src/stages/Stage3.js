@@ -88,6 +88,10 @@ export function Stage3() {
   ]);
   let character = null;
 
+  /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
+  let portalPlaneConfig = null;
+  let prevPortalSignedDist = null;
+
   const handleStageKeyDown = (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -98,6 +102,36 @@ export function Stage3() {
       resetLetterFall();
     }
   };
+
+  /** 포탈 평면 통과 시 stage:switch 이벤트 dispatch */
+  function checkPortalPlaneCrossing() {
+    const plane = portalPlaneConfig;
+    if (!plane || !character) return;
+    const pos = character.getPosition?.();
+    if (!pos) return;
+
+    const dx = pos.x - plane.px;
+    const dz = pos.z - plane.pz;
+    const signedDist = dx * plane.nx + dz * plane.nz;
+    const lateral = Math.abs(-dx * plane.nz + dz * plane.nx);
+    if (lateral > plane.halfWidth) return;
+
+    if (prevPortalSignedDist !== null) {
+      const crossed =
+        (prevPortalSignedDist > 0 && signedDist < 0) ||
+        (prevPortalSignedDist < 0 && signedDist > 0);
+      if (crossed) {
+        window.dispatchEvent(
+          new CustomEvent("stage:switch", {
+            detail: { targetStage: plane.targetStage },
+          }),
+        );
+        prevPortalSignedDist = null;
+        return;
+      }
+    }
+    prevPortalSignedDist = signedDist;
+  }
 
   /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | null */
   function getPointerHitTarget(clientX, clientY) {
@@ -1100,6 +1134,24 @@ export function Stage3() {
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
+      prevPortalSignedDist = null;
+
+      /** @type {import("../types.js").Stage3PortalConfig | undefined} */
+      const portalCfg = config.portal_bright;
+      if (portalCfg?.targetStage != null && portalCfg?.normal) {
+        const { x: nx, z: nz } = portalCfg.normal;
+        const len = Math.hypot(nx, nz) || 1;
+        portalPlaneConfig = {
+          px: portalCfg.position?.x ?? 0,
+          pz: portalCfg.position?.z ?? 0,
+          nx: nx / len,
+          nz: nz / len,
+          halfWidth: portalCfg.halfWidth ?? 2,
+          targetStage: portalCfg.targetStage,
+        };
+      } else {
+        portalPlaneConfig = null;
+      }
 
       character = createCharacterController({
         scene,
@@ -1327,6 +1379,7 @@ export function Stage3() {
       if (character) {
         character.update(delta, this.camera, { skipCameraFollow: true });
       }
+      checkPortalPlaneCrossing();
     },
 
     cleanup(scene) {
