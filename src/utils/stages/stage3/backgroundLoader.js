@@ -62,10 +62,12 @@ export function loadStage3Background({
         backgroundBounds = box.clone();
       }
 
-      const backgroundMaxY = box.max.y;
+      // Stage3에서는 캐릭터가 서는 실제 섬 윗면(y≈6.2)을 기준 바닥으로 사용한다.
+      // box.max.y(나무/등대 꼭대기)는 너무 높아서 다른 프롭들이 공중에 뜬다.
+      const backgroundMaxY = center.y;
 
       console.log(
-        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), backgroundMaxY=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
+        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
       );
 
       model.traverse((child) => {
