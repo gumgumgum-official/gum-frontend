@@ -31,6 +31,15 @@ const HANDWRITING_TABLE = "handwriting_files";
 
 /** Stage2 대비 4배 크기 (글자 일부도 크게 보이도록) */
 const STAGE3_LETTER_SCALE = 0.006 * 0.75 * 4;
+// Z 방향 입체감은 살짝만 주고 거의 평면에 가깝게
+const STAGE3_LETTER_Z_SCALE = 1.0;
+const STAGE3_LETTER_COLOR = 0x111111;
+// Stage3 전용: 글자 겹침 줄이기 위해 스트로크 확장 값을 과하지 않게 유지
+const STAGE3_STROKE_OUTLINE = 1.6;
+const STAGE3_STROKE_FILL = 1.3;
+// OUTLINE/FILL 레이어 간 Z 오프셋도 최소화해서 볼륨감 과한 느낌을 줄임
+const STAGE3_OUTLINE_Z_OFFSET = 0.004;
+const STAGE3_FILL_Z_OFFSET = 0.008;
 const STAGE3_SPAWN_HEIGHT = 5;
 // 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
 const STAGE3_GRAVITY = -35;
@@ -451,34 +460,75 @@ export function Stage3() {
       }
       let shapes = await loadSVGShapes(metadata.url);
       if (shapes.length === 0) return;
-      shapes = expandShapesStroke(shapes, 1.3);
+
+      const outlineShapes = expandShapesStroke(shapes, STAGE3_STROKE_OUTLINE);
+      const fillShapes = expandShapesStroke(shapes, STAGE3_STROKE_FILL);
 
       const group = new THREE.Group();
       group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
       // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
       const extrudeSettings = {
+        // depth를 줄여 앞뒤 볼륨감을 과하지 않게 유지
         depth: 0.18,
         bevelEnabled: true,
-        bevelThickness: 0.03,
-        bevelSize: 0.02,
+        bevelThickness: 0.035,
+        bevelSize: 0.025,
         bevelSegments: 8,
       };
       const meshes = [];
-      shapes.forEach((shape) => {
+      const sharedMaterialOptions = {
+        color: STAGE3_LETTER_COLOR,
+        metalness: 0.1,
+        roughness: 0.8,
+      };
+
+      outlineShapes.forEach((shape, index) => {
         const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        const material = new THREE.MeshStandardMaterial({
-          color: 0x2e2e2e,
-          metalness: 0.1,
-          roughness: 0.8,
-        });
+        const material = new THREE.MeshStandardMaterial(sharedMaterialOptions);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        mesh.scale.set(STAGE3_LETTER_SCALE, STAGE3_LETTER_SCALE, 1.45);
+        mesh.scale.set(
+          STAGE3_LETTER_SCALE,
+          STAGE3_LETTER_SCALE,
+          STAGE3_LETTER_Z_SCALE,
+        );
         group.add(mesh);
         meshes.push(mesh);
+
+        const fillShape = fillShapes[index];
+        if (!fillShape) return;
+        const fillGeometry = new THREE.ExtrudeGeometry(
+          fillShape,
+          extrudeSettings,
+        );
+        const fillMaterial = new THREE.MeshStandardMaterial(
+          sharedMaterialOptions,
+        );
+        const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+        fillMesh.castShadow = true;
+        fillMesh.receiveShadow = true;
+        fillMesh.scale.set(
+          STAGE3_LETTER_SCALE,
+          STAGE3_LETTER_SCALE,
+          STAGE3_LETTER_Z_SCALE,
+        );
+        group.add(fillMesh);
+        meshes.push(fillMesh);
       });
       centerGroupGeometries(meshes);
+      meshes.forEach((mesh) => {
+        if (!mesh.geometry || !mesh.geometry.boundingBox) {
+          mesh.geometry?.computeBoundingBox();
+        }
+        // OUTLINE/FILL 모두 같은 스케일을 쓰되, 생성 순서로 Z 오프셋을 나눠 적용
+        // outline: 먼저 push 된 메쉬, fill: 그 다음 메쉬
+        // meshes 배열에서 짝수 index를 OUTLINE, 홀수 index를 FILL로 간주
+      });
+      meshes.forEach((mesh, idx) => {
+        mesh.position.z +=
+          idx % 2 === 0 ? -STAGE3_OUTLINE_Z_OFFSET : STAGE3_FILL_Z_OFFSET;
+      });
       group.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(group);
       const letterBottomOffset = Math.max(0, -box.min.y);
