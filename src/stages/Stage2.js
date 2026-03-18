@@ -21,18 +21,18 @@ import { getSessionId } from "../lib/session.js";
 // ----------------------------------------
 // [검증용] 예전 수동 측정값 주석 처리 — island.glb 자동 계산만 사용하는지 검증하려면 아래 사용 안 함.
 // 검증 끝나면 주석 해제하고 getSpawnBounds/loadCharacters fallback 다시 ISLAND_BOUNDS로.
-// const ISLAND_BOUNDS = {
-//   minX: -8.06,
-//   maxX: 7.94,
-//   minZ: -3.21,
-//   maxZ: 6.89,
-// };
+const LEGACY_ISLAND_BOUNDS = {
+  minX: -8.06,
+  maxX: 7.94,
+  minZ: -3.21,
+  maxZ: 6.89,
+};
 const GROUND_Y = 0.7;
 /** 글자끼리 최소 거리(m). 이 값보다 가깝게 스폰되지 않음. */
 const MIN_DISTANCE_BETWEEN = 5.2;
 // island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
-const ISLAND_BOUNDS_INSET_RATIO = 0.15;
+const ISLAND_BOUNDS_INSET_RATIO = 0.08;
 // 스폰 시 그 안에서 다시 앞·뒤·좌우 살짝만 더 빼기 (섬 전체에 퍼지도록 작게)
 const SPAWN_INSET_RATIO = 0.05;
 const SPAWN_INSET_SIDE_RATIO = 0.06;
@@ -54,6 +54,21 @@ function findChildByName(obj, name) {
   return null;
 }
 
+/**
+ * island.glb 기반 자동 계산 bounds가 너무 좁게 잡히는 경우(메쉬/스케일/원점 이슈 등),
+ * 예전 수동 측정값(LEGACY_ISLAND_BOUNDS)으로 안전하게 fallback 한다.
+ */
+function getSafeIslandBounds(bounds) {
+  if (!bounds) return LEGACY_ISLAND_BOUNDS;
+  const w = bounds.maxX - bounds.minX;
+  const d = bounds.maxZ - bounds.minZ;
+  // 섬이 이보다 작게 잡히면 스폰 영역이 과도하게 좁아져 겹침이 급증하므로 fallback
+  if (!Number.isFinite(w) || !Number.isFinite(d) || w < 6 || d < 6) {
+    return LEGACY_ISLAND_BOUNDS;
+  }
+  return bounds;
+}
+
 export function Stage2() {
   const config = STAGE2_CONFIG;
   const glbLoader = getGLBLoader();
@@ -73,14 +88,17 @@ export function Stage2() {
       islandBounds = null;
       return;
     }
-    const root = roots[0];
-    const box = new THREE.Box3().setFromObject(root);
+    // collision.glb가 여러 조각(여러 root)으로 로드되는 경우가 있어,
+    // 첫 번째 root만 쓰면 "맨 위/왼쪽/오른쪽/아래" 일부만 잡혀 스폰 영역이 과도하게 좁아질 수 있다.
+    // 따라서 전체 roots를 union(Box3) 해서 섬 전체 XZ 범위를 구한다.
+    const box = new THREE.Box3();
+    roots.forEach((r) => box.expandByObject(r));
     const minX = box.min.x;
     const maxX = box.max.x;
     const minZ = box.min.z;
     const maxZ = box.max.z;
     islandBounds = { minX, maxX, minZ, maxZ };
-    const p = root.position;
+    const p = roots[0]?.position ?? { x: 0, y: 0, z: 0 };
     console.log(
       `📐 [Stage2] collision (prop[0]) position: x=${p.x.toFixed(2)}, y=${p.y.toFixed(2)}, z=${p.z.toFixed(2)}`,
     );
@@ -948,15 +966,7 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
  * 스폰용 XZ 범위 — island.glb 범위에서 inset만 적용 (inset 작으면 섬 전체에 고르게 퍼짐)
  */
 function getSpawnBounds(bounds) {
-  // 검증: island.glb 계산값만 사용 (예전 수동 측정값 fallback 주석 처리)
-  const b =
-    bounds ??
-    (() => {
-      console.warn(
-        "[Stage2] getSpawnBounds: island bounds 없음 — island.glb 자동 계산만 사용 중.",
-      );
-      return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
-    })();
+  const b = getSafeIslandBounds(bounds);
   const fullW = b.maxX - b.minX;
   const fullD = b.maxZ - b.minZ;
   const insetX = fullW * SPAWN_INSET_SIDE_RATIO;
@@ -990,10 +1000,17 @@ function pickSpawnXZ(fallingTextsArr, _isInitial, _bounds) {
     return d;
   };
 
-  for (let tryCount = 0; tryCount < 120; tryCount++) {
-    const x = minX + Math.random() * (maxX - minX);
-    const z = minZ + Math.random() * (maxZ - minZ);
-    if (minDist(x, z) >= MIN_DISTANCE_BETWEEN) return { x, z };
+  // 스폰 영역이 좁아지면 MIN_DISTANCE_BETWEEN 고정값 때문에 자리가 안 나서 겹침이 급증할 수 있음.
+  // -> 영역/상황에 맞게 최소거리를 단계적으로 완화하면서 "최대한 안 겹치게" 배치한다.
+  const MIN_DIST_FLOOR = 2.0;
+  let required = MIN_DISTANCE_BETWEEN;
+  for (let pass = 0; pass < 4; pass++) {
+    for (let tryCount = 0; tryCount < 120; tryCount++) {
+      const x = minX + Math.random() * (maxX - minX);
+      const z = minZ + Math.random() * (maxZ - minZ);
+      if (minDist(x, z) >= required) return { x, z };
+    }
+    required = Math.max(MIN_DIST_FLOOR, required * 0.82);
   }
 
   // 실패 시: 그리드 후보 중 "가장 가까운 글자와의 거리"가 최대인 점 선택 (겹침 최소화)
