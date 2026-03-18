@@ -601,6 +601,67 @@ const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files"; // session_id, storage_path, created_at, client_id
 const STAGGER_MS = 90; // 첫 글자 즉시, 이후 글자는 이 간격으로 순차 스폰
 
+// ------------------------------------------------------------
+// 글씨 스케일 정규화 (입력 크기 무관)
+// - 최대 기준: '남친이랑 맨날 싸움' SVG
+// - 최소: 그 75%  (0.75~1.0 범위 랜덤)
+// ------------------------------------------------------------
+const REFERENCE_SVG_URL =
+  "https://cffuybxttyrfjetyqrww.supabase.co/storage/v1/object/public/handwriting/exhibition-2026/2216b9af-0c5f-43dd-b41c-8f87de5046a7_2026-03-17T07:06:57.209Z_84brj4j.svg";
+// 기존 Stage2에서 체감 “최대 크기”로 보이던 값 유지 (reference가 이 크기를 1.0으로 삼음)
+const BASE_MAX_SCALE = 0.006 * 0.75;
+const RANDOM_SCALE_MIN = 0.5;
+const RANDOM_SCALE_MAX = 0.75;
+// 입력 SVG가 극단적으로 작거나 클 때 스케일 폭주 방지용 클램프
+const NORMALIZED_SCALE_MIN = BASE_MAX_SCALE * 0.35;
+const NORMALIZED_SCALE_MAX = BASE_MAX_SCALE * 2.2;
+
+let referenceLocalHeight = null;
+let referenceHeightPromise = null;
+
+function computeLocalHeightFromShapes(shapes, extrudeSettings) {
+  if (!Array.isArray(shapes) || shapes.length === 0) return null;
+  const box = new THREE.Box3();
+  const temp = new THREE.Box3();
+  let hasAny = false;
+  for (const shape of shapes) {
+    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geometry.computeBoundingBox();
+    if (geometry.boundingBox) {
+      temp.copy(geometry.boundingBox);
+      box.union(temp);
+      hasAny = true;
+    }
+    geometry.dispose();
+  }
+  if (!hasAny) return null;
+  const h = box.max.y - box.min.y;
+  if (!Number.isFinite(h) || h <= 1e-6) return null;
+  return h;
+}
+
+function ensureReferenceLocalHeight(extrudeSettings) {
+  if (referenceLocalHeight && Number.isFinite(referenceLocalHeight)) return;
+  if (referenceHeightPromise) return;
+  referenceHeightPromise = (async () => {
+    try {
+      let shapes = await loadSVGShapes(REFERENCE_SVG_URL);
+      if (!Array.isArray(shapes) || shapes.length === 0) return;
+      shapes = expandShapesStroke(shapes, 1.3);
+      const h = computeLocalHeightFromShapes(shapes, extrudeSettings);
+      if (h && Number.isFinite(h)) {
+        referenceLocalHeight = h;
+        console.log(
+          `[Stage2] 기준 글씨(reference) 높이 측정 완료: h=${referenceLocalHeight.toFixed(2)}`,
+        );
+      }
+    } catch (e) {
+      // 네트워크/권한/일시 오류 등일 수 있어 조용히 fallback 유지
+      console.warn("[Stage2] 기준 글씨(reference) 로드/측정 실패:", e);
+    }
+  })();
+}
+
 async function loadInitialHandwritings(
   scene,
   camera,
@@ -791,7 +852,6 @@ async function createFallingText(
     shapes = expandShapesStroke(shapes, 1.3);
 
     const group = new THREE.Group();
-    const scale = 0.006 * 0.75; // 현재 대비 75% 크기
     // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
     const extrudeSettings = {
       depth: 0.05,
@@ -800,6 +860,25 @@ async function createFallingText(
       bevelSize: 0.02,
       bevelSegments: 8,
     };
+
+    // reference 기준 높이 측정은 한 번만(비동기) 수행
+    ensureReferenceLocalHeight(extrudeSettings);
+
+    const localHeight = computeLocalHeightFromShapes(shapes, extrudeSettings);
+    const randomFactor =
+      RANDOM_SCALE_MIN + Math.random() * (RANDOM_SCALE_MAX - RANDOM_SCALE_MIN);
+    const normalizedScale =
+      referenceLocalHeight && localHeight
+        ? BASE_MAX_SCALE * (referenceLocalHeight / localHeight) * randomFactor
+        : BASE_MAX_SCALE * randomFactor;
+    const finalScaleRaw = Number.isFinite(normalizedScale)
+      ? normalizedScale
+      : BASE_MAX_SCALE * randomFactor;
+    const finalScale = THREE.MathUtils.clamp(
+      finalScaleRaw,
+      NORMALIZED_SCALE_MIN,
+      NORMALIZED_SCALE_MAX,
+    );
 
     const meshes = [];
     shapes.forEach((shape) => {
@@ -812,7 +891,7 @@ async function createFallingText(
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.scale.set(scale, scale, 1.45);
+      mesh.scale.set(finalScale, finalScale, 1.45);
       group.add(mesh);
       meshes.push(mesh);
     });
