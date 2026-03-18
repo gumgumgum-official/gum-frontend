@@ -40,8 +40,14 @@ const SPAWN_INSET_BOTTOM_RATIO = 0.1;
 const SPAWN_HEIGHT_MIN = 3; // 낙하 시작 높이 하한 (빨리 보이게)
 const SPAWN_HEIGHT_MAX = 14; // 최대 시작 높이 (너무 높으면 오래 걸림)
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
-const FALL_GRAVITY_MAX = -22 * 0.15;
-const FALL_INITIAL_VY_MAX = -6 * 0.15;
+// 기존 대비 약 20% 빠르게 (체감 속도 개선)
+const FALL_SPEED_MULTIPLIER = 1.2;
+const FALL_GRAVITY_MAX = -22 * 0.15 * FALL_SPEED_MULTIPLIER;
+const FALL_INITIAL_VY_MAX = -6 * 0.15 * FALL_SPEED_MULTIPLIER;
+// Stage3(운석)처럼 "통통" 한 번만 바운스
+// 너무 크게 튀지 않게(얌전하게) 탄성 낮춤
+const LETTER_BOUNCE_RESTITUTION = 0.22;
+const LETTER_MAX_BOUNCES = 1;
 
 /** 자식/손자 중 name이 일치하는 첫 오브젝트 반환 (디자이너가 넣은 Walkable 등) */
 function findChildByName(obj, name) {
@@ -851,6 +857,7 @@ async function createFallingText(
       },
       gravity,
       groundY: GROUND_Y,
+      bounces: 0,
       landed: initial,
     };
 
@@ -883,6 +890,23 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
     const nextY = group.position.y + velocity.y * delta;
 
     if (nextY <= groundY) {
+      // Stage3처럼 첫 충돌 시 한 번만 가볍게 바운스해서 "통통" 무게감 표현
+      if ((ft.bounces ?? 0) < LETTER_MAX_BOUNCES && Math.abs(velocity.y) > 2) {
+        group.position.y = groundY;
+        const vyUp = -velocity.y * LETTER_BOUNCE_RESTITUTION; // 위로 튀는 속도(양수)
+        velocity.y = vyUp;
+        ft.bounces = (ft.bounces ?? 0) + 1;
+
+        // 바운스 구간에서도 더 얌전하게: "약 0.15~0.55바퀴"만 랜덤 (칼처럼)
+        const T = (2 * vyUp) / Math.max(1e-6, -gravity); // 올라갔다 내려오는 대략 시간
+        const sign = Math.random() < 0.5 ? -1 : 1;
+        const turnsY = 0.15 + Math.random() * 0.4; // 0.15~0.55
+        velocity.rotationY = (sign * 2 * Math.PI * turnsY) / Math.max(1e-3, T);
+        velocity.rotationX = 0;
+        velocity.rotationZ = 0;
+        continue;
+      }
+
       group.position.y = groundY;
       velocity.y = 0;
       velocity.rotationX = 0;
@@ -918,9 +942,9 @@ function setReadableRotationTowardCamera(group, camera, _groundY) {
 }
 
 /**
- * 낙하 시간에 맞춰 정수 바퀴만큼 회전하도록 각속도를 계산.
+ * 낙하 시간에 맞춰 "최대 한 바퀴 정도"만 돌도록 각속도를 계산.
  * - startY, groundY, initialVy, gravity로 낙하 시간 T를 근사 계산.
- * - X/Z축은 0~1바퀴, Y축은 1~3바퀴 정도만 랜덤으로 돌도록 설정.
+ * - 너무 팔랑팔랑하지 않도록 Y축만 0.35~1.0바퀴, X/Z는 회전하지 않음.
  */
 function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
   const height = startY - groundY;
@@ -948,17 +972,13 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
     return { x: 0, y: 0, z: 0 };
   }
 
-  const pickTurns = (min, max) => {
-    const n = min + Math.floor(Math.random() * (max - min + 1));
-    if (n === 0) return 0;
-    const sign = Math.random() < 0.5 ? -1 : 1;
-    return (sign * 2 * Math.PI * n) / T;
-  };
+  const sign = Math.random() < 0.5 ? -1 : 1;
+  const turnsY = 0.35 + Math.random() * 0.65; // 0.35~1.0 바퀴
 
   return {
-    x: pickTurns(0, 1),
-    y: pickTurns(1, 3),
-    z: pickTurns(0, 1),
+    x: 0,
+    y: (sign * 2 * Math.PI * turnsY) / T,
+    z: 0,
   };
 }
 
