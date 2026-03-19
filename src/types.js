@@ -141,6 +141,7 @@
  * @property {Stage3PropConfig} [gameMachine]
  * @property {Stage3PropConfig} [bench]
  * @property {Stage3PropConfig} [signs]
+ * @property {Stage3PropConfig} [mirror] - FBX 거울
  */
 
 export {};

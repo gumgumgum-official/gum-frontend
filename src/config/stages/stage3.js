@@ -130,6 +130,13 @@ export const STAGE3_CONFIG = {
     rotation: { x: 0, y: -60, z: 0 },
     scale: 0.8,
   },
+  /** 거울 (FBX) */
+  mirror: {
+    path: "/models/stage3/mirror.fbx",
+    position: { x: 7, y: 1.6, z: -15 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 0.1,
+  },
 };
 
 /**
