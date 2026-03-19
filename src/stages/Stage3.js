@@ -6,6 +6,7 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
@@ -50,6 +51,7 @@ export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
+  const fbxLoader = new FBXLoader();
   const objects = [];
   let debugControls = null;
   let sceneRef = null;
@@ -1278,6 +1280,23 @@ export function Stage3() {
               data: prop,
             });
           }
+          // 거울(FBX) 별도 로드
+          const mirrorConfig = config.mirror;
+          if (mirrorConfig?.path) {
+            loadTasks.push({
+              type: "fbxProp",
+              name: "mirror",
+              promise: new Promise((resolve, reject) => {
+                fbxLoader.load(
+                  base + mirrorConfig.path,
+                  resolve,
+                  undefined,
+                  reject,
+                );
+              }),
+              data: mirrorConfig,
+            });
+          }
 
           const results = await Promise.allSettled(
             loadTasks.map((t) => t.promise),
@@ -1344,6 +1363,29 @@ export function Stage3() {
                 value.length,
                 "개",
               );
+            } else if (task.type === "fbxProp") {
+              const model = value; // FBX는 Object3D 직접 반환
+              const d = task.data;
+              model.position.set(
+                d.position?.x ?? 0,
+                backgroundMaxY + (d.position?.y ?? 0),
+                d.position?.z ?? 0,
+              );
+              model.rotation.set(
+                ((d.rotation?.x ?? 0) * Math.PI) / 180,
+                ((d.rotation?.y ?? 0) * Math.PI) / 180,
+                ((d.rotation?.z ?? 0) * Math.PI) / 180,
+              );
+              model.scale.setScalar(d.scale ?? 1);
+              model.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
+              });
+              scene.add(model);
+              objects.push(model);
+              console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
             } else {
               const model = value.scene;
               const d = task.data;
