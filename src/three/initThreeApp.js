@@ -50,11 +50,20 @@ export function initThreeApp(canvasElement, options = {}) {
     return { dispose: noopDispose };
   }
 
+  const perfMode = APP_CONFIG?.renderer?.performanceMode ?? false;
+  const antialias = perfMode
+    ? false
+    : (APP_CONFIG?.renderer?.antialias ?? true);
+  const pixelRatio = perfMode
+    ? Math.min(1.5, Math.max(1, window.devicePixelRatio || 1))
+    : (APP_CONFIG?.renderer?.pixelRatio ??
+      Math.min(2, Math.max(1, window.devicePixelRatio || 1)));
+
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({
       canvas: canvasElement,
-      antialias: APP_CONFIG?.renderer?.antialias ?? true,
+      antialias,
     });
   } catch (err) {
     reportError(
@@ -65,7 +74,7 @@ export function initThreeApp(canvasElement, options = {}) {
   }
 
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(APP_CONFIG?.renderer?.pixelRatio ?? 2);
+  renderer.setPixelRatio(pixelRatio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.4;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -150,6 +159,13 @@ export function initThreeApp(canvasElement, options = {}) {
   const clock = new THREE.Clock();
   let animationId = null;
 
+  /** Stage3 성능 프로파일: localStorage.setItem('STAGE3_PROFILE','1') 후 새로고침 */
+  const profileEnabled = () =>
+    typeof window !== "undefined" &&
+    (window.STAGE3_PROFILE || localStorage.getItem("STAGE3_PROFILE"));
+  let profileLastTime = 0;
+  const profileTimes = [];
+
   function animate() {
     animationId = requestAnimationFrame(animate);
     try {
@@ -158,6 +174,21 @@ export function initThreeApp(canvasElement, options = {}) {
       const camera = stageManager.getCurrentCamera();
       if (camera) {
         renderer.render(scene, camera);
+      }
+
+      if (profileEnabled() && stageManager.getCurrentStageNumber?.() === 3) {
+        const now = window.performance.now();
+        if (profileLastTime > 0) profileTimes.push(now - profileLastTime);
+        profileLastTime = now;
+        if (profileTimes.length >= 60) {
+          const avg =
+            profileTimes.reduce((a, b) => a + b, 0) / profileTimes.length;
+          const max = Math.max(...profileTimes);
+          console.log(
+            `[Stage3 Profile] avg: ${avg.toFixed(1)}ms | max: ${max.toFixed(0)}ms | fps: ${(1000 / avg).toFixed(0)}`,
+          );
+          profileTimes.length = 0;
+        }
       }
     } catch (err) {
       console.error("[initThreeApp] animate 오류:", err);

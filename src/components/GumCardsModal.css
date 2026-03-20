@@ -400,16 +400,18 @@
   position: fixed;
   pointer-events: none;
   border-radius: 50%;
-  animation: gum-burst 0.9s ease-out forwards;
-  z-index: 999;
+  animation: gum-burst ease-out forwards;
+  z-index: 99999;
+  transform: translate(-50%, -50%);
 }
 @keyframes gum-burst {
   0% {
-    opacity: 0.8;
-    transform: translate(0, 0) scale(1);
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translate(var(--dx), var(--dy)) scale(0);
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+      scale(0.3);
   }
 }

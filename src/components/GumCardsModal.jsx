@@ -91,13 +91,15 @@ function spawnParticles(color) {
   const cx = window.innerWidth / 2;
   const cy = window.innerHeight / 2;
   const particles = [];
-  for (let i = 0; i < 28; i++) {
+  const count = 65;
+  for (let i = 0; i < count; i++) {
     const el = document.createElement("div");
     el.className = "gum-particle";
     const angle = Math.random() * 2 * Math.PI;
-    const dist = 60 + Math.random() * 160;
-    const size = 3 + Math.random() * 5;
-    el.style.cssText = `left:${cx}px;top:${cy}px;background:${color};width:${size}px;height:${size}px;--dx:${Math.cos(angle) * dist}px;--dy:${Math.sin(angle) * dist}px;animation-duration:${0.6 + Math.random() * 0.5}s;`;
+    const dist = 180 + Math.random() * 320;
+    const size = 12 + Math.random() * 18;
+    const duration = 1 + Math.random() * 0.8;
+    el.style.cssText = `left:${cx}px;top:${cy}px;background:${color};width:${size}px;height:${size}px;--dx:${Math.cos(angle) * dist}px;--dy:${Math.sin(angle) * dist}px;animation-duration:${duration}s;box-shadow:0 0 20px ${color};`;
     document.body.appendChild(el);
     el.addEventListener("animationend", () => el.remove());
     particles.push(el);
