@@ -121,6 +121,7 @@
  * @property {string[]} [spawnPaths] - 클릭 시 랜덤 스폰될 아이스크림 GLB 경로
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxSpawns] - 스폰 최대 개수
+ * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
  */
 
 /**

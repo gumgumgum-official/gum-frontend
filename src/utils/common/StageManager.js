@@ -8,6 +8,7 @@
  */
 export function createStageManager(renderer, scene) {
   let currentStage = null;
+  let currentStageNumber = null;
   const stages = new Map();
 
   return {
@@ -27,6 +28,7 @@ export function createStageManager(renderer, scene) {
       const newStage = stages.get(stageNumber);
       if (newStage) {
         currentStage = newStage;
+        currentStageNumber = stageNumber;
         currentStage.setup(scene, renderer);
         console.log(`✅ Stage ${stageNumber} 로드 완료`);
       }
@@ -47,6 +49,11 @@ export function createStageManager(renderer, scene) {
     // 현재 Stage 가져오기 (cleanup용)
     getCurrentStage() {
       return currentStage;
+    },
+
+    // 현재 스테이지 번호 (성능 프로파일 등용)
+    getCurrentStageNumber() {
+      return currentStageNumber;
     },
   };
 }

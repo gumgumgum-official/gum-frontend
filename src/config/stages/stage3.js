@@ -48,7 +48,9 @@ export const STAGE3_CONFIG = {
     ],
     spawnScale: 0.4,
     /** 스폰 최대 개수 (이 이상 클릭해도 생성 안 됨) */
-    maxSpawns: 15,
+    maxSpawns: 10,
+    /** Cannon 물리 서브스텝 (1~3, 낮을수록 성능 우선) */
+    physicsSubsteps: 2,
   },
   /** tree1 모델 */
   tree1: {

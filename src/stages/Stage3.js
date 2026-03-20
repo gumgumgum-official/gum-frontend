@@ -12,7 +12,6 @@ import { createStageDebugControls } from "../utils/common/stageDebugControls.js"
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
-import { inspectModel } from "../utils/common/modelInspector.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
 import {
@@ -68,6 +67,9 @@ export function Stage3() {
   let letterState = null;
   let letterLoadInProgress = false;
   const fragments = [];
+  /** Fragment 풀: { group, velocity, angularVelocity } 재사용 (GC 감소) */
+  const fragmentPool = [];
+  const FRAGMENT_POOL_MAX = 32;
 
   // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
   let iceCreamCartRef = null;
@@ -143,11 +145,18 @@ export function Stage3() {
   /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | "mirror" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
+    const targets = [
+      iceCreamCartRef,
+      noticeRef,
+      gameMachineRef,
+      mirrorRef,
+    ].filter(Boolean);
+    if (targets.length === 0) return null;
     const rect = canvasRef.getBoundingClientRect();
     _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     _iceRaycaster.setFromCamera(_icePointer, cameraRef);
-    const hits = _iceRaycaster.intersectObjects(sceneRef.children, true);
+    const hits = _iceRaycaster.intersectObjects(targets, true);
     if (hits.length === 0) return null;
     let obj = hits[0].object;
     while (obj && obj !== sceneRef) {
@@ -160,10 +169,19 @@ export function Stage3() {
     return null;
   }
 
+  let _pointerMoveRafId = 0;
+  let _lastPointerEvent = null;
   function handlePointerMove(event) {
     if (!canvasRef) return;
-    const target = getPointerHitTarget(event.clientX, event.clientY);
-    canvasRef.style.cursor = target ? "pointer" : "default";
+    _lastPointerEvent = event;
+    if (_pointerMoveRafId !== 0) return;
+    _pointerMoveRafId = requestAnimationFrame(() => {
+      _pointerMoveRafId = 0;
+      const e = _lastPointerEvent;
+      if (!e || !canvasRef) return;
+      const target = getPointerHitTarget(e.clientX, e.clientY);
+      canvasRef.style.cursor = target ? "pointer" : "default";
+    });
   }
 
   function handlePointerLeave() {
@@ -309,7 +327,7 @@ export function Stage3() {
       return;
     }
     if (!sceneRef) return;
-    const maxSpawns = config.icecreamCart?.maxSpawns ?? 15;
+    const maxSpawns = config.icecreamCart?.maxSpawns ?? 10;
     if (spawnedIceCreams.length >= maxSpawns) return;
     if (iceCreamTemplates.length === 0) {
       console.warn(
@@ -377,7 +395,8 @@ export function Stage3() {
 
   function updateSpawnedIceCreams(delta) {
     if (!iceCreamPhysicsWorld) return;
-    iceCreamPhysicsWorld.step(1 / 60, delta, 3);
+    const substeps = config.icecreamCart?.physicsSubsteps ?? 2;
+    iceCreamPhysicsWorld.step(1 / 60, delta, substeps);
     for (let i = 0; i < spawnedIceCreams.length; i++) {
       const s = spawnedIceCreams[i];
       s.group.position.copy(s.body.position);
@@ -941,6 +960,40 @@ export function Stage3() {
     return best;
   }
 
+  /** 풀에서 fragment 슬롯 할당 (없으면 새로 생성). geom, mat은 caller가 생성 후 전달 */
+  function allocFragment(geom, mat) {
+    if (fragmentPool.length > 0) {
+      const slot = fragmentPool.pop();
+      slot.group.geometry = geom;
+      slot.group.material = mat.clone();
+      return slot;
+    }
+    const mesh = new THREE.Mesh(geom, mat.clone());
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return {
+      group: mesh,
+      velocity: new THREE.Vector3(),
+      angularVelocity: new THREE.Vector3(),
+    };
+  }
+
+  /** fragment 슬롯을 풀에 반환 (geometry/material dispose) */
+  function releaseFragment(f) {
+    sceneRef.remove(f.group);
+    if (f.group.geometry) {
+      f.group.geometry.dispose();
+      f.group.geometry = null;
+    }
+    if (f.group.material) {
+      f.group.material.dispose();
+      f.group.material = null;
+    }
+    if (fragmentPool.length < FRAGMENT_POOL_MAX) {
+      fragmentPool.push(f);
+    }
+  }
+
   function createFragmentMeshes(fragTriangles, mat, groundY) {
     for (const triList of fragTriangles) {
       if (triList.length === 0) continue;
@@ -951,30 +1004,28 @@ export function Stage3() {
       fragCenter.multiplyScalar(1 / (triList.length * 3));
       const geom = trianglesToGeometry(triList, fragCenter);
       if (!geom) continue;
-      const mesh = new THREE.Mesh(geom, mat.clone());
-      mesh.position.copy(fragCenter);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.rotation.set(
+      const slot = allocFragment(geom, mat);
+      slot.group.position.copy(fragCenter);
+      slot.group.rotation.set(
         Math.random() * Math.PI,
         Math.random() * Math.PI,
         Math.random() * Math.PI,
       );
-      const velocity = new THREE.Vector3(
+      slot.velocity.set(
         (Math.random() - 0.5) * 6,
         Math.random() * 2 + 3,
         (Math.random() - 0.5) * 6,
       );
-      const angularVelocity = new THREE.Vector3(
+      slot.angularVelocity.set(
         (Math.random() - 0.5) * 4,
         (Math.random() - 0.5) * 4,
         (Math.random() - 0.5) * 4,
       );
-      sceneRef.add(mesh);
+      sceneRef.add(slot.group);
       fragments.push({
-        group: mesh,
-        velocity,
-        angularVelocity,
+        group: slot.group,
+        velocity: slot.velocity,
+        angularVelocity: slot.angularVelocity,
         age: 0,
         groundY,
       });
@@ -1002,9 +1053,7 @@ export function Stage3() {
       if (tris.length === 0) return;
       const { remaining, fragments: fragTriangles } =
         partitionTrianglesOneSlice(tris, mesh, FRACTION_PER_HIT);
-      sceneRef.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (mesh.material) mesh.material.dispose();
+      releaseFragment(frag);
       fragments.splice(fragIdx, 1);
       createFragmentMeshes(fragTriangles, mat, target.groundY);
       if (remaining.length > 0) {
@@ -1015,23 +1064,23 @@ export function Stage3() {
         fragCenter.multiplyScalar(1 / (remaining.length * 3));
         const geom = trianglesToGeometry(remaining, fragCenter);
         if (geom) {
-          const m = new THREE.Mesh(geom, mat.clone());
-          m.position.copy(fragCenter);
-          m.castShadow = true;
-          m.receiveShadow = true;
-          sceneRef.add(m);
+          const slot = allocFragment(geom, mat);
+          slot.group.position.copy(fragCenter);
+          slot.velocity.set(
+            (Math.random() - 0.5) * 5,
+            Math.random() * 1.5 + 2.5,
+            (Math.random() - 0.5) * 5,
+          );
+          slot.angularVelocity.set(
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 3,
+          );
+          sceneRef.add(slot.group);
           fragments.push({
-            group: m,
-            velocity: new THREE.Vector3(
-              (Math.random() - 0.5) * 5,
-              Math.random() * 1.5 + 2.5,
-              (Math.random() - 0.5) * 5,
-            ),
-            angularVelocity: new THREE.Vector3(
-              (Math.random() - 0.5) * 3,
-              (Math.random() - 0.5) * 3,
-              (Math.random() - 0.5) * 3,
-            ),
+            group: slot.group,
+            velocity: slot.velocity,
+            angularVelocity: slot.angularVelocity,
             age: 0,
             groundY: target.groundY,
           });
@@ -1139,9 +1188,7 @@ export function Stage3() {
         if (f.group.material) f.group.material.opacity = opacity;
       }
       if (f.age >= FRAGMENT_FADE_END) {
-        sceneRef.remove(f.group);
-        if (f.group.geometry) f.group.geometry.dispose();
-        if (f.group.material) f.group.material.dispose();
+        releaseFragment(f);
         fragments.splice(i, 1);
       }
     }
@@ -1458,6 +1505,10 @@ export function Stage3() {
         character = null;
       }
       if (canvasRef) {
+        if (_pointerMoveRafId !== 0) {
+          cancelAnimationFrame(_pointerMoveRafId);
+          _pointerMoveRafId = 0;
+        }
         canvasRef.removeEventListener("pointerdown", handlePointerDown, {
           capture: true,
         });
@@ -1515,12 +1566,13 @@ export function Stage3() {
       }
 
       removeAllLetterGroupsFromScene(scene);
-      fragments.forEach((f) => {
-        scene.remove(f.group);
-        if (f.group.geometry) f.group.geometry.dispose();
-        if (f.group.material) f.group.material.dispose();
-      });
+      fragments.forEach((f) => releaseFragment(f));
       fragments.length = 0;
+      fragmentPool.forEach((slot) => {
+        if (slot.group.geometry) slot.group.geometry.dispose();
+        if (slot.group.material) slot.group.material.dispose();
+      });
+      fragmentPool.length = 0;
 
       objects.forEach((obj) => {
         scene.remove(obj);
