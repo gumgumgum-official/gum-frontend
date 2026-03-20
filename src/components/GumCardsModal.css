@@ -1,0 +1,415 @@
+/* 껌딱지 카드 모달 - docs/gum-cards-final.html 참고 */
+.gum-cards-root {
+  --card-w: 168px;
+  --card-h: 260px;
+  --radius: 15px;
+  font-family: "Gowun Dodum", "Noto Serif KR", sans-serif;
+}
+
+.gum-cards-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  backdrop-filter: blur(18px) brightness(0.5);
+  -webkit-backdrop-filter: blur(18px) brightness(0.5);
+  background: rgba(8, 6, 20, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+.gum-cards-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.gum-cards-modal {
+  position: relative;
+  width: 100%;
+  max-width: 880px;
+  max-height: 90vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  background: rgba(14, 12, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  backdrop-filter: blur(24px);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 40px 80px rgba(0, 0, 0, 0.6),
+    0 0 80px rgba(120, 100, 255, 0.08);
+  padding: 44px 40px 48px;
+  transform: translateY(20px) scale(0.97);
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.gum-cards-overlay.open .gum-cards-modal {
+  transform: translateY(0) scale(1);
+}
+.gum-cards-modal::-webkit-scrollbar {
+  display: none;
+}
+
+.gum-cards-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+.gum-cards-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.gum-cards-header {
+  text-align: center;
+  margin-bottom: 36px;
+}
+.gum-cards-header h2 {
+  font-family: "Noto Serif KR", serif;
+  font-weight: 300;
+  font-size: clamp(18px, 3vw, 26px);
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.55;
+  letter-spacing: -0.3px;
+}
+.gum-cards-header h2 em {
+  font-style: normal;
+  color: #a78bfa;
+}
+.gum-cards-header p {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.2);
+  letter-spacing: 2px;
+  margin-top: 10px;
+}
+
+.gum-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, var(--card-w));
+  gap: 16px;
+  justify-content: center;
+}
+@media (max-width: 760px) {
+  .gum-cards-root {
+    --card-w: 148px;
+    --card-h: 240px;
+  }
+  .gum-cards-grid {
+    grid-template-columns: repeat(2, var(--card-w));
+  }
+  .gum-cards-modal {
+    padding: 36px 24px 40px;
+  }
+}
+
+.gum-card-wrap {
+  width: var(--card-w);
+  height: var(--card-h);
+  perspective: 1000px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+  transition:
+    opacity 0.44s ease,
+    transform 0.44s ease;
+}
+.gum-cards-grid.ready .gum-card-wrap {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(1) {
+  transition-delay: 60ms;
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(2) {
+  transition-delay: 120ms;
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(3) {
+  transition-delay: 180ms;
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(4) {
+  transition-delay: 240ms;
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(5) {
+  transition-delay: 300ms;
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(6) {
+  transition-delay: 360ms;
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(7) {
+  transition-delay: 420ms;
+}
+.gum-cards-grid.ready .gum-card-wrap:nth-child(8) {
+  transition-delay: 480ms;
+}
+
+.gum-card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--radius);
+}
+.gum-card-wrap.flipped .gum-card-inner {
+  transform: rotateY(180deg);
+}
+
+.gum-card-front,
+.gum-card-back {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.gum-card-front {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #f5f2ee;
+  transition:
+    border-color 0.28s,
+    box-shadow 0.28s;
+}
+.gum-card-wrap:hover:not(.flipped) .gum-card-front {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 24px rgba(200, 180, 255, 0.15);
+}
+
+.gum-card-img {
+  position: absolute;
+  top: -6%;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  border-radius: var(--radius);
+}
+
+.gum-card-front-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background: linear-gradient(
+    to bottom,
+    transparent 35%,
+    rgba(10, 8, 28, 0.5) 62%,
+    rgba(10, 8, 28, 0.86) 100%
+  );
+}
+
+.gum-card-front-dot {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  opacity: 0.8;
+}
+
+.gum-card-front-text {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 14px 16px;
+  z-index: 2;
+}
+.gum-card-front-text .num {
+  font-family: "Noto Serif KR", serif;
+  font-weight: 300;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+.gum-card-front-text .gum-name {
+  font-family: "Noto Serif KR", serif;
+  font-weight: 400;
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: -0.3px;
+  margin-bottom: 5px;
+}
+.gum-card-front-text .keywords {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.gum-card-front-text .kw {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.3px;
+}
+
+.gum-card-back {
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 14px 12px;
+  gap: 0;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.gum-card-back::-webkit-scrollbar {
+  display: none;
+}
+
+.back-header {
+  flex-shrink: 0;
+  margin-bottom: 6px;
+}
+.back-num {
+  font-family: "Noto Serif KR", serif;
+  font-weight: 300;
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+.back-name {
+  font-family: "Noto Serif KR", serif;
+  font-weight: 400;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+.back-theme {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.38);
+  line-height: 1.3;
+}
+
+.back-divider {
+  flex-shrink: 0;
+  width: 24px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.18);
+  margin-top: 10px;
+  margin-bottom: 12px;
+}
+
+.back-desc {
+  flex: 1;
+  min-height: 0;
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.65;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.back-desc::-webkit-scrollbar {
+  display: none;
+}
+
+.back-comfort {
+  flex-shrink: 0;
+  margin-top: 10px;
+  font-family: "Noto Serif KR", serif;
+  font-weight: 300;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.7;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 9px;
+}
+
+.gum-stick-wrap {
+  margin-top: 32px;
+  text-align: center;
+  display: none;
+}
+.gum-stick-wrap.visible {
+  display: block;
+}
+.gum-stick-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 14px;
+  padding: 12px 36px;
+  border-radius: 100px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s;
+  letter-spacing: 0.5px;
+}
+.gum-stick-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.26);
+  color: white;
+}
+
+.gum-toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%) translateY(14px);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  color: rgba(255, 255, 255, 0.78);
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 13px;
+  padding: 11px 26px;
+  border-radius: 100px;
+  opacity: 0;
+  transition: all 0.36s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 9999;
+  white-space: nowrap;
+}
+.gum-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.gum-particle {
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  animation: gum-burst 0.9s ease-out forwards;
+  z-index: 999;
+}
+@keyframes gum-burst {
+  0% {
+    opacity: 0.8;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0);
+  }
+}

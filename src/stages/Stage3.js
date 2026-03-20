@@ -24,6 +24,7 @@ import {
   closeMinigame,
   onMinigameClose,
 } from "../utils/stages/stage3/minigameLauncher.js";
+import { openMirrorModal } from "../utils/stages/stage3/mirrorModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 
@@ -74,6 +75,8 @@ export function Stage3() {
   let noticeRef = null;
   /** 게임기 클릭 → 미니게임 */
   let gameMachineRef = null;
+  /** 거울 클릭 → 모달 */
+  let mirrorRef = null;
   let unlistenMinigameClose = null;
   let noticeModalEl = null;
   let noticePaperAudio = null;
@@ -137,7 +140,7 @@ export function Stage3() {
     prevPortalSignedDist = signedDist;
   }
 
-  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | null */
+  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | "mirror" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
     const rect = canvasRef.getBoundingClientRect();
@@ -151,6 +154,7 @@ export function Stage3() {
       if (iceCreamCartRef && obj === iceCreamCartRef) return "icecream";
       if (noticeRef && obj === noticeRef) return "notice";
       if (gameMachineRef && obj === gameMachineRef) return "gameMachine";
+      if (mirrorRef && obj === mirrorRef) return "mirror";
       obj = obj.parent;
     }
     return null;
@@ -266,6 +270,9 @@ export function Stage3() {
         gameMachineRef,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
+    }
+    if (target === "mirror") {
+      openMirrorModal();
     }
   }
 
@@ -1385,6 +1392,7 @@ export function Stage3() {
               });
               scene.add(model);
               objects.push(model);
+              if (task.name === "mirror") mirrorRef = model;
               console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
             } else {
               const model = value.scene;
@@ -1464,6 +1472,7 @@ export function Stage3() {
         noticeModalEl = null;
       }
       noticeRef = null;
+      mirrorRef = null;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
         unlistenMinigameClose = null;
