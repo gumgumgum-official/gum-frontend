@@ -15,7 +15,7 @@
 /**
  * initThreeApp 옵션
  * @typedef {Object} InitThreeAppOptions
- * @property {number[]} [allowedStages] - 허용 Stage 목록 (예: [2], [3,4,5,6])
+ * @property {number[]} [allowedStages] - 허용 Stage 목록 (예: [2], [3, 6])
  * @property {number} [initialStage] - 시작 Stage
  * @property {boolean} [enableKeyboardSwitch] - 키보드 2~6 전환 활성화
  * @property {function(string, Error?): void} [onError] - 에러 시 사용자 피드백용 콜백 (메시지, 원본 에러)
@@ -98,6 +98,19 @@
  * @property {string[]} [paperSoundPaths] - 게시판 등 클릭 시 재생할 사운드 경로
  */
 
+/**
+ * Stage3 포탈 전용 설정 (평면 통과 시 스테이지 전환)
+ * @typedef {Object} Stage3PortalConfig
+ * @extends Stage3PropConfig
+ * @property {string} path
+ * @property {{x?: number, y?: number, z?: number}} [position]
+ * @property {{x?: number, y?: number, z?: number}} [rotation]
+ * @property {number} [scale]
+ * @property {{x: number, z: number}} [normal] - 평면 법선 (XZ)
+ * @property {number} [halfWidth] - 포탈 반폭 (수평 허용 거리)
+ * @property {number} [targetStage] - 전환할 Stage 번호
+ */
+
 /** Stage3 아이스크림 카트 전용 설정 */
 /**
  * @typedef {Object} Stage3IcecreamCartConfig
@@ -108,6 +121,7 @@
  * @property {string[]} [spawnPaths] - 클릭 시 랜덤 스폰될 아이스크림 GLB 경로
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxSpawns] - 스폰 최대 개수
+ * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
  */
 
 /**
@@ -120,7 +134,7 @@
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
  * @property {Stage3PropConfig} [tree1]
  * @property {Stage3PropConfig} [notice]
- * @property {Stage3PropConfig} [portal_bright]
+ * @property {Stage3PortalConfig} [portal_bright]
  * @property {Stage3PropConfig} [statue]
  * @property {Stage3PropConfig} [well]
  * @property {Stage3PropConfig} [clock]
@@ -128,6 +142,7 @@
  * @property {Stage3PropConfig} [gameMachine]
  * @property {Stage3PropConfig} [bench]
  * @property {Stage3PropConfig} [signs]
+ * @property {Stage3PropConfig} [mirror] - FBX 거울
  */
 
 export {};

@@ -5,7 +5,7 @@ import { initThreeApp } from "../three/initThreeApp.js";
  * Three.js 캔버스를 렌더링하고 기존 로직을 마운트합니다.
  * allowedStages는 상위에서 useMemo 등으로 안정된 참조를 전달하는 것을 권장합니다.
  * @param {Object} props
- * @param {number[]} props.allowedStages - 허용 Stage 목록 (예: [2], [3,4,5,6])
+ * @param {number[]} props.allowedStages - 허용 Stage 목록 (예: [2], [3, 6])
  * @param {number} props.initialStage - 시작 Stage
  * @param {boolean} [props.enableKeyboardSwitch] - 키보드 2~6 전환 (개발용)
  * @param {function(string, Error?): void} [props.onError] - 에러 시 호출 (미전달 시 화면에 메시지 표시)

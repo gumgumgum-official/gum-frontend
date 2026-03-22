@@ -19,7 +19,7 @@ export const STAGE3_CONFIG = {
   /** 캐릭터 GLB 경로 */
   characterModelPath: "/models/common/user_walking_color.glb",
   model: {
-    path: "/models/stage3/part3_2.glb",
+    path: "/models/stage3/island.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -48,7 +48,9 @@ export const STAGE3_CONFIG = {
     ],
     spawnScale: 0.4,
     /** 스폰 최대 개수 (이 이상 클릭해도 생성 안 됨) */
-    maxSpawns: 15,
+    maxSpawns: 10,
+    /** Cannon 물리 서브스텝 (1~3, 낮을수록 성능 우선) */
+    physicsSubsteps: 2,
   },
   /** tree1 모델 */
   tree1: {
@@ -69,12 +71,17 @@ export const STAGE3_CONFIG = {
       "/static/sounds/paper/PaperMovement_fNAyV_01-3.mp3",
     ],
   },
-  /** 마법 포탈 */
+  /** 마법 포탈 (평면 통과 시 Stage 6로 전환) */
   portal_bright: {
     path: "/models/stage3/portal_bright.glb",
     position: { x: -3, y: -0.3, z: 12 },
     rotation: { x: 0, y: 40, z: 0 },
     scale: 2,
+    /** 평면 법선 (XZ, 정규화됨). 캐릭터가 이 방향→반대방향으로 평면을 가로지르면 전환 */
+    normal: { x: 0, z: 1 },
+    /** 포탈 중심으로부터 수평(법선에 수직) 허용 반거리. 이 거리 밖 통과는 무시 */
+    halfWidth: 2,
+    targetStage: 6,
   },
   /** 껌딱지 동상 */
   statue: {
@@ -124,6 +131,13 @@ export const STAGE3_CONFIG = {
     position: { x: -2.8, y: -0.4, z: 7.5 },
     rotation: { x: 0, y: -60, z: 0 },
     scale: 0.8,
+  },
+  /** 거울 (FBX) */
+  mirror: {
+    path: "/models/stage3/mirror.fbx",
+    position: { x: 7, y: 1.6, z: -15 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 0.1,
   },
 };
 
