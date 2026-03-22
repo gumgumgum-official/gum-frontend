@@ -6,12 +6,12 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
-import { inspectModel } from "../utils/common/modelInspector.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
 import {
@@ -21,8 +21,13 @@ import {
 import {
   openMinigame,
   closeMinigame,
+  dispatchMinigameClose,
   onMinigameClose,
 } from "../utils/stages/stage3/minigameLauncher.js";
+import {
+  openMirrorModal,
+  dispatchMirrorModalClose,
+} from "../utils/stages/stage3/mirrorModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 
@@ -50,6 +55,7 @@ export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
+  const fbxLoader = new FBXLoader();
   const objects = [];
   let debugControls = null;
   let sceneRef = null;
@@ -58,11 +64,16 @@ export function Stage3() {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
+  let isStage3Active = true;
 
   // 낙하 글자 1개 (최신 것만)
   let letterState = null;
   let letterLoadInProgress = false;
   const fragments = [];
+  /** Fragment 풀: { group, velocity, angularVelocity } 재사용 (GC 감소) */
+  const fragmentPool = [];
+  const FRAGMENT_POOL_MAX = 32;
 
   // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
   let iceCreamCartRef = null;
@@ -70,6 +81,8 @@ export function Stage3() {
   let noticeRef = null;
   /** 게임기 클릭 → 미니게임 */
   let gameMachineRef = null;
+  /** 거울 클릭 → 모달 */
+  let mirrorRef = null;
   let unlistenMinigameClose = null;
   let noticeModalEl = null;
   let noticePaperAudio = null;
@@ -88,6 +101,10 @@ export function Stage3() {
   ]);
   let character = null;
 
+  /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
+  let portalPlaneConfig = null;
+  let prevPortalSignedDist = null;
+
   const handleStageKeyDown = (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -99,29 +116,76 @@ export function Stage3() {
     }
   };
 
-  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | null */
+  /** 포탈 평면 통과 시 stage:switch 이벤트 dispatch */
+  function checkPortalPlaneCrossing() {
+    const plane = portalPlaneConfig;
+    if (!plane || !character) return;
+    const pos = character.getPosition?.();
+    if (!pos) return;
+
+    const dx = pos.x - plane.px;
+    const dz = pos.z - plane.pz;
+    const signedDist = dx * plane.nx + dz * plane.nz;
+    const lateral = Math.abs(-dx * plane.nz + dz * plane.nx);
+    if (lateral > plane.halfWidth) return;
+
+    if (prevPortalSignedDist !== null) {
+      const crossed =
+        (prevPortalSignedDist > 0 && signedDist < 0) ||
+        (prevPortalSignedDist < 0 && signedDist > 0);
+      if (crossed) {
+        window.dispatchEvent(
+          new CustomEvent("stage:switch", {
+            detail: { targetStage: plane.targetStage },
+          }),
+        );
+        prevPortalSignedDist = null;
+        return;
+      }
+    }
+    prevPortalSignedDist = signedDist;
+  }
+
+  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | "mirror" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
+    const targets = [
+      iceCreamCartRef,
+      noticeRef,
+      gameMachineRef,
+      mirrorRef,
+    ].filter(Boolean);
+    if (targets.length === 0) return null;
     const rect = canvasRef.getBoundingClientRect();
     _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     _iceRaycaster.setFromCamera(_icePointer, cameraRef);
-    const hits = _iceRaycaster.intersectObjects(sceneRef.children, true);
+    const hits = _iceRaycaster.intersectObjects(targets, true);
     if (hits.length === 0) return null;
     let obj = hits[0].object;
     while (obj && obj !== sceneRef) {
       if (iceCreamCartRef && obj === iceCreamCartRef) return "icecream";
       if (noticeRef && obj === noticeRef) return "notice";
       if (gameMachineRef && obj === gameMachineRef) return "gameMachine";
+      if (mirrorRef && obj === mirrorRef) return "mirror";
       obj = obj.parent;
     }
     return null;
   }
 
+  let _pointerMoveRafId = 0;
+  let _lastPointerEvent = null;
   function handlePointerMove(event) {
     if (!canvasRef) return;
-    const target = getPointerHitTarget(event.clientX, event.clientY);
-    canvasRef.style.cursor = target ? "pointer" : "default";
+    _lastPointerEvent = event;
+    if (_pointerMoveRafId !== 0) return;
+    _pointerMoveRafId = requestAnimationFrame(() => {
+      _pointerMoveRafId = 0;
+      const e = _lastPointerEvent;
+      if (!e || !canvasRef) return;
+      const target = getPointerHitTarget(e.clientX, e.clientY);
+      canvasRef.style.cursor = target ? "pointer" : "default";
+    });
   }
 
   function handlePointerLeave() {
@@ -229,6 +293,9 @@ export function Stage3() {
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
     }
+    if (target === "mirror") {
+      openMirrorModal();
+    }
   }
 
   let _iceCreamGroundMat = null;
@@ -264,7 +331,7 @@ export function Stage3() {
       return;
     }
     if (!sceneRef) return;
-    const maxSpawns = config.icecreamCart?.maxSpawns ?? 15;
+    const maxSpawns = config.icecreamCart?.maxSpawns ?? 10;
     if (spawnedIceCreams.length >= maxSpawns) return;
     if (iceCreamTemplates.length === 0) {
       console.warn(
@@ -332,7 +399,8 @@ export function Stage3() {
 
   function updateSpawnedIceCreams(delta) {
     if (!iceCreamPhysicsWorld) return;
-    iceCreamPhysicsWorld.step(1 / 60, delta, 3);
+    const substeps = config.icecreamCart?.physicsSubsteps ?? 2;
+    iceCreamPhysicsWorld.step(1 / 60, delta, substeps);
     for (let i = 0; i < spawnedIceCreams.length; i++) {
       const s = spawnedIceCreams[i];
       s.group.position.copy(s.body.position);
@@ -487,6 +555,15 @@ export function Stage3() {
       const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
       group.position.set(0, startY, 0);
       group.rotation.set(0, 0, 0);
+      if (!isStage3Active) {
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          }
+        });
+        return;
+      }
       scene.add(group);
       const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0: 전반적으로 더 빠르게
       const gravity = STAGE3_GRAVITY * speedFactor;
@@ -887,6 +964,40 @@ export function Stage3() {
     return best;
   }
 
+  /** 풀에서 fragment 슬롯 할당 (없으면 새로 생성). geom, mat은 caller가 생성 후 전달 */
+  function allocFragment(geom, mat) {
+    if (fragmentPool.length > 0) {
+      const slot = fragmentPool.pop();
+      slot.group.geometry = geom;
+      slot.group.material = mat.clone();
+      return slot;
+    }
+    const mesh = new THREE.Mesh(geom, mat.clone());
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return {
+      group: mesh,
+      velocity: new THREE.Vector3(),
+      angularVelocity: new THREE.Vector3(),
+    };
+  }
+
+  /** fragment 슬롯을 풀에 반환 (geometry/material dispose) */
+  function releaseFragment(f) {
+    sceneRef.remove(f.group);
+    if (f.group.geometry) {
+      f.group.geometry.dispose();
+      f.group.geometry = null;
+    }
+    if (f.group.material) {
+      f.group.material.dispose();
+      f.group.material = null;
+    }
+    if (fragmentPool.length < FRAGMENT_POOL_MAX) {
+      fragmentPool.push(f);
+    }
+  }
+
   function createFragmentMeshes(fragTriangles, mat, groundY) {
     for (const triList of fragTriangles) {
       if (triList.length === 0) continue;
@@ -897,30 +1008,28 @@ export function Stage3() {
       fragCenter.multiplyScalar(1 / (triList.length * 3));
       const geom = trianglesToGeometry(triList, fragCenter);
       if (!geom) continue;
-      const mesh = new THREE.Mesh(geom, mat.clone());
-      mesh.position.copy(fragCenter);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.rotation.set(
+      const slot = allocFragment(geom, mat);
+      slot.group.position.copy(fragCenter);
+      slot.group.rotation.set(
         Math.random() * Math.PI,
         Math.random() * Math.PI,
         Math.random() * Math.PI,
       );
-      const velocity = new THREE.Vector3(
+      slot.velocity.set(
         (Math.random() - 0.5) * 6,
         Math.random() * 2 + 3,
         (Math.random() - 0.5) * 6,
       );
-      const angularVelocity = new THREE.Vector3(
+      slot.angularVelocity.set(
         (Math.random() - 0.5) * 4,
         (Math.random() - 0.5) * 4,
         (Math.random() - 0.5) * 4,
       );
-      sceneRef.add(mesh);
+      sceneRef.add(slot.group);
       fragments.push({
-        group: mesh,
-        velocity,
-        angularVelocity,
+        group: slot.group,
+        velocity: slot.velocity,
+        angularVelocity: slot.angularVelocity,
         age: 0,
         groundY,
       });
@@ -948,9 +1057,7 @@ export function Stage3() {
       if (tris.length === 0) return;
       const { remaining, fragments: fragTriangles } =
         partitionTrianglesOneSlice(tris, mesh, FRACTION_PER_HIT);
-      sceneRef.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (mesh.material) mesh.material.dispose();
+      releaseFragment(frag);
       fragments.splice(fragIdx, 1);
       createFragmentMeshes(fragTriangles, mat, target.groundY);
       if (remaining.length > 0) {
@@ -961,23 +1068,23 @@ export function Stage3() {
         fragCenter.multiplyScalar(1 / (remaining.length * 3));
         const geom = trianglesToGeometry(remaining, fragCenter);
         if (geom) {
-          const m = new THREE.Mesh(geom, mat.clone());
-          m.position.copy(fragCenter);
-          m.castShadow = true;
-          m.receiveShadow = true;
-          sceneRef.add(m);
+          const slot = allocFragment(geom, mat);
+          slot.group.position.copy(fragCenter);
+          slot.velocity.set(
+            (Math.random() - 0.5) * 5,
+            Math.random() * 1.5 + 2.5,
+            (Math.random() - 0.5) * 5,
+          );
+          slot.angularVelocity.set(
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 3,
+          );
+          sceneRef.add(slot.group);
           fragments.push({
-            group: m,
-            velocity: new THREE.Vector3(
-              (Math.random() - 0.5) * 5,
-              Math.random() * 1.5 + 2.5,
-              (Math.random() - 0.5) * 5,
-            ),
-            angularVelocity: new THREE.Vector3(
-              (Math.random() - 0.5) * 3,
-              (Math.random() - 0.5) * 3,
-              (Math.random() - 0.5) * 3,
-            ),
+            group: slot.group,
+            velocity: slot.velocity,
+            angularVelocity: slot.angularVelocity,
             age: 0,
             groundY: target.groundY,
           });
@@ -1085,9 +1192,7 @@ export function Stage3() {
         if (f.group.material) f.group.material.opacity = opacity;
       }
       if (f.age >= FRAGMENT_FADE_END) {
-        sceneRef.remove(f.group);
-        if (f.group.geometry) f.group.geometry.dispose();
-        if (f.group.material) f.group.material.dispose();
+        releaseFragment(f);
         fragments.splice(i, 1);
       }
     }
@@ -1097,9 +1202,28 @@ export function Stage3() {
     camera: null,
 
     setup(scene, renderer) {
+      isStage3Active = true;
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
+      prevPortalSignedDist = null;
+
+      /** @type {import("../types.js").Stage3PortalConfig | undefined} */
+      const portalCfg = config.portal_bright;
+      if (portalCfg?.targetStage != null && portalCfg?.normal) {
+        const { x: nx, z: nz } = portalCfg.normal;
+        const len = Math.hypot(nx, nz) || 1;
+        portalPlaneConfig = {
+          px: portalCfg.position?.x ?? 0,
+          pz: portalCfg.position?.z ?? 0,
+          nx: nx / len,
+          nz: nz / len,
+          halfWidth: portalCfg.halfWidth ?? 2,
+          targetStage: portalCfg.targetStage,
+        };
+      } else {
+        portalPlaneConfig = null;
+      }
 
       character = createCharacterController({
         scene,
@@ -1157,6 +1281,7 @@ export function Stage3() {
         scene,
         glbLoader,
         config,
+        getIsActive: () => isStage3Active,
         onReady: async ({
           model,
           center,
@@ -1213,10 +1338,28 @@ export function Stage3() {
               data: prop,
             });
           }
+          // 거울(FBX) 별도 로드
+          const mirrorConfig = config.mirror;
+          if (mirrorConfig?.path) {
+            loadTasks.push({
+              type: "fbxProp",
+              name: "mirror",
+              promise: new Promise((resolve, reject) => {
+                fbxLoader.load(
+                  base + mirrorConfig.path,
+                  resolve,
+                  undefined,
+                  reject,
+                );
+              }),
+              data: mirrorConfig,
+            });
+          }
 
           const results = await Promise.allSettled(
             loadTasks.map((t) => t.promise),
           );
+          if (!isStage3Active) return;
 
           loadTasks.forEach((task, i) => {
             const result = results[i];
@@ -1278,6 +1421,30 @@ export function Stage3() {
                 value.length,
                 "개",
               );
+            } else if (task.type === "fbxProp") {
+              const model = value; // FBX는 Object3D 직접 반환
+              const d = task.data;
+              model.position.set(
+                d.position?.x ?? 0,
+                backgroundMaxY + (d.position?.y ?? 0),
+                d.position?.z ?? 0,
+              );
+              model.rotation.set(
+                ((d.rotation?.x ?? 0) * Math.PI) / 180,
+                ((d.rotation?.y ?? 0) * Math.PI) / 180,
+                ((d.rotation?.z ?? 0) * Math.PI) / 180,
+              );
+              model.scale.setScalar(d.scale ?? 1);
+              model.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
+              });
+              scene.add(model);
+              objects.push(model);
+              if (task.name === "mirror") mirrorRef = model;
+              console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
             } else {
               const model = value.scene;
               const d = task.data;
@@ -1327,9 +1494,11 @@ export function Stage3() {
       if (character) {
         character.update(delta, this.camera, { skipCameraFollow: true });
       }
+      checkPortalPlaneCrossing();
     },
 
     cleanup(scene) {
+      isStage3Active = false;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,
@@ -1340,6 +1509,10 @@ export function Stage3() {
         character = null;
       }
       if (canvasRef) {
+        if (_pointerMoveRafId !== 0) {
+          cancelAnimationFrame(_pointerMoveRafId);
+          _pointerMoveRafId = 0;
+        }
         canvasRef.removeEventListener("pointerdown", handlePointerDown, {
           capture: true,
         });
@@ -1353,7 +1526,14 @@ export function Stage3() {
         noticeModalEl.parentNode.removeChild(noticeModalEl);
         noticeModalEl = null;
       }
+      closeMinigame({
+        camera: cameraRef ?? this.camera,
+        orbitControls: debugControls?.getOrbitControls?.() ?? null,
+      });
+      dispatchMinigameClose();
+      dispatchMirrorModalClose();
       noticeRef = null;
+      mirrorRef = null;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
         unlistenMinigameClose = null;
@@ -1396,12 +1576,13 @@ export function Stage3() {
       }
 
       removeAllLetterGroupsFromScene(scene);
-      fragments.forEach((f) => {
-        scene.remove(f.group);
-        if (f.group.geometry) f.group.geometry.dispose();
-        if (f.group.material) f.group.material.dispose();
-      });
+      fragments.forEach((f) => releaseFragment(f));
       fragments.length = 0;
+      fragmentPool.forEach((slot) => {
+        if (slot.group.geometry) slot.group.geometry.dispose();
+        if (slot.group.material) slot.group.material.dispose();
+      });
+      fragmentPool.length = 0;
 
       objects.forEach((obj) => {
         scene.remove(obj);

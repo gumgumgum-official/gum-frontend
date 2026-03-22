@@ -18,10 +18,17 @@ import { inspectModel } from "../../common/modelInspector.js";
  *   scene: import("three").Scene,
  *   glbLoader: ReturnType<import("../../common/assetLoaders.js").getGLBLoader>,
  *   config: import("../../../types.js").Stage3Config,
+ *   getIsActive?: () => boolean,
  *   onReady: (payload: BackgroundReadyPayload) => void,
  * }} params
  */
-export function loadStage3Background({ scene, glbLoader, config, onReady }) {
+export function loadStage3Background({
+  scene,
+  glbLoader,
+  config,
+  getIsActive,
+  onReady,
+}) {
   glbLoader.load(config.model.path, {
     onLoad: (gltf) => {
       const model = gltf.scene;
@@ -55,10 +62,12 @@ export function loadStage3Background({ scene, glbLoader, config, onReady }) {
         backgroundBounds = box.clone();
       }
 
-      const backgroundMaxY = box.max.y;
+      // Stage3에서는 캐릭터가 서는 실제 섬 윗면(y≈6.2)을 기준 바닥으로 사용한다.
+      // box.max.y(나무/등대 꼭대기)는 너무 높아서 다른 프롭들이 공중에 뜬다.
+      const backgroundMaxY = center.y;
 
       console.log(
-        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), backgroundMaxY=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
+        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
       );
 
       model.traverse((child) => {
@@ -72,6 +81,22 @@ export function loadStage3Background({ scene, glbLoader, config, onReady }) {
           child.raycast = () => {};
         }
       });
+
+      if (getIsActive && !getIsActive()) {
+        model.traverse((child) => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
+            }
+          }
+        });
+        return;
+      }
 
       scene.add(model);
       console.log("✅ Stage3 배경 모델 로드 완료");
