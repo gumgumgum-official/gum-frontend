@@ -19,6 +19,8 @@ export function createStageManager(renderer, scene) {
 
     // 단계 전환
     switchToStage(stageNumber) {
+      if (currentStageNumber === stageNumber) return;
+
       // 기존 단계 정리
       if (currentStage && currentStage.cleanup) {
         currentStage.cleanup(scene);

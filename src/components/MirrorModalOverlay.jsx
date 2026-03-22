@@ -6,6 +6,7 @@ import { GumCardsModal } from "./GumCardsModal.jsx";
 import {
   dispatchMirrorModalClose,
   EVENT_OPEN,
+  EVENT_CLOSE,
 } from "../utils/stages/stage3/mirrorModalLauncher.js";
 
 export function MirrorModalOverlay() {
@@ -20,6 +21,12 @@ export function MirrorModalOverlay() {
     const onOpen = () => setVisible(true);
     window.addEventListener(EVENT_OPEN, onOpen);
     return () => window.removeEventListener(EVENT_OPEN, onOpen);
+  }, []);
+
+  useEffect(() => {
+    const onClose = () => setVisible(false);
+    window.addEventListener(EVENT_CLOSE, onClose);
+    return () => window.removeEventListener(EVENT_CLOSE, onClose);
   }, []);
 
   return <GumCardsModal open={visible} onClose={handleClose} />;
