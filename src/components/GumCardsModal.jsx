@@ -101,7 +101,13 @@ function spawnParticles(color) {
     const duration = 1 + Math.random() * 0.8;
     el.style.cssText = `left:${cx}px;top:${cy}px;background:${color};width:${size}px;height:${size}px;--dx:${Math.cos(angle) * dist}px;--dy:${Math.sin(angle) * dist}px;animation-duration:${duration}s;box-shadow:0 0 20px ${color};`;
     document.body.appendChild(el);
-    el.addEventListener("animationend", () => el.remove());
+    let timeoutId;
+    const removeEl = () => {
+      clearTimeout(timeoutId);
+      el.remove();
+    };
+    el.addEventListener("animationend", removeEl);
+    timeoutId = setTimeout(removeEl, 3000);
     particles.push(el);
   }
   return particles;

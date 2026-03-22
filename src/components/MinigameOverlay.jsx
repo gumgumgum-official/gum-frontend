@@ -7,6 +7,7 @@ import { WeedGameUI } from "../minigame";
 import {
   dispatchMinigameClose,
   EVENT_OPEN,
+  EVENT_CLOSE,
 } from "../utils/stages/stage3/minigameLauncher.js";
 
 export function MinigameOverlay() {
@@ -21,6 +22,12 @@ export function MinigameOverlay() {
     const onOpen = () => setVisible(true);
     window.addEventListener(EVENT_OPEN, onOpen);
     return () => window.removeEventListener(EVENT_OPEN, onOpen);
+  }, []);
+
+  useEffect(() => {
+    const onClose = () => setVisible(false);
+    window.addEventListener(EVENT_CLOSE, onClose);
+    return () => window.removeEventListener(EVENT_CLOSE, onClose);
   }, []);
 
   if (!visible) return null;

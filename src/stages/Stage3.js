@@ -21,9 +21,13 @@ import {
 import {
   openMinigame,
   closeMinigame,
+  dispatchMinigameClose,
   onMinigameClose,
 } from "../utils/stages/stage3/minigameLauncher.js";
-import { openMirrorModal } from "../utils/stages/stage3/mirrorModalLauncher.js";
+import {
+  openMirrorModal,
+  dispatchMirrorModalClose,
+} from "../utils/stages/stage3/mirrorModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 
@@ -1522,6 +1526,12 @@ export function Stage3() {
         noticeModalEl.parentNode.removeChild(noticeModalEl);
         noticeModalEl = null;
       }
+      closeMinigame({
+        camera: cameraRef ?? this.camera,
+        orbitControls: debugControls?.getOrbitControls?.() ?? null,
+      });
+      dispatchMinigameClose();
+      dispatchMirrorModalClose();
       noticeRef = null;
       mirrorRef = null;
       if (unlistenMinigameClose) {
