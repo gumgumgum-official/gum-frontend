@@ -10,6 +10,7 @@ import { createSpeechBubbleHover } from "../utils/stages/stage6/speechBubbleHove
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 
 const DEFAULT_CHARACTER_PATH = "/models/common/user_walking2.glb";
+const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
 
 export function Stage6() {
   const objects = [];
@@ -18,6 +19,12 @@ export function Stage6() {
   const glbLoader = getGLBLoader();
   let speechBubbleHover = null;
   let orbitControls = null;
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
+    }
+  };
 
   return {
     camera: null,
@@ -53,6 +60,7 @@ export function Stage6() {
       );
 
       scene.background = new THREE.Color(config.background.color);
+      window.addEventListener("keydown", handleKeyDown, { capture: true });
 
       // 배경 GLB 로드
       glbLoader.load(config.model.path, {
@@ -185,6 +193,7 @@ export function Stage6() {
     },
 
     cleanup(scene) {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
       if (orbitControls) {
         orbitControls.dispose();
         orbitControls = null;
