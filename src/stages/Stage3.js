@@ -1,7 +1,7 @@
 /**
  * Stage3: 부셔버리자 (밝은 초원, 스트레스 해소)
- * - 서버로부터 할당된 handwriting 1개(svgUrl)가 우선으로 낙하
- * - 서버 이벤트 미수신 시 fallback으로 "최신 1개"가 낙하
+ * - gum_server REST 폴링(GET /api/monitors/:id/current)으로 할당된 worry(svgUrl) 우선 낙하
+ * - 폴링에서 busy 미수신 시 fallback으로 "최신 1개"가 낙하
  * - 엔터키로 타격 시 큰 조각이 깔끔하게 부서짐, 4번 치면 사라짐. 조각은 3초 후 페이드아웃
  * @returns {import("../types.js").StageInstance}
  */
@@ -14,7 +14,6 @@ import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { inspectModel as _inspectModel } from "../utils/common/modelInspector.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
-import { io } from "socket.io-client";
 import * as CANNON from "cannon-es";
 import {
   STAGE3_CONFIG,
@@ -27,6 +26,11 @@ import {
 } from "../utils/stages/stage3/minigameLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
+import {
+  MONITOR_POLL_MS,
+  fetchMonitorCurrent,
+  getMonitorDeviceId,
+} from "../lib/monitorCurrentApi.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -57,6 +61,9 @@ const FRAGMENT_GROUND_FRICTION = 0.82;
 const FRAGMENT_FADE_START = 3; // 땅에 떨어진 뒤 3초 뒤부터
 const FRAGMENT_FADE_END = 5;
 
+/** REST에서 busy를 한 번도 못 받았을 때만 Supabase fallback (ms) */
+const STAGE3_MONITOR_FALLBACK_TIMEOUT_MS = 5000;
+
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
@@ -75,15 +82,16 @@ export function Stage3() {
   let letterLoadInProgress = false;
   const fragments = [];
 
-  // gum_server(Socket.io)로부터 할당된 글자 (start-experience payload)
+  // gum_server REST 폴링으로 할당된 글자
   let assignedWorryId = null; // string
   let assignedSvgUrl = null; // string
-  let startExperienceReceived = false;
-  let gumSocket = null;
-  let arrivalTextEl = null;
+  /** REST로 busy(worry)를 한 번이라도 받으면 true → Supabase fallback 타이머 미실행 유지 */
+  let monitorRestAssignmentReceived = false;
+  let monitorPollIntervalId = null;
+  let monitorPollInFlight = false;
   let pendingSvgUrlToLoad = null;
   let pendingSvgUrlDebugId = null;
-  let socketFallbackTimeoutId = null;
+  let monitorFallbackTimeoutId = null;
 
   // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
   let iceCreamCartRef = null;
@@ -149,131 +157,94 @@ export function Stage3() {
     if (canvasRef) canvasRef.style.cursor = "default";
   }
 
-  function ensureArrivalTextEl() {
-    if (arrivalTextEl) return arrivalTextEl;
-    arrivalTextEl = document.createElement("div");
-    arrivalTextEl.style.position = "fixed";
-    arrivalTextEl.style.left = "50%";
-    arrivalTextEl.style.top = "12%";
-    arrivalTextEl.style.transform = "translateX(-50%)";
-    arrivalTextEl.style.zIndex = "9999";
-    arrivalTextEl.style.pointerEvents = "none";
-    arrivalTextEl.style.padding = "12px 18px";
-    arrivalTextEl.style.borderRadius = "999px";
-    arrivalTextEl.style.background = "rgba(0,0,0,0.35)";
-    arrivalTextEl.style.color = "#fff";
-    arrivalTextEl.style.fontSize = "20px";
-    arrivalTextEl.style.fontWeight = "700";
-    arrivalTextEl.style.letterSpacing = "-0.02em";
-    arrivalTextEl.style.whiteSpace = "nowrap";
-    arrivalTextEl.style.display = "none";
-    document.body.appendChild(arrivalTextEl);
-    return arrivalTextEl;
+  function applyMonitorIdleState() {
+    assignedWorryId = null;
+    assignedSvgUrl = null;
   }
 
-  function setArrivalText(worryId) {
-    const el = ensureArrivalTextEl();
-    el.textContent = `${worryId}번째 고민이 도착했습니다`;
-    el.style.display = "block";
-  }
-
-  function clearArrivalText() {
-    if (!arrivalTextEl) return;
-    arrivalTextEl.style.display = "none";
-    arrivalTextEl.textContent = "";
-  }
-
-  function normalizeMonitorDeviceId(raw) {
-    const s = String(raw ?? "").trim();
-    if (!s) return "monitor-1";
-    if (s === "1" || s === "monitor-1") return "monitor-1";
-    if (s === "2" || s === "monitor-2") return "monitor-2";
-    if (s === "monitor-1" || s === "monitor-2") return s;
-    return "monitor-1";
-  }
-
-  function getGumServerUrl() {
-    // 운영에서 gum_server 주소를 명시할 경우 VITE_GUM_SERVER_URL 사용
-    // 없으면 현재 origin 기준으로 socket.io 연결 시도
-    return import.meta.env.VITE_GUM_SERVER_URL || window.location.origin;
-  }
-
-  function getMonitorDeviceId() {
-    const params = new URLSearchParams(window.location.search);
-    const qsMonitor = params.get("monitor") || params.get("monitorId");
-    return normalizeMonitorDeviceId(
-      import.meta.env.VITE_MONITOR_DEVICE || qsMonitor || "monitor-1",
-    );
-  }
-
-  function startGumServerSocket() {
-    if (gumSocket) return;
-
-    const gumServerUrl = getGumServerUrl();
-    const monitorDeviceId = getMonitorDeviceId();
-
-    console.log(
-      `[Stage3] Socket.io gum_server 연결 시도: ${gumServerUrl}, monitorDeviceId="${monitorDeviceId}"`,
-    );
-
-    try {
-      gumSocket = io(gumServerUrl, {
-        transports: ["websocket"],
-      });
-    } catch (e) {
-      console.error("[Stage3] gum_server socket 생성 실패:", e);
-      gumSocket = null;
+  function applyMonitorBusyWorry(worry) {
+    const worryId = worry?.worryId ?? worry?.id ?? worry?.seq;
+    const svgUrl = worry?.svgUrl;
+    if (worryId == null || worryId === "" || !svgUrl) {
+      console.warn("[Stage3] monitor busy 응답에 worryId/svgUrl 누락:", worry);
+      return;
+    }
+    const wid = String(worryId);
+    const surl = String(svgUrl);
+    if (assignedWorryId === wid && assignedSvgUrl === surl) {
       return;
     }
 
-    gumSocket.on("connect", () => {
-      console.log(
-        `[Stage3] gum_server socket 연결됨. register-device("${monitorDeviceId}")`,
+    if (!monitorRestAssignmentReceived) {
+      monitorRestAssignmentReceived = true;
+      if (monitorFallbackTimeoutId) {
+        window.clearTimeout(monitorFallbackTimeoutId);
+        monitorFallbackTimeoutId = null;
+      }
+    }
+
+    assignedWorryId = wid;
+    assignedSvgUrl = surl;
+
+    if (sceneRef && cameraRef && stage3GroundY > 0) {
+      loadLetterFromSvgUrl(
+        sceneRef,
+        cameraRef,
+        stage3GroundY,
+        assignedSvgUrl,
+        assignedWorryId,
       );
-      gumSocket.emit("register-device", monitorDeviceId);
-    });
+    } else {
+      console.log(
+        "[Stage3] monitor busy 수신 (배경 아직 준비 전) → background ready 시 로드",
+      );
+    }
+  }
 
-    gumSocket.on("connect_error", (err) => {
-      console.error("[Stage3] gum_server socket connect_error:", err);
-    });
+  async function pollMonitorCurrent() {
+    if (monitorPollInFlight) return;
+    monitorPollInFlight = true;
+    try {
+      const data = await fetchMonitorCurrent();
+      if (data == null) return;
+      const status = data?.status;
 
-    gumSocket.on("start-experience", (payload) => {
-      const worryId = payload?.worryId;
-      const svgUrl = payload?.svgUrl;
-
-      if (!worryId || !svgUrl) {
-        console.warn(
-          "[Stage3] start-experience payload 누락:",
-          "worryId or svgUrl missing",
-          payload,
-        );
+      if (status === "idle") {
+        applyMonitorIdleState();
         return;
       }
 
-      assignedWorryId = String(worryId);
-      assignedSvgUrl = String(svgUrl);
-      startExperienceReceived = true;
-      if (socketFallbackTimeoutId) {
-        window.clearTimeout(socketFallbackTimeoutId);
-        socketFallbackTimeoutId = null;
+      if (status === "busy" && data.worry) {
+        applyMonitorBusyWorry(data.worry);
+        return;
       }
-      setArrivalText(assignedWorryId);
 
-      // 배경/씬 groundY가 준비된 뒤에만 로드
-      if (sceneRef && cameraRef && stage3GroundY > 0) {
-        loadLetterFromSvgUrl(
-          sceneRef,
-          cameraRef,
-          stage3GroundY,
-          assignedSvgUrl,
-          assignedWorryId,
-        );
-      } else {
-        console.log(
-          "[Stage3] start-experience 수신됨 (배경 아직 준비 전) → background ready 시 로드",
-        );
+      if (status === "busy") {
+        console.warn("[Stage3] monitor busy인데 worry 없음:", data);
       }
-    });
+    } catch (e) {
+      console.warn("[Stage3] monitor current 폴링 실패:", e);
+    } finally {
+      monitorPollInFlight = false;
+    }
+  }
+
+  function startMonitorPolling() {
+    if (monitorPollIntervalId != null) return;
+    void pollMonitorCurrent();
+    monitorPollIntervalId = window.setInterval(() => {
+      void pollMonitorCurrent();
+    }, MONITOR_POLL_MS);
+    console.log(
+      `[Stage3] gum_server REST 폴링 시작 (${MONITOR_POLL_MS}ms), monitor="${getMonitorDeviceId()}"`,
+    );
+  }
+
+  function stopMonitorPolling() {
+    if (monitorPollIntervalId != null) {
+      window.clearInterval(monitorPollIntervalId);
+      monitorPollIntervalId = null;
+    }
   }
 
   /** 게시판 모달 생성 및 표시 */
@@ -603,7 +574,7 @@ export function Stage3() {
 
     try {
       // pending을 포함해 "하나라도 더 있으면" 순차 처리
-      // (연속 start-experience 이벤트에도 마지막 SVG가 반영되도록)
+      // (연속 REST 할당에도 마지막 SVG가 반영되도록)
       while (nextSvgUrl) {
         const currentSvgUrl = nextSvgUrl;
         const currentDebugId = nextDebugId;
@@ -1410,8 +1381,8 @@ export function Stage3() {
         },
       });
 
-      // monitor start-experience 수신을 위해 gum_server 연결 시작
-      startGumServerSocket();
+      // gum_server REST: 모니터 현재 할당 폴링
+      startMonitorPolling();
 
       loadStage3Background({
         scene,
@@ -1438,14 +1409,13 @@ export function Stage3() {
               assignedWorryId,
             );
           } else {
-            // 우선순위: start-experience(1순위)를 기다리고,
-            // 일정 시간 동안 수신이 없을 때만 fallback(2순위)로 최신 글자를 로드
+            // 우선순위: REST busy(1순위)를 기다리고,
+            // 일정 시간 동안 busy가 없을 때만 fallback(2순위)로 최신 글자를 로드
             const stageCamera = this.camera;
-            const STAGE3_SOCKET_FALLBACK_TIMEOUT_MS = 5000;
-            socketFallbackTimeoutId = window.setTimeout(() => {
-              if (startExperienceReceived || assignedSvgUrl) return;
+            monitorFallbackTimeoutId = window.setTimeout(() => {
+              if (monitorRestAssignmentReceived || assignedSvgUrl) return;
               loadLatestLetter(scene, stageCamera, backgroundMaxY);
-            }, STAGE3_SOCKET_FALLBACK_TIMEOUT_MS);
+            }, STAGE3_MONITOR_FALLBACK_TIMEOUT_MS);
           }
 
           character.setup(backgroundMaxY, backgroundBounds);
@@ -1667,26 +1637,12 @@ export function Stage3() {
       iceCreamCartRef = null;
       iceCreamTemplates.length = 0;
 
-      if (socketFallbackTimeoutId) {
-        window.clearTimeout(socketFallbackTimeoutId);
-        socketFallbackTimeoutId = null;
+      if (monitorFallbackTimeoutId) {
+        window.clearTimeout(monitorFallbackTimeoutId);
+        monitorFallbackTimeoutId = null;
       }
 
-      if (gumSocket) {
-        try {
-          gumSocket.disconnect();
-        } catch (e) {
-          // no-op: cleanup 중엔 에러를 전파하지 않음
-          void e;
-        }
-        gumSocket = null;
-      }
-
-      clearArrivalText();
-      if (arrivalTextEl && arrivalTextEl.parentNode) {
-        arrivalTextEl.parentNode.removeChild(arrivalTextEl);
-      }
-      arrivalTextEl = null;
+      stopMonitorPolling();
 
       if (debugControls) {
         debugControls.dispose();

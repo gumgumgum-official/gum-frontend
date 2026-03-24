@@ -3,7 +3,9 @@
 ## 1. 하드웨어 간 데이터 흐름
 
 1. **iPad (별도 프로젝트)**: 유저 입력 -> `POST /api/worry` -> Server
-2. **Server**: `Socket.io` 브로드캐스팅 -> Beam Projector & PC
+2. **Server**: 이벤트/REST -> Beam Projector & PC  
+   - Beam(Stage2)은 handwriting realtime을 수신  
+   - Monitor(Stage3)은 `GET /api/monitors/:id/current` 폴링으로 `worryId`/`svgUrl`을 받아 해당 글자를 1순위로 렌더링 (완료 시 `POST .../complete`)
 3. **Beam Projector**: 실시간 3D 텍스트 객체 렌더링 및 물리 시뮬레이션
 4. **Arcade Button**: 물리 신호 -> PC 인터랙션 트리거
 
