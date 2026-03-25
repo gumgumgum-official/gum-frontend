@@ -12,6 +12,7 @@ import { createStageDebugControls } from "../utils/common/stageDebugControls.js"
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
+import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
 import {
@@ -100,6 +101,7 @@ export function Stage3() {
     "ArrowRight",
   ]);
   let character = null;
+  let gumFollowers = null;
 
   /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
   let portalPlaneConfig = null;
@@ -1298,6 +1300,26 @@ export function Stage3() {
 
           character.setup(backgroundMaxY, backgroundBounds);
 
+          // 유저를 따라다니는 껌딱지(사이드 캐릭터) 2마리
+          gumFollowers = createGumFollowersController({
+            scene,
+            glbLoader,
+            config,
+            getUserState: () => ({
+              position: character?.getPosition?.() ?? null,
+              yaw: character?.getYaw?.() ?? null,
+              moving: character?.getIsMoving?.() ?? false,
+            }),
+          });
+          // 캐릭터 모델 로딩 타이밍과 무관하게, 껌딱지는 init이 끝나는 즉시 update에서 따라오게 처리
+          try {
+            await gumFollowers.init({ backgroundMaxY });
+          } catch (e) {
+            console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
+            gumFollowers?.cleanup?.();
+            gumFollowers = null;
+          }
+
           const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
           const stage3Props = [
             { key: "tree1", name: "tree1" },
@@ -1494,6 +1516,9 @@ export function Stage3() {
       if (character) {
         character.update(delta, this.camera, { skipCameraFollow: true });
       }
+      if (gumFollowers) {
+        gumFollowers.update(delta);
+      }
       checkPortalPlaneCrossing();
     },
 
@@ -1507,6 +1532,10 @@ export function Stage3() {
       if (character) {
         character.cleanup();
         character = null;
+      }
+      if (gumFollowers) {
+        gumFollowers.cleanup();
+        gumFollowers = null;
       }
       if (canvasRef) {
         if (_pointerMoveRafId !== 0) {
