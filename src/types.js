@@ -86,6 +86,7 @@
  * @property {{x: number, y: number, z: number}} cameraOffset - 캐릭터 뒤 카메라 오프셋
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
+ * @property {any} gumFollowers
  */
 
 /**

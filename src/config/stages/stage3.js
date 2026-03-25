@@ -26,14 +26,38 @@ export const STAGE3_CONFIG = {
     receiveShadow: true,
   },
   /** 캐릭터 이동·카메라 (Stage3 전용) */
-  character: {
+  character: /** @type {any} */ ({
     groundOffset: 0.2, // 배경 위에 설 때 y 여유 공간
     moveSpeed: 5.0, // 이동 속도
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
     cameraOffset: { x: 0, y: 3, z: 8 }, // 캐릭터 뒤쪽 카메라 오프셋
     cameraLerpFactor: 0.1, // 카메라 부드러운 추적 강도
     lookAtHeightOffset: 1, // lookAt 시 캐릭터 머리 높이
-  },
+    /**
+     * 껌딱지(사이드 캐릭터) 2마리 설정
+     * - 유저 기준 좌/우 후방 45도 방향으로 일정 거리 유지
+     * - 유저 이동 시 걷기 애니메이션, 정지 시 paused(Idle) 처리
+     */
+    gumFollowers: {
+      modelPath: "/models/common/walk__gum.glb",
+      distance: 2, // 유저와 껌딱지 간 간격(바닥 기준)
+      angleDeg: 30, // 유저 후방 기준 좌/우로 벌리는 각도
+      followLerpFactor: 4, // 위치 lerp 스무딩(클수록 더 따라옴) -> 더 늦게 따라오도록 감소
+      turnLerpFactor: 7, // 유저가 급회전할 때 오프셋 yaw 스무딩
+      lookAtHeightOffset: 0.9, // 유저 바라볼 때 y 오프셋
+      breakOff: {
+        enabled: true,
+        yawThresholdDeg: 120, // 유저 yaw 변화가 이 이상이면 잠깐 "분리" 모드
+        durationSec: 0.55, // 분리 지속 시간
+        distanceMultiplier: 1.5, // 분리 중 목표 간격 확대
+        followLerpMultiplier: 0.35, // 분리 중 따라오는 강도 감소(관성)
+        driftAmplitude: 0.55, // 분리 중 옆으로 벌어지는 정도
+      },
+      scale: 0.7, // 껌딱지 모델 전체 크기
+      // 유저의 groundOffset을 그대로 쓰되, 필요하면 오버라이드 가능
+      groundOffset: null,
+    },
+  }),
   /** 13. 아이스크림 카트 (클릭 시 아이스크림 랜덤 스폰) */
   icecreamCart: {
     path: "/models/stage3/icecream_cart.glb",
