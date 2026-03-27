@@ -90,9 +90,9 @@
  */
 
 /**
- * Stage3 오브제 공통 설정 (tree1, notice, water 등)
+ * Stage3 오브제 공통 설정 (외부 GLB 배치 시)
  * @typedef {Object} Stage3PropConfig
- * @property {string} path
+ * @property {string} [path]
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
@@ -103,7 +103,7 @@
  * Stage3 포탈 전용 설정 (평면 통과 시 스테이지 전환)
  * @typedef {Object} Stage3PortalConfig
  * @extends Stage3PropConfig
- * @property {string} path
+ * @property {string} [path]
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
@@ -112,14 +112,14 @@
  * @property {number} [targetStage] - 전환할 Stage 번호
  */
 
-/** Stage3 아이스크림 카트 전용 설정 */
+/** Stage3 아이스크림 클릭 스폰 설정 (카트 메시는 island GLB 내 INT_icecream) */
 /**
  * @typedef {Object} Stage3IcecreamCartConfig
- * @property {string} path
+ * @property {string} [path]
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
- * @property {string[]} [spawnPaths] - 클릭 시 랜덤 스폰될 아이스크림 GLB 경로
+ * @property {string[]} [spawnPaths] - 레거시: 별도 GLB 스폰 경로
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxSpawns] - 스폰 최대 개수
  * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
@@ -143,7 +143,7 @@
  * @property {Stage3PropConfig} [gameMachine]
  * @property {Stage3PropConfig} [bench]
  * @property {Stage3PropConfig} [signs]
- * @property {Stage3PropConfig} [mirror] - FBX 거울
+ * @property {Stage3PropConfig} [mirror]
  */
 
 export {};
