@@ -6,7 +6,6 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
@@ -15,10 +14,7 @@ import { createCharacterController } from "../utils/stages/stage3/characterContr
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
-import {
-  STAGE3_CONFIG,
-  loadIceCreamSpawnModels,
-} from "../config/stages/stage3.js";
+import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import {
   openMinigame,
   closeMinigame,
@@ -56,7 +52,6 @@ export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
-  const fbxLoader = new FBXLoader();
   const objects = [];
   let debugControls = null;
   let sceneRef = null;
@@ -76,14 +71,10 @@ export function Stage3() {
   const fragmentPool = [];
   const FRAGMENT_POOL_MAX = 32;
 
-  // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
+  // island2.glb 내 INT_icecream 루트 (클릭 → 스폰, cannon-es)
   let iceCreamCartRef = null;
-  /** 게시판 클릭 → 모달 */
-  let noticeRef = null;
-  /** 게임기 클릭 → 미니게임 */
+  /** island2.glb 내 INT_gameMachine 루트 */
   let gameMachineRef = null;
-  /** 거울 클릭 → 모달 */
-  let mirrorRef = null;
   let unlistenMinigameClose = null;
   let noticeModalEl = null;
   let noticePaperAudio = null;
@@ -93,6 +84,16 @@ export function Stage3() {
   let iceCreamGroundBody = null;
   const _icePointer = new THREE.Vector2();
   const _iceRaycaster = new THREE.Raycaster();
+  const INT_PREFIX = "INT_";
+  const INT_SUFFIX_TO_TARGET = {
+    notice: "notice",
+    gameMachine: "gameMachine",
+    mirror: "mirror",
+    icecream: "icecream",
+    portal: "portal",
+  };
+  /** island2.glb 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
+  const intRaycastMeshes = [];
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -148,31 +149,81 @@ export function Stage3() {
     prevPortalSignedDist = signedDist;
   }
 
-  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | "mirror" | null */
+  function resolveIntPointerTarget(hitObject) {
+    let p = hitObject;
+    while (p) {
+      if (typeof p.name === "string" && p.name.startsWith(INT_PREFIX)) {
+        const suffix = p.name.slice(INT_PREFIX.length);
+        return INT_SUFFIX_TO_TARGET[suffix] ?? null;
+      }
+      p = p.parent;
+    }
+    return null;
+  }
+
+  /** island2 로드 후: INT_* 노드에서 레이캐스트 메시·refs 등록 */
+  function registerIslandInteractions(islandModel) {
+    intRaycastMeshes.length = 0;
+    iceCreamCartRef = null;
+    gameMachineRef = null;
+    if (unlistenMinigameClose) {
+      unlistenMinigameClose();
+      unlistenMinigameClose = null;
+    }
+
+    const meshSet = new Set();
+    const rootNames = [];
+    islandModel.traverse((obj) => {
+      if (typeof obj.name !== "string" || !obj.name.startsWith(INT_PREFIX)) {
+        return;
+      }
+      rootNames.push(obj.name);
+      const suffix = obj.name.slice(INT_PREFIX.length);
+      if (suffix === "gameMachine") gameMachineRef = obj;
+      if (suffix === "icecream") iceCreamCartRef = obj;
+      obj.traverse((child) => {
+        if (child.isMesh) meshSet.add(child);
+      });
+    });
+    intRaycastMeshes.push(...meshSet);
+
+    if (gameMachineRef) {
+      unlistenMinigameClose = onMinigameClose(() => {
+        closeMinigame({
+          camera: cameraRef,
+          orbitControls: debugControls?.getOrbitControls?.() ?? null,
+        });
+      });
+    }
+
+    if (rootNames.length > 0) {
+      const uniq = [...new Set(rootNames)];
+      console.log("[Stage3] island INT_ 노드:", uniq.join(", "));
+      const knownSuffixes = new Set(Object.keys(INT_SUFFIX_TO_TARGET));
+      for (const full of uniq) {
+        const suf = full.startsWith(INT_PREFIX)
+          ? full.slice(INT_PREFIX.length)
+          : full;
+        if (!knownSuffixes.has(suf)) {
+          console.log(
+            `[Stage3] INT_ '${full}' → 아직 클릭 핸들러 없음 (매핑 추가 또는 GLB 이름 변경)`,
+          );
+        }
+      }
+    }
+  }
+
+  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "mirror" | "portal" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
-    const targets = [
-      iceCreamCartRef,
-      noticeRef,
-      gameMachineRef,
-      mirrorRef,
-    ].filter(Boolean);
-    if (targets.length === 0) return null;
+    if (intRaycastMeshes.length === 0) return null;
     const rect = canvasRef.getBoundingClientRect();
     _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     _iceRaycaster.setFromCamera(_icePointer, cameraRef);
-    const hits = _iceRaycaster.intersectObjects(targets, true);
+    const hits = _iceRaycaster.intersectObjects(intRaycastMeshes, false);
     if (hits.length === 0) return null;
-    let obj = hits[0].object;
-    while (obj && obj !== sceneRef) {
-      if (iceCreamCartRef && obj === iceCreamCartRef) return "icecream";
-      if (noticeRef && obj === noticeRef) return "notice";
-      if (gameMachineRef && obj === gameMachineRef) return "gameMachine";
-      if (mirrorRef && obj === mirrorRef) return "mirror";
-      obj = obj.parent;
-    }
-    return null;
+    return resolveIntPointerTarget(hits[0].object);
   }
 
   let _pointerMoveRafId = 0;
@@ -271,7 +322,7 @@ export function Stage3() {
     if (noticeModalEl) noticeModalEl.style.display = "none";
   }
 
-  /** 아이스크림 카트 / 게시판 클릭 핸들러 */
+  /** island INT_* 클릭 핸들러 */
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
     const target = getPointerHitTarget(event.clientX, event.clientY);
@@ -297,6 +348,15 @@ export function Stage3() {
     }
     if (target === "mirror") {
       openMirrorModal();
+      return;
+    }
+    if (target === "portal") {
+      const targetStage = config.portal_bright?.targetStage ?? 6;
+      window.dispatchEvent(
+        new CustomEvent("stage:switch", {
+          detail: { targetStage },
+        }),
+      );
     }
   }
 
@@ -416,9 +476,21 @@ export function Stage3() {
     const sessionId = getSessionId();
     let list = [];
     for (const folder of [sessionId, sessionId + "/"]) {
-      const { data: files, error } = await supabase.storage
-        .from(HANDWRITING_BUCKET)
-        .list(folder.replace(/\/$/, ""), { limit: 500 });
+      let files;
+      let error;
+      try {
+        const res = await supabase.storage
+          .from(HANDWRITING_BUCKET)
+          .list(folder.replace(/\/$/, ""), { limit: 500 });
+        files = res.data;
+        error = res.error;
+      } catch (e) {
+        console.warn(
+          "[Stage3] handwriting Storage 목록 실패(네트워크 전환 등) — DB 폴백 시도:",
+          e?.message ?? e,
+        );
+        break;
+      }
       if (!error && Array.isArray(files)) {
         const svgFiles = files.filter(
           (f) => f.name && String(f.name).toLowerCase().endsWith(".svg"),
@@ -435,18 +507,22 @@ export function Stage3() {
       }
     }
     if (list.length === 0) {
-      const { data: rows } = await supabase
-        .from(HANDWRITING_TABLE)
-        .select("storage_path, created_at")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true })
-        .limit(500);
-      if (Array.isArray(rows) && rows.length > 0) {
-        list = rows.map((r) => ({
-          path: String(r.storage_path ?? ""),
-          id: String(r.storage_path ?? "").replace(/\.svg$/i, ""),
-          createdAt: r.created_at ?? null,
-        }));
+      try {
+        const { data: rows } = await supabase
+          .from(HANDWRITING_TABLE)
+          .select("storage_path, created_at")
+          .eq("session_id", sessionId)
+          .order("created_at", { ascending: true })
+          .limit(500);
+        if (Array.isArray(rows) && rows.length > 0) {
+          list = rows.map((r) => ({
+            path: String(r.storage_path ?? ""),
+            id: String(r.storage_path ?? "").replace(/\.svg$/i, ""),
+            createdAt: r.created_at ?? null,
+          }));
+        }
+      } catch (e) {
+        console.warn("[Stage3] handwriting DB 조회 실패:", e?.message ?? e);
       }
     }
     if (list.length === 0) return null;
@@ -1320,188 +1396,8 @@ export function Stage3() {
             gumFollowers = null;
           }
 
-          const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-          const stage3Props = [
-            { key: "tree1", name: "tree1" },
-            { key: "notice", name: "notice" },
-            { key: "portal_bright", name: "portal_bright" },
-            { key: "statue", name: "statue" },
-            { key: "well", name: "well" },
-            { key: "clock", name: "clock" },
-            { key: "water", name: "water" },
-            { key: "gameMachine", name: "gameMachine" },
-            { key: "bench", name: "bench" },
-            { key: "signs", name: "signs" },
-          ];
-
-          // 병렬 로드: 아이스크림 카트, 스폰 템플릿, props (tree1 포함)
-          const loadTasks = [];
-          const iceCart = config.icecreamCart;
-          if (iceCart) {
-            loadTasks.push({
-              type: "iceCart",
-              promise: glbLoader.loadAsync(base + iceCart.path),
-              data: iceCart,
-            });
-          }
-          loadTasks.push({
-            type: "spawn",
-            promise: loadIceCreamSpawnModels(),
-            data: null,
-          });
-          for (const { key, name } of stage3Props) {
-            const prop = config[key];
-            if (!prop) continue;
-            loadTasks.push({
-              type: "prop",
-              key,
-              name,
-              promise: glbLoader.loadAsync(base + prop.path),
-              data: prop,
-            });
-          }
-          // 거울(FBX) 별도 로드
-          const mirrorConfig = config.mirror;
-          if (mirrorConfig?.path) {
-            loadTasks.push({
-              type: "fbxProp",
-              name: "mirror",
-              promise: new Promise((resolve, reject) => {
-                fbxLoader.load(
-                  base + mirrorConfig.path,
-                  resolve,
-                  undefined,
-                  reject,
-                );
-              }),
-              data: mirrorConfig,
-            });
-          }
-
-          const results = await Promise.allSettled(
-            loadTasks.map((t) => t.promise),
-          );
           if (!isStage3Active) return;
-
-          loadTasks.forEach((task, i) => {
-            const result = results[i];
-            if (result.status === "rejected") {
-              if (task.type === "iceCart") {
-                console.warn(
-                  "❌ Stage3 아이스크림 카트 로드 실패:",
-                  base + task.data.path,
-                  result.reason,
-                );
-              } else if (task.type === "spawn") {
-                console.warn(
-                  "[Stage3] 아이스크림 스폰 모델 로드 실패:",
-                  result.reason,
-                );
-              } else {
-                console.warn(
-                  `❌ Stage3 ${task.name} 로드 실패:`,
-                  base + task.data.path,
-                  result.reason,
-                );
-              }
-              return;
-            }
-            const value = result.value;
-
-            if (task.type === "iceCart") {
-              const iceCreamCart = value.scene;
-              const d = task.data;
-              iceCreamCart.position.set(
-                d.position?.x ?? 0,
-                backgroundMaxY + (d.position?.y ?? 0),
-                d.position?.z ?? 0,
-              );
-              iceCreamCart.rotation.set(
-                ((d.rotation?.x ?? 0) * Math.PI) / 180,
-                ((d.rotation?.y ?? 0) * Math.PI) / 180,
-                ((d.rotation?.z ?? 0) * Math.PI) / 180,
-              );
-              iceCreamCart.scale.setScalar(d.scale ?? 1);
-              iceCreamCart.traverse((child) => {
-                if (child.isMesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-              iceCreamCart.userData.isIceCreamCart = true;
-              scene.add(iceCreamCart);
-              objects.push(iceCreamCart);
-              iceCreamCartRef = iceCreamCart;
-              console.log(
-                "✅ Stage3 아이스크림 카트 로드 완료:",
-                base + d.path,
-              );
-            } else if (task.type === "spawn") {
-              iceCreamTemplates.push(...value);
-              console.log(
-                "✅ Stage3 아이스크림 스폰 템플릿 로드 완료:",
-                value.length,
-                "개",
-              );
-            } else if (task.type === "fbxProp") {
-              const model = value; // FBX는 Object3D 직접 반환
-              const d = task.data;
-              model.position.set(
-                d.position?.x ?? 0,
-                backgroundMaxY + (d.position?.y ?? 0),
-                d.position?.z ?? 0,
-              );
-              model.rotation.set(
-                ((d.rotation?.x ?? 0) * Math.PI) / 180,
-                ((d.rotation?.y ?? 0) * Math.PI) / 180,
-                ((d.rotation?.z ?? 0) * Math.PI) / 180,
-              );
-              model.scale.setScalar(d.scale ?? 1);
-              model.traverse((child) => {
-                if (child instanceof THREE.Mesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-              scene.add(model);
-              objects.push(model);
-              if (task.name === "mirror") mirrorRef = model;
-              console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
-            } else {
-              const model = value.scene;
-              const d = task.data;
-              model.position.set(
-                d.position?.x ?? 0,
-                backgroundMaxY + (d.position?.y ?? 0),
-                d.position?.z ?? 0,
-              );
-              model.rotation.set(
-                ((d.rotation?.x ?? 0) * Math.PI) / 180,
-                ((d.rotation?.y ?? 0) * Math.PI) / 180,
-                ((d.rotation?.z ?? 0) * Math.PI) / 180,
-              );
-              model.scale.setScalar(d.scale ?? 1);
-              model.traverse((child) => {
-                if (child.isMesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-              scene.add(model);
-              objects.push(model);
-              if (task.key === "notice") noticeRef = model;
-              if (task.key === "gameMachine") {
-                gameMachineRef = model;
-                unlistenMinigameClose = onMinigameClose(() => {
-                  closeMinigame({
-                    camera: cameraRef,
-                    orbitControls: debugControls?.getOrbitControls?.() ?? null,
-                  });
-                });
-              }
-              console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
-            }
-          });
+          registerIslandInteractions(model);
         },
       });
 
@@ -1561,8 +1457,7 @@ export function Stage3() {
       });
       dispatchMinigameClose();
       dispatchMirrorModalClose();
-      noticeRef = null;
-      mirrorRef = null;
+      intRaycastMeshes.length = 0;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
         unlistenMinigameClose = null;

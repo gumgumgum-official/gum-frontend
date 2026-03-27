@@ -43,10 +43,13 @@ export function loadStage3Background({
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
 
-      // island 객체 탐색 (캐릭터 이동 범위 제한용)
-      const islandObject = model.children.find(
-        (child) => child.name === "island",
-      );
+      // island 객체 탐색 (캐릭터 이동 범위 제한용) — 깊은 계층·대소문자 허용
+      let islandObject = null;
+      model.traverse((obj) => {
+        if (islandObject) return;
+        const n = typeof obj.name === "string" ? obj.name.trim() : "";
+        if (n && n.toLowerCase() === "island") islandObject = obj;
+      });
 
       let backgroundBounds;
       if (islandObject) {
@@ -70,6 +73,18 @@ export function loadStage3Background({
         `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
       );
 
+      /** 클릭 타깃: 이름이 `INT_`로 시작하는 오브젝트 트리만 기본 raycast 유지 */
+      const isUnderIntInteractive = (mesh) => {
+        let p = mesh;
+        while (p) {
+          if (typeof p.name === "string" && p.name.startsWith("INT_")) {
+            return true;
+          }
+          p = p.parent;
+        }
+        return false;
+      };
+
       model.traverse((child) => {
         if (child.isMesh) {
           if (config.model.castShadow !== undefined) {
@@ -78,7 +93,9 @@ export function loadStage3Background({
           if (config.model.receiveShadow !== undefined) {
             child.receiveShadow = config.model.receiveShadow;
           }
-          child.raycast = () => {};
+          if (!isUnderIntInteractive(child)) {
+            child.raycast = () => {};
+          }
         }
       });
 
