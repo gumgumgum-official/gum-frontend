@@ -103,6 +103,8 @@ export function Stage3() {
   ]);
   let character = null;
   let gumFollowers = null;
+  /** 껌딱지 init(GLB await) 도중 cleanup 시 scene.add 방지용 */
+  let gumCancelled = false;
   /**
    * 카메라 인트로 상태
    * - stage 시작 시 섬 전체를 위에서 시계방향으로 천천히(부분 호) 보여준 뒤
@@ -327,7 +329,7 @@ export function Stage3() {
       });
     }
 
-    if (rootNames.length > 0) {
+    if (rootNames.length > 0 && import.meta.env.DEV) {
       const uniq = [...new Set(rootNames)];
       console.log("[Stage3] island INT_ 노드:", uniq.join(", "));
       const knownSuffixes = new Set(Object.keys(INT_SUFFIX_TO_TARGET));
@@ -520,16 +522,20 @@ export function Stage3() {
 
   function spawnIceCreamFromCart() {
     if (!iceCreamCartRef) {
-      console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
+      }
       return;
     }
     if (!sceneRef) return;
     const maxSpawns = config.icecreamCart?.maxSpawns ?? 10;
     if (spawnedIceCreams.length >= maxSpawns) return;
     if (iceCreamTemplates.length === 0) {
-      console.warn(
-        "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
-      );
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
+        );
+      }
       return;
     }
     initIceCreamPhysics();
@@ -616,10 +622,12 @@ export function Stage3() {
         files = res.data;
         error = res.error;
       } catch (e) {
-        console.warn(
-          "[Stage3] handwriting Storage 목록 실패(네트워크 전환 등) — DB 폴백 시도:",
-          e?.message ?? e,
-        );
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] handwriting Storage 목록 실패(네트워크 전환 등) — DB 폴백 시도:",
+            e?.message ?? e,
+          );
+        }
         break;
       }
       if (!error && Array.isArray(files)) {
@@ -653,7 +661,9 @@ export function Stage3() {
           }));
         }
       } catch (e) {
-        console.warn("[Stage3] handwriting DB 조회 실패:", e?.message ?? e);
+        if (import.meta.env.DEV) {
+          console.warn("[Stage3] handwriting DB 조회 실패:", e?.message ?? e);
+        }
       }
     }
     if (list.length === 0) return null;
@@ -723,7 +733,9 @@ export function Stage3() {
     try {
       const metadata = await getLatestHandwritingMetadata();
       if (!metadata?.url) {
-        console.log("[Stage3] 표시할 handwriting 없음");
+        if (import.meta.env.DEV) {
+          console.log("[Stage3] 표시할 handwriting 없음");
+        }
         return;
       }
       let shapes = await loadSVGShapes(metadata.url);
@@ -792,9 +804,13 @@ export function Stage3() {
         landed: false,
         hitCount: 0,
       };
-      console.log("[Stage3] 최신 글자 1개 낙하 시작 (2배 크기)");
+      if (import.meta.env.DEV) {
+        console.log("[Stage3] 최신 글자 1개 낙하 시작 (2배 크기)");
+      }
     } catch (e) {
-      console.warn("[Stage3] 글자 로드 실패:", e);
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] 글자 로드 실패:", e);
+      }
     } finally {
       letterLoadInProgress = false;
     }
@@ -822,12 +838,16 @@ export function Stage3() {
       s.bounces = 0;
       s.landed = false;
       s.hitCount = 0;
-      console.log("[Stage3] 0키: 글자 재낙하");
+      if (import.meta.env.DEV) {
+        console.log("[Stage3] 0키: 글자 재낙하");
+      }
       return;
     }
     if (sceneRef && cameraRef && stage3GroundY > 0) {
       loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
-      console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
+      if (import.meta.env.DEV) {
+        console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
+      }
     }
   }
 
@@ -1412,6 +1432,7 @@ export function Stage3() {
 
     setup(scene, renderer) {
       isStage3Active = true;
+      gumCancelled = false;
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
@@ -1499,7 +1520,9 @@ export function Stage3() {
         }) => {
           backgroundModel = model;
           debugControls.setOrbitTarget(center);
-          console.log("✅ Stage3 배경 모델 로드 완료");
+          if (import.meta.env.DEV) {
+            console.log("✅ Stage3 배경 모델 로드 완료");
+          }
 
           cameraRef = this.camera;
           stage3GroundY = backgroundMaxY;
@@ -1520,9 +1543,14 @@ export function Stage3() {
           });
           // 캐릭터 모델 로딩 타이밍과 무관하게, 껌딱지는 init이 끝나는 즉시 update에서 따라오게 처리
           try {
-            await gumFollowers.init({ backgroundMaxY });
+            await gumFollowers.init({
+              backgroundMaxY,
+              isCancelled: () => !isStage3Active || gumCancelled,
+            });
           } catch (e) {
-            console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
+            if (import.meta.env.DEV) {
+              console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
+            }
             gumFollowers?.cleanup?.();
             gumFollowers = null;
           }
@@ -1533,7 +1561,9 @@ export function Stage3() {
         },
       });
 
-      console.log("✅ Stage3 생성 완료");
+      if (import.meta.env.DEV) {
+        console.log("✅ Stage3 생성 완료");
+      }
     },
 
     update(delta) {
@@ -1555,6 +1585,7 @@ export function Stage3() {
 
     cleanup(scene) {
       isStage3Active = false;
+      gumCancelled = true;
       cameraIntro.active = false;
       cameraIntro.transitioning = false;
       cameraIntro.completed = false;
@@ -1682,7 +1713,9 @@ export function Stage3() {
       }
 
       scene.background = null;
-      console.log("🧹 Stage3 정리 완료");
+      if (import.meta.env.DEV) {
+        console.log("🧹 Stage3 정리 완료");
+      }
     },
   };
 }

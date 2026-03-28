@@ -89,7 +89,10 @@ export function createGumFollowersController({
     );
   }
 
-  async function init({ backgroundMaxY } = {}) {
+  /**
+   * @param {{ backgroundMaxY?: number, isCancelled?: () => boolean }} [opts]
+   */
+  async function init({ backgroundMaxY, isCancelled } = {}) {
     if (isReady) return;
     if (backgroundMaxY == null) {
       throw new Error("[GumFollowers] init requires backgroundMaxY");
@@ -98,6 +101,19 @@ export function createGumFollowersController({
     const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
     const fullPath = base + modelPath;
     const gltf = await glbLoader.loadAsync(fullPath);
+    if (isCancelled?.()) {
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry?.dispose();
+          const mat = child.material;
+          if (mat) {
+            if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+            else mat.dispose();
+          }
+        }
+      });
+      return;
+    }
     const baseModel = gltf.scene;
 
     // 원하는 크기로 먼저 스케일을 적용해야, minY 기반 y 보정도 맞게 계산됩니다.
