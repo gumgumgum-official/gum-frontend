@@ -1,4 +1,4 @@
-﻿/** Stage3 오브제/배경: 씬 지오메트리는 island2.glb 단일 모델만 사용 */
+/** Stage3 오브제/배경: 씬 지오메트리는 island2.glb 단일 모델만 사용 */
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
@@ -7,6 +7,13 @@ export const STAGE3_OBJECTS_CONFIG = {
     envMapIntensity: 1,
     castShadow: true,
     receiveShadow: true,
+    /**
+     * island 바운딩 min~max 보간으로 1차 후보 Y를 구한 뒤, `max - groundYInsetFromIslandTop`과
+     * 둘 중 더 높은 값을 씀(절벽/물 아래 min 때문에 보간값만 쓰면 발이 지면보다 낮아짐).
+     */
+    groundYLerpFromIslandMinMax: 0.97,
+    /** island 바운딩 max.y에서 빼는 값(m). 나무 꼭대기가 max면 조금 키워서 미세 조정 */
+    groundYInsetFromIslandTop: 0.35,
   },
 
   /**

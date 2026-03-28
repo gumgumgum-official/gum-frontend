@@ -6,7 +6,7 @@ export const STAGE3_CHARACTER_CONFIG = {
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {any} */ ({
-    groundOffset: 0.2, // 배경 위에 설 때 y 여유 공간
+    groundOffset: 0.45, // 배경 위에 설 때 y 여유 (메시·바운딩 오차 보정)
     moveSpeed: 5.0, // 이동 속도
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
     cameraOffset: { x: 0, y: 3, z: 8 }, // 캐릭터 뒤쪽 카메라 오프셋

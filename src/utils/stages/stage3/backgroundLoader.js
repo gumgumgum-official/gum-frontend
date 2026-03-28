@@ -65,12 +65,30 @@ export function loadStage3Background({
         backgroundBounds = box.clone();
       }
 
-      // Stage3에서는 캐릭터가 서는 실제 섬 윗면(y≈6.2)을 기준 바닥으로 사용한다.
-      // box.max.y(나무/등대 꼭대기)는 너무 높아서 다른 프롭들이 공중에 뜬다.
-      const backgroundMaxY = center.y;
+      // 발 높이: 전체 씬 center.y는 물·배경에 끌려 낮게 잡히기 쉬움.
+      // island의 min이 물/절벽 아래까지 포함되면 min+(max-min)*t 만으로는 지면보다 낮아질 수 있어
+      // max.y 근처 후보와 둘 중 더 높은 쪽을 택한다.
+      let backgroundMaxY = center.y;
+      if (islandObject) {
+        const t = THREE.MathUtils.clamp(
+          config.model.groundYLerpFromIslandMinMax ?? 0.95,
+          0,
+          1,
+        );
+        const minY = backgroundBounds.min.y;
+        const maxY = backgroundBounds.max.y;
+        const h = maxY - minY;
+        const lerpY = minY + h * t;
+        const inset =
+          config.model.groundYInsetFromIslandTop != null
+            ? config.model.groundYInsetFromIslandTop
+            : 0.5;
+        const nearTopY = maxY - Math.max(0, inset);
+        backgroundMaxY = Math.max(lerpY, nearTopY);
+      }
 
       console.log(
-        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, center=${center.y.toFixed(2)}`,
+        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, sceneCenter.y=${center.y.toFixed(2)}`,
       );
 
       /** 클릭 타깃: 이름이 `INT_`로 시작하는 오브젝트 트리만 기본 raycast 유지 */
