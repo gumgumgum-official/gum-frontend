@@ -103,10 +103,141 @@ export function Stage3() {
   ]);
   let character = null;
   let gumFollowers = null;
+  /**
+   * 카메라 인트로 상태
+   * - stage 시작 시 섬 전체를 위에서 시계방향으로 천천히(부분 호) 보여준 뒤
+   * - 캐릭터 기준 카메라 포즈로 줌인 전환 후 추적 모드로 넘어간다.
+   */
+  const cameraIntro = {
+    active: false,
+    transitioning: false,
+    completed: false,
+    elapsed: 0,
+    transitionElapsed: 0,
+    /** 인트로 회전 구간 길이 — 클수록 같은 sweep 각에서 더 천천히 회전 */
+    durationSec: 9,
+    transitionSec: 2.0,
+    /** 시계방향으로 도는 각(rad). */
+    sweepAngleRad: Math.PI * 0.78,
+    center: new THREE.Vector3(),
+    radius: 20,
+    height: 18,
+    startAngle: 0,
+    lookAtY: 0,
+    fromPos: new THREE.Vector3(),
+    fromLookAt: new THREE.Vector3(),
+    toPos: new THREE.Vector3(),
+    toLookAt: new THREE.Vector3(),
+  };
+  const _introTargetPos = new THREE.Vector3();
+  const _introTargetLookAt = new THREE.Vector3();
+  const _introLerpLookAt = new THREE.Vector3();
 
   /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
   let portalPlaneConfig = null;
   let prevPortalSignedDist = null;
+
+  function getCharacterFollowPose(outPos, outLookAt) {
+    if (!character) return false;
+    const pos = character.getPosition?.();
+    if (!pos) return false;
+    const camOffset = config.character?.cameraOffset ?? { x: 0, y: 3, z: 8 };
+    const lookAtHeight = config.character?.lookAtHeightOffset ?? 1;
+    outPos.set(pos.x + camOffset.x, pos.y + camOffset.y, pos.z + camOffset.z);
+    outLookAt.copy(pos);
+    outLookAt.y += lookAtHeight;
+    return true;
+  }
+
+  function startCameraIntro(center, bounds) {
+    if (!cameraRef) return;
+    cameraIntro.active = true;
+    cameraIntro.transitioning = false;
+    cameraIntro.completed = false;
+    cameraIntro.elapsed = 0;
+    cameraIntro.transitionElapsed = 0;
+    cameraIntro.center.copy(center);
+    const size = new THREE.Vector3();
+    bounds.getSize(size);
+    const horizontalSize = Math.max(size.x, size.z);
+    // 수평 반경을 살짝 줄여 더 “정수리에 가깝게”
+    cameraIntro.radius = Math.max(13, horizontalSize * 0.76);
+    // 더 높은 위치 + 시선은 바운딩 중심보다 약간 아래(섬 윗면 쪽)로 두어 내려다보기 강화
+    cameraIntro.height = center.y + Math.max(60, size.y * 1.2 + 16);
+    const minY = bounds.min.y;
+    const maxY = bounds.max.y;
+    const targetLookY = center.y - Math.min(size.y * 0.14, 4);
+    cameraIntro.lookAtY = THREE.MathUtils.clamp(
+      targetLookY,
+      minY + size.y * 0.05,
+      maxY - 0.3,
+    );
+    // 궤도 각: x = center.x + sin(θ)*r, z = center.z + cos(θ)*r, 시간에 따라 θ 감소 = 시계방향 스윕
+    // 시작점을 시계 반대 방향으로 약 60° 옮김 → θ에 π/3 더하기
+    const baseAngle = Math.atan2(
+      cameraRef.position.x - center.x,
+      cameraRef.position.z - center.z,
+    );
+    cameraIntro.startAngle = baseAngle + Math.PI / 2;
+
+    const orbit = debugControls?.getOrbitControls?.();
+    if (orbit) orbit.enabled = false;
+  }
+
+  function updateCameraIntro(delta) {
+    if (!cameraRef || !cameraIntro.active || cameraIntro.completed) return;
+
+    if (!cameraIntro.transitioning) {
+      cameraIntro.elapsed += delta;
+      const t = Math.min(1, cameraIntro.elapsed / cameraIntro.durationSec);
+      const angle = cameraIntro.startAngle - cameraIntro.sweepAngleRad * t; // 시계방향
+      cameraRef.position.set(
+        cameraIntro.center.x + Math.sin(angle) * cameraIntro.radius,
+        cameraIntro.height,
+        cameraIntro.center.z + Math.cos(angle) * cameraIntro.radius,
+      );
+      cameraRef.lookAt(
+        cameraIntro.center.x,
+        cameraIntro.lookAtY,
+        cameraIntro.center.z,
+      );
+
+      if (
+        t >= 1 &&
+        getCharacterFollowPose(_introTargetPos, _introTargetLookAt)
+      ) {
+        cameraIntro.transitioning = true;
+        cameraIntro.transitionElapsed = 0;
+        cameraIntro.fromPos.copy(cameraRef.position);
+        cameraIntro.fromLookAt.set(
+          cameraIntro.center.x,
+          cameraIntro.lookAtY,
+          cameraIntro.center.z,
+        );
+      }
+      return;
+    }
+
+    if (!getCharacterFollowPose(cameraIntro.toPos, cameraIntro.toLookAt))
+      return;
+    cameraIntro.transitionElapsed += delta;
+    const t = Math.min(
+      1,
+      cameraIntro.transitionElapsed / cameraIntro.transitionSec,
+    );
+    const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+    cameraRef.position.copy(cameraIntro.fromPos).lerp(cameraIntro.toPos, eased);
+    _introLerpLookAt
+      .copy(cameraIntro.fromLookAt)
+      .lerp(cameraIntro.toLookAt, eased);
+    cameraRef.lookAt(_introLerpLookAt);
+
+    if (t >= 1) {
+      cameraIntro.active = false;
+      cameraIntro.transitioning = false;
+      cameraIntro.completed = true;
+    }
+  }
 
   const handleStageKeyDown = (event) => {
     if (event.key === "Enter") {
@@ -1398,6 +1529,7 @@ export function Stage3() {
 
           if (!isStage3Active) return;
           registerIslandInteractions(model);
+          startCameraIntro(center, backgroundBounds);
         },
       });
 
@@ -1410,8 +1542,11 @@ export function Stage3() {
       updateFragments(delta);
       updateSpawnedIceCreams(delta);
       if (character) {
-        character.update(delta, this.camera, { skipCameraFollow: true });
+        character.update(delta, this.camera, {
+          skipCameraFollow: cameraIntro.active || !cameraIntro.completed,
+        });
       }
+      updateCameraIntro(delta);
       if (gumFollowers) {
         gumFollowers.update(delta);
       }
@@ -1420,6 +1555,9 @@ export function Stage3() {
 
     cleanup(scene) {
       isStage3Active = false;
+      cameraIntro.active = false;
+      cameraIntro.transitioning = false;
+      cameraIntro.completed = false;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,
