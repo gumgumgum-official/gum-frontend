@@ -40,7 +40,7 @@ export const STAGE3_OBJECTS_CONFIG = {
    */
   portal_bright: {
     position: { x: -3, y: -0.3, z: 12 },
-    normal: { x: 0, z: 1 },
+    normal: { x: 0, y: 0, z: 1 },
     halfWidth: 2,
     targetStage: 6,
   },

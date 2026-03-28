@@ -1593,6 +1593,7 @@ export function Stage3() {
         camera: cameraRef ?? this.camera,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
+      cameraRef = null;
       dispatchMinigameClose();
       dispatchMirrorModalClose();
       intRaycastMeshes.length = 0;

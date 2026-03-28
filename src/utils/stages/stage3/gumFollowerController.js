@@ -22,8 +22,8 @@ export function createGumFollowersController({
   getUserState,
 }) {
   const gumCfg = config.character?.gumFollowers ?? null;
-  const gumModelCfg = gumCfg?.models ?? gumCfg;
-  const gumBehaviorCfg = gumCfg?.behavior ?? gumCfg;
+  const gumModelCfg = gumCfg?.models;
+  const gumBehaviorCfg = gumCfg?.behavior;
 
   const modelPath = gumModelCfg?.modelPath ?? "/models/common/walk__gum.glb";
   const distance = gumBehaviorCfg?.distance ?? 2.2;
@@ -74,14 +74,19 @@ export function createGumFollowersController({
   let prevUserYaw = null;
 
   function lerpAngle(from, to, t) {
-    // 각도 차이를 [-PI, PI]로 정규화한 뒤 t만큼 이동
-    const diff = ((to - from + Math.PI) % (Math.PI * 2)) - Math.PI;
+    // 각도 차이를 [-PI, PI]로 정규화한 뒤 t만큼 이동 (% 는 음수 나머지를 줄 수 있어 euclideanModulo 사용)
+    const diff =
+      THREE.MathUtils.euclideanModulo(to - from + Math.PI, Math.PI * 2) -
+      Math.PI;
     return from + diff * t;
   }
 
   function angleDiff(from, to) {
     // from→to 각도 차이를 [-PI, PI] 범위로 정규화
-    return ((to - from + Math.PI) % (Math.PI * 2)) - Math.PI;
+    return (
+      THREE.MathUtils.euclideanModulo(to - from + Math.PI, Math.PI * 2) -
+      Math.PI
+    );
   }
 
   async function init({ backgroundMaxY } = {}) {
@@ -162,21 +167,8 @@ export function createGumFollowersController({
     return userYaw + Math.PI + side * angleRad;
   }
 
-  function updateFollowerFacing(userPos, follower, delta) {
-    _look.copy(userPos).sub(follower.model.position);
-    _look.y = 0;
-    if (_look.lengthSq() < 1e-6) return;
-    const yaw = Math.atan2(_look.x, _look.z);
-    const tFace = Math.min(1, facingLerpFactor * delta);
-    follower.model.rotation.y = lerpAngle(
-      follower.model.rotation.y,
-      yaw,
-      tFace,
-    );
-  }
-
-  function updateFollowerFacingToTarget(targetPos, follower, delta) {
-    _look.copy(targetPos).sub(follower.model.position);
+  function updateFollowerFacingTo(lookTarget, follower, delta) {
+    _look.copy(lookTarget).sub(follower.model.position);
     _look.y = 0;
     if (_look.lengthSq() < 1e-6) return;
     const yaw = Math.atan2(_look.x, _look.z);
@@ -285,9 +277,9 @@ export function createGumFollowersController({
 
         // 걷는 동안은 "이동 앞"을 보고, 멈추면 유저를 바라보도록 전환
         if (moving) {
-          updateFollowerFacingToTarget(_target, f, delta);
+          updateFollowerFacingTo(_target, f, delta);
         } else {
-          updateFollowerFacing(userPos, f, delta);
+          updateFollowerFacingTo(userPos, f, delta);
         }
 
         f.mixer.update(delta);
@@ -313,6 +305,8 @@ export function createGumFollowersController({
       followers.length = 0;
       followerYOffsetFromUserY = null;
       isReady = false;
+      isMovingPrev = false;
+      stopOnNextLoop = false;
       elapsedSec = 0;
       breakOffUntil = 0;
       prevUserYaw = null;
