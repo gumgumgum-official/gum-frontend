@@ -5,7 +5,7 @@ export const STAGE3_CHARACTER_CONFIG = {
   characterModelPath: "/models/common/user_walking_color.glb",
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
-  character: /** @type {any} */ ({
+  character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({
     groundOffset: 0.45, // 배경 위에 설 때 y 여유 (메시·바운딩 오차 보정)
     moveSpeed: 5.0, // 이동 속도
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
@@ -27,6 +27,7 @@ export const STAGE3_CHARACTER_CONFIG = {
         angleDeg: 30, // 유저 후방 기준 좌/우로 벌리는 각도
         followLerpFactor: 4, // 위치 lerp 스무딩
         turnLerpFactor: 7, // 유저가 급회전할 때 오프셋 yaw 스무딩
+        facingLerpFactor: 6, // 유저/목표 방향 바라보기 yaw 스무딩
         lookAtHeightOffset: 0.9, // 유저 바라볼 때 y 오프셋
         breakOff: {
           enabled: true,

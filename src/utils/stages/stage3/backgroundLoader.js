@@ -55,13 +55,17 @@ export function loadStage3Background({
       if (islandObject) {
         islandObject.updateMatrixWorld(true);
         backgroundBounds = new THREE.Box3().setFromObject(islandObject);
-        console.log(
-          `🏝️ Island 바운딩 박스: min=(${backgroundBounds.min.x.toFixed(2)}, ${backgroundBounds.min.y.toFixed(2)}, ${backgroundBounds.min.z.toFixed(2)}), max=(${backgroundBounds.max.x.toFixed(2)}, ${backgroundBounds.max.y.toFixed(2)}, ${backgroundBounds.max.z.toFixed(2)})`,
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            `🏝️ Island 바운딩 박스: min=(${backgroundBounds.min.x.toFixed(2)}, ${backgroundBounds.min.y.toFixed(2)}, ${backgroundBounds.min.z.toFixed(2)}), max=(${backgroundBounds.max.x.toFixed(2)}, ${backgroundBounds.max.y.toFixed(2)}, ${backgroundBounds.max.z.toFixed(2)})`,
+          );
+        }
       } else {
-        console.warn(
-          "⚠️ Island 객체를 찾을 수 없습니다. 전체 모델의 바운딩 박스를 사용합니다.",
-        );
+        if (import.meta.env.DEV) {
+          console.warn(
+            "⚠️ Island 객체를 찾을 수 없습니다. 전체 모델의 바운딩 박스를 사용합니다.",
+          );
+        }
         backgroundBounds = box.clone();
       }
 
@@ -87,9 +91,11 @@ export function loadStage3Background({
         backgroundMaxY = Math.max(lerpY, nearTopY);
       }
 
-      console.log(
-        `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, sceneCenter.y=${center.y.toFixed(2)}`,
-      );
+      if (import.meta.env.DEV) {
+        console.log(
+          `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, sceneCenter.y=${center.y.toFixed(2)}`,
+        );
+      }
 
       /** 클릭 타깃: 이름이 `INT_`로 시작하는 오브젝트 트리만 기본 raycast 유지 */
       const isUnderIntInteractive = (mesh) => {
@@ -134,13 +140,15 @@ export function loadStage3Background({
       }
 
       scene.add(model);
-      console.log("✅ Stage3 배경 모델 로드 완료");
+      if (import.meta.env.DEV) {
+        console.log("✅ Stage3 배경 모델 로드 완료");
+      }
       inspectModel(model, null, "배경 모델");
 
       onReady({ model, center, backgroundMaxY, backgroundBounds });
     },
     onProgress: (xhr) => {
-      if (xhr.total > 0) {
+      if (import.meta.env.DEV && xhr.total > 0) {
         console.log(
           `Stage3 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
         );
