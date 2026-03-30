@@ -6,11 +6,6 @@ const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
 const card = "oklch(0.99 0.012 85)";
 const amber50 = "#fffbeb";
-// Wood grain approximation (no external texture asset available).
-const woodTexture =
-  "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.18))," +
-  "repeating-linear-gradient(90deg, rgba(0,0,0,0.12) 0px 1px, rgba(255,255,255,0) 1px 8px)," +
-  "repeating-linear-gradient(25deg, rgba(255,255,255,0.06) 0px 2px, rgba(255,255,255,0) 2px 14px)";
 
 /** @param {Object} props
  * @param {boolean} props.isOpen
@@ -81,9 +76,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 alignItems: "center",
                 justifyContent: "center",
                 padding: "16px 28px",
-                backgroundColor: wood,
-                backgroundImage: woodTexture,
-                backgroundBlendMode: "overlay, multiply, overlay",
+                background: wood,
                 borderBottom: `3px solid ${woodDark}`,
                 borderRadius: "24px 24px 0 0",
                 margin: "-3px -3px 0 -3px",
