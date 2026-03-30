@@ -105,11 +105,11 @@ export function createStageDebugControls(params) {
   }
 
   // ---- TransformControls (축 조정)
+  // Three.js r170+ : TransformControls는 Controls 상속 — 씬에는 getHelper() Object3D만 추가
   transformControls = new TransformControls(camera, domElement);
   transformControls.setMode("translate");
-  // TransformControls는 Object3D를 확장하므로 씬에 추가 가능 (타입 단언 필요)
-  // @ts-ignore - TransformControls extends Object3D but TypeScript types may not reflect this
-  scene.add(transformControls);
+  const transformControlHelper = transformControls.getHelper();
+  scene.add(transformControlHelper);
   transformControls.addEventListener("dragging-changed", (e) => {
     if (orbitControls) orbitControls.enabled = !e.value;
     if (!e.value) logConfigToConsole(); // 축 드래그 끝날 때마다 콘솔 출력
@@ -320,8 +320,7 @@ export function createStageDebugControls(params) {
       }
       if (transformControls) {
         transformControls.detach();
-        // @ts-expect-error - TransformControls extends Object3D but TypeScript types may not reflect this
-        scene.remove(transformControls);
+        scene.remove(transformControlHelper);
         transformControls.dispose();
       }
       if (dragControls) {

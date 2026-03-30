@@ -30,6 +30,7 @@ export function createCharacterController({
   let characterMixer = null;
   let characterWalkAction = null;
   let isWalking = false;
+  let isMoving = false;
   let backgroundBounds = null;
   let stopOnNextLoop = false;
 
@@ -128,26 +129,15 @@ export function createCharacterController({
       if (keys.ArrowLeft) _moveVector.x -= 1;
       if (keys.ArrowRight) _moveVector.x += 1;
 
-      const moving = _moveVector.length() > 0;
+      const movingInput = _moveVector.length() > 0;
+      let moved = false;
 
-      if (characterWalkAction) {
-        if (moving) {
-          if (!isWalking) {
-            stopOnNextLoop = false;
-            characterWalkAction.paused = false;
-            isWalking = true;
-          }
-        } else {
-          if (isWalking) {
-            stopOnNextLoop = true;
-            isWalking = false;
-          }
-        }
-      }
-
-      if (moving) {
+      if (movingInput) {
         _direction.copy(_moveVector).normalize();
         _moveVector.copy(_direction).multiplyScalar(moveSpeed * delta);
+
+        const oldX = characterModel.position.x;
+        const oldZ = characterModel.position.z;
 
         let newX = characterModel.position.x + _moveVector.x;
         let newZ = characterModel.position.z + _moveVector.z;
@@ -167,8 +157,27 @@ export function createCharacterController({
         characterModel.position.z = newZ;
         characterModel.position.y = characterYPosition;
 
+        moved = Math.abs(newX - oldX) > 1e-6 || Math.abs(newZ - oldZ) > 1e-6;
+
         const angle = Math.atan2(_direction.x, _direction.z);
         characterModel.rotation.y = angle;
+      }
+
+      // 실제 이동(moved) 기준으로 애니메이션/이동 상태 갱신
+      isMoving = moved;
+      if (characterWalkAction) {
+        if (moved) {
+          if (!isWalking) {
+            stopOnNextLoop = false;
+            characterWalkAction.paused = false;
+            isWalking = true;
+          }
+        } else {
+          if (isWalking) {
+            stopOnNextLoop = true;
+            isWalking = false;
+          }
+        }
       }
 
       if (characterMixer) {
@@ -216,6 +225,20 @@ export function createCharacterController({
 
     getPosition() {
       return characterModel?.position ?? null;
+    },
+    /**
+     * 바닥 플래너(y=0) 기준 유저가 바라보는 방향의 yaw(radian).
+     * @returns {number|null}
+     */
+    getYaw() {
+      return characterModel ? characterModel.rotation.y : null;
+    },
+    /**
+     * 현재 프레임 입력 기준으로 이동 중인지 여부.
+     * @returns {boolean}
+     */
+    getIsMoving() {
+      return isMoving;
     },
   };
 }
