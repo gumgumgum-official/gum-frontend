@@ -15,7 +15,7 @@
 /**
  * initThreeApp 옵션
  * @typedef {Object} InitThreeAppOptions
- * @property {number[]} [allowedStages] - 허용 Stage 목록 (예: [2], [3,4,5,6])
+ * @property {number[]} [allowedStages] - 허용 Stage 목록 (예: [2], [3, 6])
  * @property {number} [initialStage] - 시작 Stage
  * @property {boolean} [enableKeyboardSwitch] - 키보드 2~6 전환 활성화
  * @property {function(string, Error?): void} [onError] - 에러 시 사용자 피드백용 콜백 (메시지, 원본 에러)
@@ -78,6 +78,45 @@
  */
 
 /**
+ * Stage3 껌딱지(사이드 캐릭터) 분리(break-off) 동작 설정
+ * @typedef {Object} Stage3GumFollowerBreakOffConfig
+ * @property {boolean} [enabled]
+ * @property {number} [yawThresholdDeg] - 유저 yaw 변화가 이 값(도) 이상이면 분리 모드
+ * @property {number} [durationSec] - 분리 지속 시간(초)
+ * @property {number} [distanceMultiplier] - 분리 중 목표 간격 배율
+ * @property {number} [followLerpMultiplier] - 분리 중 위치 추종 강도 배율
+ * @property {number} [driftAmplitude] - 분리 중 옆으로 벌어지는 정도
+ */
+
+/**
+ * Stage3 껌딱지 GLB 경로·스케일
+ * @typedef {Object} Stage3GumFollowerModelsConfig
+ * @property {string} [modelPath]
+ * @property {number} [scale] - 모델 전체 스케일
+ */
+
+/**
+ * Stage3 껌딱지 추종·바라보기·애니메이션 동작
+ * @typedef {Object} Stage3GumFollowerBehaviorConfig
+ * @property {number} [distance] - 유저와의 바닥 기준 간격
+ * @property {number} [angleDeg] - 유저 후방 기준 좌/우 벌림 각도(도)
+ * @property {number} [followLerpFactor] - 위치 lerp
+ * @property {number} [turnLerpFactor] - 오프셋 yaw lerp
+ * @property {number} [facingLerpFactor] - 바라보기 yaw lerp
+ * @property {number} [lookAtHeightOffset] - 유저 바라볼 때 y 오프셋
+ * @property {number} [animationSpeed] - 애니메이션 속도(미지정 시 스케일로 보정)
+ * @property {number|null} [groundOffset] - 발 높이 보정(null이면 캐릭터 groundOffset)
+ * @property {Stage3GumFollowerBreakOffConfig} [breakOff]
+ */
+
+/**
+ * Stage3 껌딱지(사이드 캐릭터) 전체 설정 (models + behavior)
+ * @typedef {Object} Stage3GumFollowersConfig
+ * @property {Stage3GumFollowerModelsConfig} models
+ * @property {Stage3GumFollowerBehaviorConfig} behavior
+ */
+
+/**
  * Stage3 캐릭터 이동·카메라 설정
  * @typedef {Object} Stage3CharacterConfig
  * @property {number} groundOffset - 배경 위 y 여유 공간
@@ -86,28 +125,43 @@
  * @property {{x: number, y: number, z: number}} cameraOffset - 캐릭터 뒤 카메라 오프셋
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
+ * @property {Stage3GumFollowersConfig} gumFollowers
  */
 
 /**
- * Stage3 오브제 공통 설정 (tree1, notice, water 등)
+ * Stage3 오브제 공통 설정 (외부 GLB 배치 시)
  * @typedef {Object} Stage3PropConfig
- * @property {string} path
+ * @property {string} [path]
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
  * @property {string[]} [paperSoundPaths] - 게시판 등 클릭 시 재생할 사운드 경로
  */
 
-/** Stage3 아이스크림 카트 전용 설정 */
 /**
- * @typedef {Object} Stage3IcecreamCartConfig
- * @property {string} path
+ * Stage3 포탈 전용 설정 (평면 통과 시 스테이지 전환)
+ * @typedef {Object} Stage3PortalConfig
+ * @extends Stage3PropConfig
+ * @property {string} [path]
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
- * @property {string[]} [spawnPaths] - 클릭 시 랜덤 스폰될 아이스크림 GLB 경로
+ * @property {{x: number, y?: number, z: number}} [normal] - 수직 포탈 평면 법선; y 생략 시 0(수평 XZ 성분만 사용)
+ * @property {number} [halfWidth] - 포탈 반폭 (수평 허용 거리)
+ * @property {number} [targetStage] - 전환할 Stage 번호
+ */
+
+/** Stage3 아이스크림 클릭 스폰 설정 (카트 메시는 island GLB 내 INT_icecream) */
+/**
+ * @typedef {Object} Stage3IcecreamCartConfig
+ * @property {string} [path]
+ * @property {{x?: number, y?: number, z?: number}} [position]
+ * @property {{x?: number, y?: number, z?: number}} [rotation]
+ * @property {number} [scale]
+ * @property {string[]} [spawnPaths] - 레거시: 별도 GLB 스폰 경로
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxSpawns] - 스폰 최대 개수
+ * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
  */
 
 /**
@@ -120,7 +174,7 @@
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
  * @property {Stage3PropConfig} [tree1]
  * @property {Stage3PropConfig} [notice]
- * @property {Stage3PropConfig} [portal_bright]
+ * @property {Stage3PortalConfig} [portal_bright]
  * @property {Stage3PropConfig} [statue]
  * @property {Stage3PropConfig} [well]
  * @property {Stage3PropConfig} [clock]
@@ -128,6 +182,7 @@
  * @property {Stage3PropConfig} [gameMachine]
  * @property {Stage3PropConfig} [bench]
  * @property {Stage3PropConfig} [signs]
+ * @property {Stage3PropConfig} [mirror]
  */
 
 export {};
