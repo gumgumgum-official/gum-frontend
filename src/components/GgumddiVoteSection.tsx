@@ -35,10 +35,11 @@ const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
   },
 ];
 
-const BAR_GRADIENTS = [
-  "bg-gradient-to-br from-[#ff8b33] to-[#ffa050] text-white",
-  "bg-gradient-to-br from-[#b8a080] to-[#f4ede5] text-[#333]",
-  "bg-gradient-to-br from-[#ff4a89] to-[#ff7eb3] text-white",
+/** 후보 점(dot)과 같은 단색 막대 (그라데이션 없음) */
+const BAR_FILLS = [
+  "bg-[#FF8B33]",
+  "bg-[#c4a882]",
+  "bg-[#FF4A89]",
 ] as const;
 
 function loadPersisted(): {
@@ -264,7 +265,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
             {CANDIDATES.map(({ id, name, dot }, idx) => {
               const count = votes[id];
               const pct = total > 0 ? (count / total) * 100 : 0;
-              const barGrad = BAR_GRADIENTS[idx];
+              const barFill = BAR_FILLS[idx];
               const hasVotes = count > 0;
               return (
                 <div
@@ -297,7 +298,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
                   </div>
                   <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200/90 ring-1 ring-inset ring-slate-300/50">
                     <div
-                      className={`h-full rounded-full transition-[width] duration-500 ease-out ${barGrad} ${hasVotes ? "shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : ""}`}
+                      className={`h-full rounded-full transition-[width] duration-500 ease-out ${barFill} ${hasVotes ? "shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : ""}`}
                       style={{
                         width: hasVotes ? `${pct}%` : "0%",
                       }}
