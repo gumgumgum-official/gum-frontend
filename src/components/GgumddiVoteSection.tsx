@@ -1,32 +1,292 @@
-const POSTER_W = 648;
-const POSTER_H = 864;
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
-/** 줌 등에서 `best_gum_poster.svg`만 표시(클릭/투표 없음). */
+type VoteId = 1 | 2 | 3;
+
+const STORAGE_KEY = "gum-ggumddi-vote-v2";
+const ASSET = "/assets/poster";
+
+const INITIAL_VOTES: Record<VoteId, number> = { 1: 0, 2: 0, 3: 0 };
+
+const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] =
+  [
+    { id: 1, name: "1. 껌뚝지", image: `${ASSET}/gum_poster_1.svg`, dot: "#FF8B33" },
+    { id: 2, name: "2. 껌떡지", image: `${ASSET}/gum_poster_2.svg`, dot: "#c4a882" },
+    { id: 3, name: "3. 껌뚱지", image: `${ASSET}/gum_poster_3.svg`, dot: "#FF4A89" },
+  ];
+
+const BAR_GRADIENTS = [
+  "bg-gradient-to-br from-[#ff8b33] to-[#ffa050] text-white",
+  "bg-gradient-to-br from-[#b8a080] to-[#f4ede5] text-[#333]",
+  "bg-gradient-to-br from-[#ff4a89] to-[#ff7eb3] text-white",
+] as const;
+
+function loadPersisted(): { votes: Record<VoteId, number>; myVote: VoteId | null } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { votes: { ...INITIAL_VOTES }, myVote: null };
+    const p = JSON.parse(raw) as {
+      votes?: Partial<Record<string, number>>;
+      myVote?: VoteId | null;
+    };
+    const v = p.votes;
+    if (
+      v &&
+      typeof v["1"] === "number" &&
+      typeof v["2"] === "number" &&
+      typeof v["3"] === "number"
+    ) {
+      return {
+        votes: { 1: v["1"], 2: v["2"], 3: v["3"] },
+        myVote: p.myVote === 1 || p.myVote === 2 || p.myVote === 3 ? p.myVote : null,
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { votes: { ...INITIAL_VOTES }, myVote: null };
+}
+
+function persist(votes: Record<VoteId, number>, myVote: VoteId | null) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ votes, myVote }));
+  } catch {
+    /* ignore */
+  }
+}
+
+type VoteBundle = {
+  votes: Record<VoteId, number>;
+  myVote: VoteId | null;
+};
+
+/** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 (`gum_vote_prototype.html`와 동일한 흐름). */
 export function GgumddiVoteSection({ className }: { className?: string }) {
+  const [bundle, setBundle] = useState<VoteBundle>(loadPersisted);
+  const { votes, myVote } = bundle;
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [justVotedId, setJustVotedId] = useState<VoteId | null>(null);
+
+  const posterWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    persist(votes, myVote);
+  }, [votes, myVote]);
+
+  useLayoutEffect(() => {
+    if (justVotedId === null) return;
+    const t = window.setTimeout(() => setJustVotedId(null), 450);
+    return () => window.clearTimeout(t);
+  }, [justVotedId]);
+
+  const total = votes[1] + votes[2] + votes[3];
+
+  const onVote = useCallback((id: VoteId) => {
+    setBundle((s) => {
+      const nextVotes = { ...s.votes };
+      if (s.myVote !== null) {
+        nextVotes[s.myVote] = Math.max(0, nextVotes[s.myVote] - 1);
+      }
+      nextVotes[id] = nextVotes[id] + 1;
+      return { votes: nextVotes, myVote: id };
+    });
+    setJustVotedId(id);
+  }, []);
+
+  useEffect(() => {
+    if (!popupOpen) return;
+    const onDocPointerDown = (e: MouseEvent | PointerEvent) => {
+      const wrap = posterWrapRef.current;
+      if (wrap && !wrap.contains(e.target as Node)) {
+        setPopupOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [popupOpen]);
+
+  const togglePopup = useCallback(() => {
+    setPopupOpen((o) => !o);
+  }, []);
+
+  const onPosterWrapClick = useCallback(
+    (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("button")) return;
+      togglePopup();
+    },
+    [togglePopup],
+  );
+
+  const onSubPosterClick = useCallback(
+    (e: MouseEvent, id: VoteId) => {
+      e.stopPropagation();
+      onVote(id);
+    },
+    [onVote],
+  );
+
   return (
-    <div
-      className={className}
-      style={{
-        position: "relative",
-        width: "min(90vw, 60vh)",
-        margin: "0 auto",
-        aspectRatio: `${POSTER_W} / ${POSTER_H}`,
-        userSelect: "none",
-      }}
-    >
-      <img
-        src="/assets/poster/best_gum_poster.svg"
-        alt="껌딱지 외모짱 선발 대회 포스터"
-        draggable={false}
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-          display: "block",
-        }}
-      />
+    <div className={className}>
+      <div className="flex flex-col items-center gap-5 min-[900px]:flex-row min-[900px]:items-start min-[900px]:gap-6">
+        <div
+          ref={posterWrapRef}
+          className="group/poster relative mx-auto aspect-[3/4] w-[min(90vw,60vh)] shrink-0 cursor-pointer overflow-visible rounded-md"
+          role="button"
+          tabIndex={0}
+          onClick={onPosterWrapClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              togglePopup();
+            }
+          }}
+        >
+          <img
+            src={`${ASSET}/best_gum_poster.svg`}
+            alt="껌딱지 외모짱 선발 대회 포스터"
+            draggable={false}
+            className={`absolute inset-0 block h-full w-full rounded-md object-contain shadow-[0_12px_48px_rgba(0,0,0,0.18)] transition-[filter,transform] duration-300 ease-in-out select-none ${
+              popupOpen ? "brightness-[0.55]" : ""
+            }`}
+          />
+          <span
+            className={`pointer-events-none absolute top-3 left-1/2 z-[5] -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-[clamp(12px,2.8vw,14px)] font-semibold whitespace-nowrap text-white transition-opacity duration-300 font-['Noto_Sans_KR',system-ui,sans-serif] ${
+              popupOpen
+                ? "opacity-0"
+                : "opacity-0 group-hover/poster:opacity-100"
+            }`}
+          >
+            포스터를 클릭하여 투표하기
+          </span>
+          <div
+            className={`absolute inset-0 z-10 flex box-border items-center justify-center gap-[clamp(10px,2.4vw,18px)] p-2 px-1.5 transition-opacity duration-[350ms] ${
+              popupOpen
+                ? "pointer-events-auto opacity-100"
+                : "pointer-events-none opacity-0"
+            }`}
+          >
+            {CANDIDATES.map(({ id, name, image }, cardIdx) => {
+              const tDelay = [50, 120, 190][cardIdx];
+              const nameDelay = [100, 170, 240][cardIdx];
+              const voted = myVote === id;
+              return (
+                <div
+                  key={id}
+                  className="flex min-w-0 flex-1 flex-col items-center gap-2.5"
+                >
+                  <button
+                    type="button"
+                    data-vote-id={id}
+                    className={`group/sub relative w-full max-w-full cursor-pointer overflow-hidden rounded-[10px] border-0 bg-transparent p-0 font-inherit shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-[transform,box-shadow] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:!z-20 hover:!-translate-y-1.5 hover:!scale-[1.08] hover:shadow-[0_16px_48px_rgba(0,0,0,0.4)] active:!translate-y-0 active:!scale-[0.97] active:duration-100 ${
+                      popupOpen
+                        ? "translate-y-0 scale-100"
+                        : "translate-y-5 scale-[0.85]"
+                    } ${voted ? "outline outline-[3px] outline-[#FFD700] outline-offset-2" : ""} ${
+                      justVotedId === id ? "animate-ggumddi-vote-pop" : ""
+                    }`}
+                    style={{ transitionDelay: `${tDelay}ms` }}
+                    onClick={(e) => onSubPosterClick(e, id)}
+                  >
+                    <img src={image} alt={name} draggable={false} className="block w-full" />
+                    <span
+                      className={`absolute right-0 bottom-0 left-0 bg-black/75 py-2.5 px-2 text-center text-[clamp(12px,2.2vw,14px)] font-semibold text-white transition-transform duration-300 font-['Noto_Sans_KR',system-ui,sans-serif] ${
+                        voted
+                          ? "translate-y-0 bg-[rgba(255,215,0,0.9)] text-[#1a1a2e]"
+                          : "translate-y-full group-hover/sub:translate-y-0"
+                      }`}
+                    >
+                      {voted ? "투표 완료!" : "투표하기"}
+                    </span>
+                  </button>
+                  <span
+                    className={`text-center text-[clamp(12px,2.6vw,16px)] font-bold leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)] transition-[opacity,transform] duration-[400ms] ease-in-out font-['Noto_Sans_KR',system-ui,sans-serif] px-0.5 ${
+                      popupOpen
+                        ? "translate-y-0 opacity-100"
+                        : "translate-y-2 opacity-0"
+                    }`}
+                    style={{ transitionDelay: `${nameDelay}ms` }}
+                  >
+                    {name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="box-border w-full max-w-[min(360px,100%)] rounded-[22px] border border-[#7f6bff]/20 bg-gradient-to-b from-[#2a2350] via-[#221b43] to-[#171431] px-5 pt-6 pb-6 font-['Noto_Sans_KR',system-ui,sans-serif] text-white shadow-[0_24px_60px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.05)_inset] backdrop-blur-sm transition-[opacity,transform] duration-500 min-[900px]:translate-x-0">
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] pb-5">
+            <div>
+              <h2 className="m-0 text-[15px] font-bold tracking-tight text-white">
+                투표 현황
+              </h2>
+              <p className="mt-1 text-[11px] font-medium text-slate-500">
+                후보별 득표 비율
+              </p>
+            </div>
+            <div className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.06] px-3.5 py-2 text-[11px] font-medium tabular-nums text-slate-400">
+              총{" "}
+              <span className="text-sm font-bold text-white">{total}</span>표
+            </div>
+          </div>
+          <div className="mt-5 flex flex-col gap-3.5">
+            {CANDIDATES.map(({ id, name, dot }, idx) => {
+              const count = votes[id];
+              const pct = total > 0 ? (count / total) * 100 : 0;
+              const barGrad = BAR_GRADIENTS[idx];
+              const hasVotes = count > 0;
+              return (
+                <div
+                  key={id}
+                  className="rounded-2xl border border-white/[0.08] bg-[#120f2a]/75 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                >
+                  <div className="mb-3.5 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
+                        style={{
+                          background: dot,
+                          boxShadow: `0 0 12px ${dot}99`,
+                        }}
+                      />
+                      <span className="truncate text-[13px] font-semibold text-slate-100">
+                        {name}
+                      </span>
+                      {myVote === id ? (
+                        <span className="shrink-0 rounded-md bg-[#FFD700] px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-[#1a1a2e]">
+                          MY
+                        </span>
+                      ) : null}
+                    </div>
+                    <span
+                      className={`shrink-0 text-sm font-semibold tabular-nums ${hasVotes ? "text-slate-200" : "text-slate-500"}`}
+                    >
+                      {count}표
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/45 ring-1 ring-inset ring-white/[0.07]">
+                    <div
+                      className={`h-full rounded-full transition-[width] duration-500 ease-out ${barGrad} ${hasVotes ? "shadow-[0_0_12px_rgba(255,255,255,0.12)]" : ""}`}
+                      style={{
+                        width: hasVotes ? `${pct}%` : "0%",
+                      }}
+                    />
+                  </div>
+                  <div className="mt-2 min-h-4 text-right text-[10px] font-semibold tabular-nums text-slate-500">
+                    {hasVotes ? `${Math.round(pct)}%` : ""}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
