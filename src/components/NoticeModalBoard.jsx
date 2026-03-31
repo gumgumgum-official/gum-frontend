@@ -183,7 +183,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src="/models/stage3/poster/party_poster.png"
+                    src="/assets/poster/party_poster.png"
                     alt="껌딱지 마을 잔치"
                     draggable={false}
                     style={{
@@ -242,7 +242,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src="/models/stage3/poster/best_gum_poster.svg"
+                    src="/assets/poster/best_gum_poster.svg"
                     alt="투표 포스터"
                     draggable={false}
                     style={{
@@ -371,7 +371,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       }}
                     >
                       <img
-                        src="/models/stage3/poster/party_poster.png"
+                        src="/assets/poster/party_poster.png"
                         alt="껌딱지 마을 잔치"
                         draggable={false}
                         style={{
@@ -393,7 +393,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       }}
                     >
                       <img
-                        src="/models/stage3/poster/best_gum_poster.svg"
+                        src="/assets/poster/best_gum_poster.svg"
                         alt="투표 포스터"
                         draggable={false}
                         style={{

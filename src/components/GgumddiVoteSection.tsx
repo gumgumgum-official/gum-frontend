@@ -15,7 +15,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
       }}
     >
       <img
-        src="/models/stage3/poster/best_gum_poster.svg"
+        src="/assets/poster/best_gum_poster.svg"
         alt="껌딱지 외모짱 선발 대회 포스터"
         draggable={false}
         style={{
