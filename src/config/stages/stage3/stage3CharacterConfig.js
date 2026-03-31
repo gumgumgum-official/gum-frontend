@@ -7,11 +7,12 @@ export const STAGE3_CHARACTER_CONFIG = {
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({
     groundOffset: 0.45, // 배경 위에 설 때 y 여유 (메시·바운딩 오차 보정)
+    scale: 2, // 캐릭터 전체 크기 배율
     moveSpeed: 5.0, // 이동 속도
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
-    cameraOffset: { x: 0, y: 3, z: 8 }, // 캐릭터 뒤쪽 카메라 오프셋
+    cameraOffset: { x: 0, y: 7, z: 12 }, // 캐릭터 뒤쪽 카메라 오프셋 (더 위·더 멀리)
     cameraLerpFactor: 0.1, // 카메라 부드러운 추적 강도
-    lookAtHeightOffset: 1, // lookAt 시 캐릭터 머리 높이
+    lookAtHeightOffset: 2, // lookAt 시 캐릭터 머리 높이
 
     /**
      * 껌딱지(사이드 캐릭터) 2마리 설정
@@ -20,7 +21,7 @@ export const STAGE3_CHARACTER_CONFIG = {
     gumFollowers: {
       models: {
         modelPath: "/models/common/walk__gum.glb",
-        scale: 0.7, // 껌딱지 모델 전체 크기
+        scale: 1.4, // 껌딱지 모델 전체 크기 (기존 대비 4배)
       },
       behavior: {
         distance: 2, // 유저와 껌딱지 간 간격(바닥 기준)

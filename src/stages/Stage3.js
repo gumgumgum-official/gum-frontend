@@ -118,10 +118,10 @@ export function Stage3() {
     elapsed: 0,
     transitionElapsed: 0,
     /** 인트로 회전 구간 길이 — 클수록 같은 sweep 각에서 더 천천히 회전 */
-    durationSec: 9,
+    durationSec: 4.5,
     transitionSec: 2.0,
-    /** 시계방향으로 도는 각(rad). */
-    sweepAngleRad: Math.PI * 0.78,
+    /** 시계방향으로 도는 각(rad). durationSec 단축에 맞춰 속도 유지하도록 각도도 함께 축소 */
+    sweepAngleRad: Math.PI * 0.39,
     center: new THREE.Vector3(),
     radius: 20,
     height: 18,
