@@ -53,6 +53,9 @@ export function createCharacterController({
         onLoad: (gltf) => {
           characterModel = gltf.scene;
 
+          const { scale = 1 } = config.character ?? {};
+          characterModel.scale.setScalar(scale);
+
           const characterBox = new THREE.Box3().setFromObject(characterModel);
           const characterMinY = characterBox.min.y;
 
