@@ -406,16 +406,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     </div>
                   )}
 
-                  {zoomedPoster === "vote" && (
-                    <div
-                      style={{
-                        borderRadius: 16,
-                        boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
-                      }}
-                    >
-                      <GgumddiVoteSection />
-                    </div>
-                  )}
+                  {zoomedPoster === "vote" && <GgumddiVoteSection />}
                 </motion.div>
               </motion.div>
             )}
