@@ -14,12 +14,26 @@ const ASSET = "/assets/poster";
 
 const INITIAL_VOTES: Record<VoteId, number> = { 1: 0, 2: 0, 3: 0 };
 
-const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] =
-  [
-    { id: 1, name: "1. 껌뚝지", image: `${ASSET}/gum_poster_1.svg`, dot: "#FF8B33" },
-    { id: 2, name: "2. 껌떡지", image: `${ASSET}/gum_poster_2.svg`, dot: "#c4a882" },
-    { id: 3, name: "3. 껌뚱지", image: `${ASSET}/gum_poster_3.svg`, dot: "#FF4A89" },
-  ];
+const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
+  {
+    id: 1,
+    name: "1. 껌뚝지",
+    image: `${ASSET}/gum_poster_1.svg`,
+    dot: "#FF8B33",
+  },
+  {
+    id: 2,
+    name: "2. 껌떡지",
+    image: `${ASSET}/gum_poster_2.svg`,
+    dot: "#c4a882",
+  },
+  {
+    id: 3,
+    name: "3. 껌뚱지",
+    image: `${ASSET}/gum_poster_3.svg`,
+    dot: "#FF4A89",
+  },
+];
 
 const BAR_GRADIENTS = [
   "bg-gradient-to-br from-[#ff8b33] to-[#ffa050] text-white",
@@ -27,7 +41,10 @@ const BAR_GRADIENTS = [
   "bg-gradient-to-br from-[#ff4a89] to-[#ff7eb3] text-white",
 ] as const;
 
-function loadPersisted(): { votes: Record<VoteId, number>; myVote: VoteId | null } {
+function loadPersisted(): {
+  votes: Record<VoteId, number>;
+  myVote: VoteId | null;
+} {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { votes: { ...INITIAL_VOTES }, myVote: null };
@@ -44,7 +61,8 @@ function loadPersisted(): { votes: Record<VoteId, number>; myVote: VoteId | null
     ) {
       return {
         votes: { 1: v["1"], 2: v["2"], 3: v["3"] },
-        myVote: p.myVote === 1 || p.myVote === 2 || p.myVote === 3 ? p.myVote : null,
+        myVote:
+          p.myVote === 1 || p.myVote === 2 || p.myVote === 3 ? p.myVote : null,
       };
     }
   } catch {
@@ -108,7 +126,8 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
       }
     };
     document.addEventListener("pointerdown", onDocPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", onDocPointerDown, true);
   }, [popupOpen]);
 
   const togglePopup = useCallback(() => {
@@ -133,10 +152,10 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      <div className="flex flex-col items-center gap-5 min-[900px]:flex-row min-[900px]:items-start min-[900px]:gap-6">
+      <div className="flex flex-col items-center gap-20 min-[900px]:flex-row min-[900px]:items-start min-[900px]:justify-center min-[900px]:gap-10">
         <div
           ref={posterWrapRef}
-          className="group/poster relative mx-auto aspect-[3/4] w-[min(90vw,60vh)] shrink-0 cursor-pointer overflow-visible rounded-md"
+          className="group/poster relative mx-auto aspect-[3/4] w-[min(90vw,60vh)] shrink-0 cursor-pointer overflow-visible rounded-md min-[900px]:mx-0"
           role="button"
           tabIndex={0}
           onClick={onPosterWrapClick}
@@ -193,7 +212,12 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
                     style={{ transitionDelay: `${tDelay}ms` }}
                     onClick={(e) => onSubPosterClick(e, id)}
                   >
-                    <img src={image} alt={name} draggable={false} className="block w-full" />
+                    <img
+                      src={image}
+                      alt={name}
+                      draggable={false}
+                      className="block w-full"
+                    />
                     <span
                       className={`absolute right-0 bottom-0 left-0 bg-black/75 py-2.5 px-2 text-center text-[clamp(12px,2.2vw,14px)] font-semibold text-white transition-transform duration-300 font-['Noto_Sans_KR',system-ui,sans-serif] ${
                         voted
@@ -220,19 +244,20 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
           </div>
         </div>
 
-        <div className="box-border w-full max-w-[min(360px,100%)] rounded-[22px] border border-[#7f6bff]/20 bg-gradient-to-b from-[#2a2350] via-[#221b43] to-[#171431] px-5 pt-6 pb-6 font-['Noto_Sans_KR',system-ui,sans-serif] text-white shadow-[0_24px_60px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.05)_inset] backdrop-blur-sm transition-[opacity,transform] duration-500 min-[900px]:translate-x-0">
-          <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] pb-5">
+        <div className="box-border w-full max-w-[min(360px,100%)] rounded-[22px] border border-slate-200/90 bg-white px-5 pt-6 pb-6 font-['Noto_Sans_KR',system-ui,sans-serif] text-slate-800 shadow-[0_16px_40px_rgba(15,23,42,0.08)] transition-[opacity,transform] duration-500 min-[900px]:translate-x-0">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200/90 pb-5">
             <div>
-              <h2 className="m-0 text-[15px] font-bold tracking-tight text-white">
+              <h2 className="m-0 text-[15px] font-bold tracking-tight text-slate-900">
                 투표 현황
               </h2>
               <p className="mt-1 text-[11px] font-medium text-slate-500">
                 후보별 득표 비율
               </p>
             </div>
-            <div className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.06] px-3.5 py-2 text-[11px] font-medium tabular-nums text-slate-400">
+            <div className="shrink-0 rounded-full border border-slate-200/90 bg-slate-50 px-3.5 py-2 text-[11px] font-medium tabular-nums text-slate-600">
               총{" "}
-              <span className="text-sm font-bold text-white">{total}</span>표
+              <span className="text-sm font-bold text-slate-900">{total}</span>
+              표
             </div>
           </div>
           <div className="mt-5 flex flex-col gap-3.5">
@@ -244,35 +269,35 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
               return (
                 <div
                   key={id}
-                  className="rounded-2xl border border-white/[0.08] bg-[#120f2a]/75 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                  className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                 >
                   <div className="mb-3.5 flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
+                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-slate-200/90"
                         style={{
                           background: dot,
-                          boxShadow: `0 0 12px ${dot}99`,
+                          boxShadow: `0 0 10px ${dot}80`,
                         }}
                       />
-                      <span className="truncate text-[13px] font-semibold text-slate-100">
+                      <span className="truncate text-[13px] font-semibold text-slate-800">
                         {name}
                       </span>
                       {myVote === id ? (
-                        <span className="shrink-0 rounded-md bg-[#FFD700] px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-[#1a1a2e]">
+                        <span className="shrink-0 rounded-md bg-amber-400 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-slate-900">
                           MY
                         </span>
                       ) : null}
                     </div>
                     <span
-                      className={`shrink-0 text-sm font-semibold tabular-nums ${hasVotes ? "text-slate-200" : "text-slate-500"}`}
+                      className={`shrink-0 text-sm font-semibold tabular-nums ${hasVotes ? "text-slate-800" : "text-slate-400"}`}
                     >
                       {count}표
                     </span>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/45 ring-1 ring-inset ring-white/[0.07]">
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200/90 ring-1 ring-inset ring-slate-300/50">
                     <div
-                      className={`h-full rounded-full transition-[width] duration-500 ease-out ${barGrad} ${hasVotes ? "shadow-[0_0_12px_rgba(255,255,255,0.12)]" : ""}`}
+                      className={`h-full rounded-full transition-[width] duration-500 ease-out ${barGrad} ${hasVotes ? "shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : ""}`}
                       style={{
                         width: hasVotes ? `${pct}%` : "0%",
                       }}
