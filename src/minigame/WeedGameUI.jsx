@@ -200,17 +200,22 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   }, [startGame]);
 
   return (
-    <div className="w-full min-h-screen flex items-center justify-center p-4 font-sans">
+    <div className="w-full h-full flex items-center justify-center p-4 font-sans">
       {/* Outer modal card */}
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 18 }}
-        className="w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl"
+        className="w-full rounded-3xl overflow-hidden shadow-2xl"
         style={{
           background: "var(--card)",
           border: "3px solid var(--wood)",
           boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+          // 너무 꽉 차지 않게 "게시판보단 약간" 작은 크기
+          width: "min(80vw, 1250px)",
+          height: "min(78vh, 840px)",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {/* Title banner – wood sign style */}
@@ -236,13 +241,13 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
           </button>
         </div>
 
-        {/* Body: flex 2:1 - fixed height to keep modal size consistent */}
-        <div className="flex flex-col md:flex-row h-[380px]">
+        {/* Body: stretch to fill the modal height */}
+        <div className="flex flex-col md:flex-row flex-1 min-h-0">
           {/* ── LEFT: Game Canvas ───────────────────────────────────── */}
           <div
             className="flex-[2] relative overflow-hidden border-b md:border-b-0 md:border-r border-border"
             style={{
-              minHeight: 380,
+              minHeight: 0,
               background:
                 "linear-gradient(to bottom, oklch(0.82 0.12 145), oklch(0.68 0.14 130))",
             }}
