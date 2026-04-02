@@ -125,6 +125,7 @@
  * @property {{x: number, y: number, z: number}} cameraOffset - 캐릭터 뒤 카메라 오프셋
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
+ * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정
  * @property {Stage3GumFollowersConfig} gumFollowers
  */
 
