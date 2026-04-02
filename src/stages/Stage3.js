@@ -89,7 +89,7 @@ export function Stage3() {
   const INT_PREFIX = "INT_";
   const INT_SUFFIX_TO_TARGET = {
     notice: "notice",
-    gameMachine: "gameMachine",
+    gamemachine: "gameMachine",
     mirror: "mirror",
     icecream: "icecream",
     portal: "portal",
@@ -101,15 +101,10 @@ export function Stage3() {
    * @returns {"notice" | "gameMachine" | "mirror" | "icecream" | "portal" | null}
    */
   function intSuffixToTarget(suffix) {
-    const direct = INT_SUFFIX_TO_TARGET[suffix];
-    if (direct != null) return direct;
     const lower = suffix.toLowerCase();
-    if (lower === "notice") return "notice";
-    if (lower === "gamemachine") return "gameMachine";
-    if (lower === "mirror") return "mirror";
-    if (lower === "icecream" || lower === "icecart") return "icecream";
-    if (lower === "portal") return "portal";
-    return null;
+    // GLB마다 INT suffix 표기가 다를 수 있어 대표 별칭(예: IceCart)을 정규화한다.
+    if (lower === "icecart") return "icecream";
+    return INT_SUFFIX_TO_TARGET[lower] ?? null;
   }
   /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
   const intRaycastMeshes = [];
@@ -386,6 +381,7 @@ export function Stage3() {
   function registerIslandInteractions(islandModel) {
     intRaycastMeshes.length = 0;
     iceCreamCartRef = null;
+    noticeRef = null;
     gameMachineRef = null;
     if (unlistenMinigameClose) {
       unlistenMinigameClose();
@@ -402,6 +398,7 @@ export function Stage3() {
       const suffix = obj.name.slice(INT_PREFIX.length);
       const intTarget = intSuffixToTarget(suffix);
       if (intTarget === "gameMachine") gameMachineRef = obj;
+      if (intTarget === "notice") noticeRef = obj;
       if (intTarget === "icecream") iceCreamCartRef = obj;
       obj.traverse((child) => {
         if (child.isMesh) meshSet.add(child);

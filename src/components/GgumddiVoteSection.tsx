@@ -120,9 +120,10 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
 
   useEffect(() => {
     if (!popupOpen) return;
-    const onDocPointerDown = (e: MouseEvent | PointerEvent) => {
+    const onDocPointerDown = (e: PointerEvent) => {
       const wrap = posterWrapRef.current;
-      if (wrap && !wrap.contains(e.target as Node)) {
+      const target = e.target;
+      if (wrap && target instanceof Node && !wrap.contains(target)) {
         setPopupOpen(false);
       }
     };
