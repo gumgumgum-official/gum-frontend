@@ -10,6 +10,7 @@ import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
+import { collectIslandStaticColliderBoxes } from "../utils/stages/stage3/islandStaticColliders.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
@@ -93,7 +94,24 @@ export function Stage3() {
     icecream: "icecream",
     portal: "portal",
   };
-  /** island2.glb 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
+  /**
+   * GLB마다 INT_ 접미사 표기가 다름 (예: INT_notice vs INT_Notice, INT_IceCart).
+   * 레이 히트·ref 등록 시 canonical 타깃으로 정규화한다.
+   * @param {string} suffix - `INT_` 제외 접미사
+   * @returns {"notice" | "gameMachine" | "mirror" | "icecream" | "portal" | null}
+   */
+  function intSuffixToTarget(suffix) {
+    const direct = INT_SUFFIX_TO_TARGET[suffix];
+    if (direct != null) return direct;
+    const lower = suffix.toLowerCase();
+    if (lower === "notice") return "notice";
+    if (lower === "gamemachine") return "gameMachine";
+    if (lower === "mirror") return "mirror";
+    if (lower === "icecream" || lower === "icecart") return "icecream";
+    if (lower === "portal") return "portal";
+    return null;
+  }
+  /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
   const intRaycastMeshes = [];
 
   const keyboard = createKeyboardInput([
@@ -135,6 +153,9 @@ export function Stage3() {
   const _introTargetPos = new THREE.Vector3();
   const _introTargetLookAt = new THREE.Vector3();
   const _introLerpLookAt = new THREE.Vector3();
+  const _portalSyncPos = new THREE.Vector3();
+  const _portalSyncNormal = new THREE.Vector3();
+  const _portalSyncQuat = new THREE.Quaternion();
 
   /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
   let portalPlaneConfig = null;
@@ -253,6 +274,72 @@ export function Stage3() {
     }
   };
 
+  /**
+   * GLB의 INT_Portal 월드 위치·방향으로 논리 포탈 평면을 맞춤.
+   * (config `portal_bright.position`은 예전 섬 좌표라 island4 등에서는 실제와 어긋남)
+   */
+  function syncPortalPlaneToIntPortalObject(islandModel) {
+    const portalCfg = config.portal_bright;
+    if (!portalCfg?.targetStage) return;
+
+    /** @type {THREE.Object3D | null} */
+    let portalRoot = null;
+    islandModel.updateMatrixWorld(true);
+    islandModel.traverse((obj) => {
+      const n = typeof obj.name === "string" ? obj.name.trim() : "";
+      if (/^INT_Portal$/i.test(n)) portalRoot = obj;
+    });
+
+    const halfWidth = portalCfg.halfWidth ?? 3;
+    const targetStage = portalCfg.targetStage;
+
+    if (!portalRoot) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] INT_Portal 노드 없음 — portal_bright config 좌표만 사용합니다.",
+        );
+      }
+      return;
+    }
+
+    portalRoot.getWorldPosition(_portalSyncPos);
+    _portalSyncNormal.set(0, 0, 1);
+    portalRoot.getWorldQuaternion(_portalSyncQuat);
+    _portalSyncNormal.applyQuaternion(_portalSyncQuat);
+    _portalSyncNormal.y = 0;
+    if (_portalSyncNormal.lengthSq() < 1e-10) {
+      _portalSyncNormal.set(1, 0, 0);
+      _portalSyncNormal.applyQuaternion(_portalSyncQuat);
+      _portalSyncNormal.y = 0;
+    }
+    if (_portalSyncNormal.lengthSq() < 1e-10) {
+      const fc = portalCfg.normal ?? { x: 0, z: 1 };
+      const fl = Math.hypot(fc.x, fc.z) || 1;
+      portalPlaneConfig = {
+        px: _portalSyncPos.x,
+        pz: _portalSyncPos.z,
+        nx: fc.x / fl,
+        nz: fc.z / fl,
+        halfWidth,
+        targetStage,
+      };
+    } else {
+      _portalSyncNormal.normalize();
+      portalPlaneConfig = {
+        px: _portalSyncPos.x,
+        pz: _portalSyncPos.z,
+        nx: _portalSyncNormal.x,
+        nz: _portalSyncNormal.z,
+        halfWidth,
+        targetStage,
+      };
+    }
+    prevPortalSignedDist = null;
+    if (import.meta.env.DEV) {
+      console.log("[Stage3] 포탈 평면 INT_Portal에 맞춤:", portalPlaneConfig);
+    }
+  }
+
   /** 포탈 평면 통과 시 stage:switch 이벤트 dispatch */
   function checkPortalPlaneCrossing() {
     const plane = portalPlaneConfig;
@@ -288,7 +375,7 @@ export function Stage3() {
     while (p) {
       if (typeof p.name === "string" && p.name.startsWith(INT_PREFIX)) {
         const suffix = p.name.slice(INT_PREFIX.length);
-        return INT_SUFFIX_TO_TARGET[suffix] ?? null;
+        return intSuffixToTarget(suffix);
       }
       p = p.parent;
     }
@@ -313,8 +400,9 @@ export function Stage3() {
       }
       rootNames.push(obj.name);
       const suffix = obj.name.slice(INT_PREFIX.length);
-      if (suffix === "gameMachine") gameMachineRef = obj;
-      if (suffix === "icecream") iceCreamCartRef = obj;
+      const intTarget = intSuffixToTarget(suffix);
+      if (intTarget === "gameMachine") gameMachineRef = obj;
+      if (intTarget === "icecream") iceCreamCartRef = obj;
       obj.traverse((child) => {
         if (child.isMesh) meshSet.add(child);
       });
@@ -333,12 +421,11 @@ export function Stage3() {
     if (rootNames.length > 0 && import.meta.env.DEV) {
       const uniq = [...new Set(rootNames)];
       console.log("[Stage3] island INT_ 노드:", uniq.join(", "));
-      const knownSuffixes = new Set(Object.keys(INT_SUFFIX_TO_TARGET));
       for (const full of uniq) {
         const suf = full.startsWith(INT_PREFIX)
           ? full.slice(INT_PREFIX.length)
           : full;
-        if (!knownSuffixes.has(suf)) {
+        if (intSuffixToTarget(suf) == null) {
           console.log(
             `[Stage3] INT_ '${full}' → 아직 클릭 핸들러 없음 (매핑 추가 또는 GLB 이름 변경)`,
           );
@@ -1383,15 +1470,15 @@ export function Stage3() {
 
       /** @type {import("../types.js").Stage3PortalConfig | undefined} */
       const portalCfg = config.portal_bright;
-      if (portalCfg?.targetStage != null && portalCfg?.normal) {
-        const { x: nx, z: nz } = portalCfg.normal;
+      if (portalCfg?.targetStage != null) {
+        const { x: nx, z: nz } = portalCfg.normal ?? { x: 0, z: 1 };
         const len = Math.hypot(nx, nz) || 1;
         portalPlaneConfig = {
           px: portalCfg.position?.x ?? 0,
           pz: portalCfg.position?.z ?? 0,
           nx: nx / len,
           nz: nz / len,
-          halfWidth: portalCfg.halfWidth ?? 2,
+          halfWidth: portalCfg.halfWidth ?? 3,
           targetStage: portalCfg.targetStage,
         };
       } else {
@@ -1471,7 +1558,17 @@ export function Stage3() {
           stage3GroundY = backgroundMaxY;
           loadLatestLetter(scene, this.camera, backgroundMaxY);
 
-          character.setup(backgroundMaxY, backgroundBounds);
+          const islandStaticColliders = collectIslandStaticColliderBoxes(model);
+          if (import.meta.env.DEV) {
+            console.log(
+              `[Stage3] INT_/OBJ_ 메시 충돌 AABB: ${islandStaticColliders.length}개 (INT_Portal 제외)`,
+            );
+          }
+          character.setup(
+            backgroundMaxY,
+            backgroundBounds,
+            islandStaticColliders,
+          );
 
           // 유저를 따라다니는 껌딱지(사이드 캐릭터) 2마리
           gumFollowers = createGumFollowersController({
@@ -1500,6 +1597,7 @@ export function Stage3() {
 
           if (!isStage3Active) return;
           registerIslandInteractions(model);
+          syncPortalPlaneToIntPortalObject(model);
           startCameraIntro(center, backgroundBounds);
         },
       });

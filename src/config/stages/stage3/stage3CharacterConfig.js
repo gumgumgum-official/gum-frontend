@@ -13,6 +13,8 @@ export const STAGE3_CHARACTER_CONFIG = {
     cameraOffset: { x: 0, y: 9, z: 25 }, // 캐릭터 뒤쪽 카메라 오프셋 (더 줌아웃)
     cameraLerpFactor: 0.1, // 카메라 부드러운 추적 강도
     lookAtHeightOffset: 0.9, // lookAt 시 캐릭터 기준점을 낮춰 화면에서 캐릭터를 살짝 위로 배치
+    /** XZ 평면 원형 충돌 반경(m). 미설정 시 scale×0.22 (최소 0.2) */
+    collisionRadius: 0.65,
 
     /**
      * 껌딱지(사이드 캐릭터) 2마리 설정
