@@ -126,12 +126,14 @@ export function slideMoveXZAgainstAABBs(oldX, oldZ, newX, newZ, r, boxes) {
   let z = newZ;
   if (!circleOverlapsAny(x, z, r, boxes)) return { x, z };
 
-  x = oldX + (newX - oldX);
+  // X만 이동 시도 (Z는 원래 값 유지)
+  x = newX;
   z = oldZ;
   if (!circleOverlapsAny(x, z, r, boxes)) return { x, z };
 
   x = oldX;
-  z = oldZ + (newZ - oldZ);
+  // Z만 이동 시도 (X는 원래 값 유지)
+  z = newZ;
   if (!circleOverlapsAny(x, z, r, boxes)) return { x, z };
 
   return { x: oldX, z: oldZ };
