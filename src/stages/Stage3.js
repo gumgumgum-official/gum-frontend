@@ -10,6 +10,7 @@ import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
+import { collectIslandStaticColliderBoxes } from "../utils/stages/stage3/islandStaticColliders.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
@@ -73,10 +74,11 @@ export function Stage3() {
 
   // island2.glb 내 INT_icecream 루트 (클릭 → 스폰, cannon-es)
   let iceCreamCartRef = null;
+  /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
+  let noticeRef = null;
   /** island2.glb 내 INT_gameMachine 루트 */
   let gameMachineRef = null;
   let unlistenMinigameClose = null;
-  let noticeModalEl = null;
   let noticePaperAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
   const spawnedIceCreams = []; // { group, body }
@@ -87,12 +89,24 @@ export function Stage3() {
   const INT_PREFIX = "INT_";
   const INT_SUFFIX_TO_TARGET = {
     notice: "notice",
-    gameMachine: "gameMachine",
+    gamemachine: "gameMachine",
     mirror: "mirror",
     icecream: "icecream",
     portal: "portal",
   };
-  /** island2.glb 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
+  /**
+   * GLB마다 INT_ 접미사 표기가 다름 (예: INT_notice vs INT_Notice, INT_IceCart).
+   * 레이 히트·ref 등록 시 canonical 타깃으로 정규화한다.
+   * @param {string} suffix - `INT_` 제외 접미사
+   * @returns {"notice" | "gameMachine" | "mirror" | "icecream" | "portal" | null}
+   */
+  function intSuffixToTarget(suffix) {
+    const lower = suffix.toLowerCase();
+    // GLB마다 INT suffix 표기가 다를 수 있어 대표 별칭(예: IceCart)을 정규화한다.
+    if (lower === "icecart") return "icecream";
+    return INT_SUFFIX_TO_TARGET[lower] ?? null;
+  }
+  /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
   const intRaycastMeshes = [];
 
   const keyboard = createKeyboardInput([
@@ -117,10 +131,10 @@ export function Stage3() {
     elapsed: 0,
     transitionElapsed: 0,
     /** 인트로 회전 구간 길이 — 클수록 같은 sweep 각에서 더 천천히 회전 */
-    durationSec: 9,
+    durationSec: 4.5,
     transitionSec: 2.0,
-    /** 시계방향으로 도는 각(rad). */
-    sweepAngleRad: Math.PI * 0.78,
+    /** 시계방향으로 도는 각(rad). durationSec 단축에 맞춰 속도 유지하도록 각도도 함께 축소 */
+    sweepAngleRad: Math.PI * 0.39,
     center: new THREE.Vector3(),
     radius: 20,
     height: 18,
@@ -134,6 +148,9 @@ export function Stage3() {
   const _introTargetPos = new THREE.Vector3();
   const _introTargetLookAt = new THREE.Vector3();
   const _introLerpLookAt = new THREE.Vector3();
+  const _portalSyncPos = new THREE.Vector3();
+  const _portalSyncNormal = new THREE.Vector3();
+  const _portalSyncQuat = new THREE.Quaternion();
 
   /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
   let portalPlaneConfig = null;
@@ -252,6 +269,72 @@ export function Stage3() {
     }
   };
 
+  /**
+   * GLB의 INT_Portal 월드 위치·방향으로 논리 포탈 평면을 맞춤.
+   * (config `portal_bright.position`은 예전 섬 좌표라 island4 등에서는 실제와 어긋남)
+   */
+  function syncPortalPlaneToIntPortalObject(islandModel) {
+    const portalCfg = config.portal_bright;
+    if (!portalCfg?.targetStage) return;
+
+    /** @type {THREE.Object3D | null} */
+    let portalRoot = null;
+    islandModel.updateMatrixWorld(true);
+    islandModel.traverse((obj) => {
+      const n = typeof obj.name === "string" ? obj.name.trim() : "";
+      if (/^INT_Portal$/i.test(n)) portalRoot = obj;
+    });
+
+    const halfWidth = portalCfg.halfWidth ?? 3;
+    const targetStage = portalCfg.targetStage;
+
+    if (!portalRoot) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] INT_Portal 노드 없음 — portal_bright config 좌표만 사용합니다.",
+        );
+      }
+      return;
+    }
+
+    portalRoot.getWorldPosition(_portalSyncPos);
+    _portalSyncNormal.set(0, 0, 1);
+    portalRoot.getWorldQuaternion(_portalSyncQuat);
+    _portalSyncNormal.applyQuaternion(_portalSyncQuat);
+    _portalSyncNormal.y = 0;
+    if (_portalSyncNormal.lengthSq() < 1e-10) {
+      _portalSyncNormal.set(1, 0, 0);
+      _portalSyncNormal.applyQuaternion(_portalSyncQuat);
+      _portalSyncNormal.y = 0;
+    }
+    if (_portalSyncNormal.lengthSq() < 1e-10) {
+      const fc = portalCfg.normal ?? { x: 0, z: 1 };
+      const fl = Math.hypot(fc.x, fc.z) || 1;
+      portalPlaneConfig = {
+        px: _portalSyncPos.x,
+        pz: _portalSyncPos.z,
+        nx: fc.x / fl,
+        nz: fc.z / fl,
+        halfWidth,
+        targetStage,
+      };
+    } else {
+      _portalSyncNormal.normalize();
+      portalPlaneConfig = {
+        px: _portalSyncPos.x,
+        pz: _portalSyncPos.z,
+        nx: _portalSyncNormal.x,
+        nz: _portalSyncNormal.z,
+        halfWidth,
+        targetStage,
+      };
+    }
+    prevPortalSignedDist = null;
+    if (import.meta.env.DEV) {
+      console.log("[Stage3] 포탈 평면 INT_Portal에 맞춤:", portalPlaneConfig);
+    }
+  }
+
   /** 포탈 평면 통과 시 stage:switch 이벤트 dispatch */
   function checkPortalPlaneCrossing() {
     const plane = portalPlaneConfig;
@@ -287,7 +370,7 @@ export function Stage3() {
     while (p) {
       if (typeof p.name === "string" && p.name.startsWith(INT_PREFIX)) {
         const suffix = p.name.slice(INT_PREFIX.length);
-        return INT_SUFFIX_TO_TARGET[suffix] ?? null;
+        return intSuffixToTarget(suffix);
       }
       p = p.parent;
     }
@@ -298,6 +381,7 @@ export function Stage3() {
   function registerIslandInteractions(islandModel) {
     intRaycastMeshes.length = 0;
     iceCreamCartRef = null;
+    noticeRef = null;
     gameMachineRef = null;
     if (unlistenMinigameClose) {
       unlistenMinigameClose();
@@ -312,8 +396,10 @@ export function Stage3() {
       }
       rootNames.push(obj.name);
       const suffix = obj.name.slice(INT_PREFIX.length);
-      if (suffix === "gameMachine") gameMachineRef = obj;
-      if (suffix === "icecream") iceCreamCartRef = obj;
+      const intTarget = intSuffixToTarget(suffix);
+      if (intTarget === "gameMachine") gameMachineRef = obj;
+      if (intTarget === "notice") noticeRef = obj;
+      if (intTarget === "icecream") iceCreamCartRef = obj;
       obj.traverse((child) => {
         if (child.isMesh) meshSet.add(child);
       });
@@ -332,12 +418,11 @@ export function Stage3() {
     if (rootNames.length > 0 && import.meta.env.DEV) {
       const uniq = [...new Set(rootNames)];
       console.log("[Stage3] island INT_ 노드:", uniq.join(", "));
-      const knownSuffixes = new Set(Object.keys(INT_SUFFIX_TO_TARGET));
       for (const full of uniq) {
         const suf = full.startsWith(INT_PREFIX)
           ? full.slice(INT_PREFIX.length)
           : full;
-        if (!knownSuffixes.has(suf)) {
+        if (intSuffixToTarget(suf) == null) {
           console.log(
             `[Stage3] INT_ '${full}' → 아직 클릭 핸들러 없음 (매핑 추가 또는 GLB 이름 변경)`,
           );
@@ -378,7 +463,7 @@ export function Stage3() {
     if (canvasRef) canvasRef.style.cursor = "default";
   }
 
-  /** 게시판 모달 생성 및 표시 */
+  /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
   function showNoticeModal() {
     const paperPaths = config.notice?.paperSoundPaths ?? [];
     if (paperPaths.length > 0) {
@@ -394,65 +479,7 @@ export function Stage3() {
       noticePaperAudio.src = src;
       noticePaperAudio.play().catch(() => {});
     }
-    if (noticeModalEl) {
-      noticeModalEl.style.display = "flex";
-      return;
-    }
-    noticeModalEl = document.createElement("div");
-    noticeModalEl.className = "stage3-notice-modal-backdrop";
-    noticeModalEl.innerHTML = `
-      <div class="stage3-notice-modal">
-        <button type="button" class="stage3-notice-modal-close" aria-label="닫기">×</button>
-        <div class="stage3-notice-modal-content">게시판</div>
-      </div>
-    `;
-    Object.assign(noticeModalEl.style, {
-      position: "fixed",
-      inset: "0",
-      background: "rgba(0,0,0,0.35)",
-      backdropFilter: "blur(6px)",
-      WebkitBackdropFilter: "blur(6px)",
-      zIndex: "9999",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "16px",
-    });
-    const modalBox = noticeModalEl.querySelector(".stage3-notice-modal");
-    if (modalBox && "style" in modalBox)
-      Object.assign(modalBox.style, {
-        background: "#fff",
-        borderRadius: "12px",
-        padding: "24px 28px",
-        maxWidth: "400px",
-        width: "100%",
-        position: "relative",
-        boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
-      });
-    const closeBtn = noticeModalEl.querySelector(".stage3-notice-modal-close");
-    if (closeBtn && "style" in closeBtn)
-      Object.assign(closeBtn.style, {
-        position: "absolute",
-        top: "12px",
-        right: "12px",
-        width: "32px",
-        height: "32px",
-        border: "none",
-        background: "transparent",
-        fontSize: "24px",
-        lineHeight: "1",
-        cursor: "pointer",
-        color: "#666",
-      });
-    closeBtn.addEventListener("click", closeNoticeModal);
-    noticeModalEl.addEventListener("click", (e) => {
-      if (e.target === noticeModalEl) closeNoticeModal();
-    });
-    document.body.appendChild(noticeModalEl);
-  }
-
-  function closeNoticeModal() {
-    if (noticeModalEl) noticeModalEl.style.display = "none";
+    window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
   }
 
   /** island INT_* 클릭 핸들러 */
@@ -1440,15 +1467,15 @@ export function Stage3() {
 
       /** @type {import("../types.js").Stage3PortalConfig | undefined} */
       const portalCfg = config.portal_bright;
-      if (portalCfg?.targetStage != null && portalCfg?.normal) {
-        const { x: nx, z: nz } = portalCfg.normal;
+      if (portalCfg?.targetStage != null) {
+        const { x: nx, z: nz } = portalCfg.normal ?? { x: 0, z: 1 };
         const len = Math.hypot(nx, nz) || 1;
         portalPlaneConfig = {
           px: portalCfg.position?.x ?? 0,
           pz: portalCfg.position?.z ?? 0,
           nx: nx / len,
           nz: nz / len,
-          halfWidth: portalCfg.halfWidth ?? 2,
+          halfWidth: portalCfg.halfWidth ?? 3,
           targetStage: portalCfg.targetStage,
         };
       } else {
@@ -1528,7 +1555,24 @@ export function Stage3() {
           stage3GroundY = backgroundMaxY;
           loadLatestLetter(scene, this.camera, backgroundMaxY);
 
-          character.setup(backgroundMaxY, backgroundBounds);
+          const islandStaticColliders = collectIslandStaticColliderBoxes(model);
+          if (import.meta.env.DEV) {
+            console.log(
+              `[Stage3] INT_/OBJ_ 메시 충돌 AABB: ${islandStaticColliders.length}개 (INT_Portal 제외)`,
+            );
+          }
+          character.setup(
+            backgroundMaxY,
+            backgroundBounds,
+            islandStaticColliders,
+          );
+
+          // 섬 GLB는 backgroundLoader에서 이미 `scene.add(model)`로 들어와 있기 때문에,
+          // 카메라 인트로 시작 타이밍을 뒤로 미루면 섬(특히 하단)이 회전 시작 전 잠깐 보일 수 있음.
+          // 따라서 gumFollowers.init() 같은 비동기 로딩보다 먼저 카메라 인트로를 활성화한다.
+          if (isStage3Active) {
+            startCameraIntro(center, backgroundBounds);
+          }
 
           // 유저를 따라다니는 껌딱지(사이드 캐릭터) 2마리
           gumFollowers = createGumFollowersController({
@@ -1557,7 +1601,7 @@ export function Stage3() {
 
           if (!isStage3Active) return;
           registerIslandInteractions(model);
-          startCameraIntro(center, backgroundBounds);
+          syncPortalPlaneToIntPortalObject(model);
         },
       });
 
@@ -1615,11 +1659,8 @@ export function Stage3() {
         canvasRef.style.cursor = "default";
         canvasRef = null;
       }
-      closeNoticeModal();
-      if (noticeModalEl && noticeModalEl.parentNode) {
-        noticeModalEl.parentNode.removeChild(noticeModalEl);
-        noticeModalEl = null;
-      }
+      window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
+      noticeRef = null;
       closeMinigame({
         camera: cameraRef ?? this.camera,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
