@@ -4,6 +4,7 @@
  */
 import * as THREE from "three";
 import { inspectGLTF } from "../../common/modelInspector.js";
+import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 
 /**
  * @param {{
@@ -13,7 +14,11 @@ import { inspectGLTF } from "../../common/modelInspector.js";
  *   getKeys: () => Record<string, boolean>,
  * }} params
  * @returns {{
- *   setup: (backgroundMaxY: number, backgroundBounds: import("three").Box3) => void,
+ *   setup: (
+ *     backgroundMaxY: number,
+ *     backgroundBounds: import("three").Box3,
+ *     staticColliderBoxes?: import("./islandStaticColliders.js").IslandColliderAabb[],
+ *   ) => void,
  *   update: (delta: number, camera: import("three").Camera) => void,
  *   cleanup: () => void,
  *   getPosition: () => import("three").Vector3 | null,
@@ -32,6 +37,9 @@ export function createCharacterController({
   let isWalking = false;
   let isMoving = false;
   let backgroundBounds = null;
+  /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
+  let staticColliderBoxes = [];
+  let collisionRadius = 0.55;
   let stopOnNextLoop = false;
 
   // 매 프레임 재사용할 Vector3 인스턴스 (GC 압박 방지)
@@ -42,8 +50,9 @@ export function createCharacterController({
   const _lookAtPosition = new THREE.Vector3();
 
   return {
-    setup(backgroundMaxY, bounds) {
+    setup(backgroundMaxY, bounds, colliderBoxes = []) {
       backgroundBounds = bounds;
+      staticColliderBoxes = colliderBoxes;
 
       const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
       const characterPath =
@@ -53,8 +62,11 @@ export function createCharacterController({
         onLoad: (gltf) => {
           characterModel = gltf.scene;
 
-          const { scale = 1 } = config.character ?? {};
+          const { scale = 1, collisionRadius: radiusCfg } =
+            config.character ?? {};
           characterModel.scale.setScalar(scale);
+          collisionRadius =
+            radiusCfg != null ? radiusCfg : Math.max(0.2, scale * 0.22);
 
           const characterBox = new THREE.Box3().setFromObject(characterModel);
           const characterMinY = characterBox.min.y;
@@ -156,6 +168,17 @@ export function createCharacterController({
           backgroundBounds.max.z - boundsPadding,
         );
 
+        const slid = slideMoveXZAgainstAABBs(
+          oldX,
+          oldZ,
+          newX,
+          newZ,
+          collisionRadius,
+          staticColliderBoxes,
+        );
+        newX = slid.x;
+        newZ = slid.z;
+
         characterModel.position.x = newX;
         characterModel.position.z = newZ;
         characterModel.position.y = characterYPosition;
@@ -224,6 +247,7 @@ export function createCharacterController({
       isWalking = false;
       stopOnNextLoop = false;
       backgroundBounds = null;
+      staticColliderBoxes = [];
     },
 
     getPosition() {
