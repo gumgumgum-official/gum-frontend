@@ -7,6 +7,17 @@ const woodDark = "oklch(0.45 0.08 55)";
 const card = "oklch(0.99 0.012 85)";
 const amber50 = "#fffbeb";
 
+/** 한 줄 가로 배치: 모달 너비의 1/3씩 균등 분배, 화면이 클수록 포스터만 함께 커짐 */
+const POSTER_BASE = {
+  flex: "1 1 0",
+  minWidth: 0,
+  aspectRatio: "11 / 16",
+  borderRadius: 12,
+  overflow: "visible",
+  position: "relative",
+  alignSelf: "center",
+};
+
 /** @param {Object} props
  * @param {boolean} props.isOpen
  * @param {function} props.onClose
@@ -51,7 +62,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "24px",
+            padding: "clamp(10px, 1.5vw, 20px)",
           }}
         >
           <motion.div
@@ -63,7 +74,11 @@ export function NoticeModalBoard({ isOpen, onClose }) {
             style={{
               background: card,
               borderRadius: "24px",
-              width: "960px",
+              width: "min(96vw, 1680px)",
+              maxHeight: "min(94vh, 1200px)",
+              height: "auto",
+              display: "flex",
+              flexDirection: "column",
               position: "relative",
               overflow: "hidden",
               border: `3px solid ${wood}`,
@@ -128,13 +143,15 @@ export function NoticeModalBoard({ isOpen, onClose }) {
             </button>
             <div
               style={{
-                padding: "40px 32px 48px",
+                padding: "clamp(32px, 4vh, 56px) clamp(16px, 2.5vw, 40px)",
                 background: card,
                 color: "oklch(0.28 0.04 60)",
                 display: "flex",
                 flexDirection: "row",
-                gap: 24,
+                flexWrap: "nowrap",
+                gap: "clamp(16px, 2vw, 32px)",
                 justifyContent: "center",
+                alignItems: "center",
               }}
             >
               {/* 포스터 1: 마을 잔치 */}
@@ -146,16 +163,11 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 style={{
-                  width: 220,
-                  height: 320,
-                  flexShrink: 0,
-                  borderRadius: 12,
-                  overflow: "visible",
+                  ...POSTER_BASE,
                   border: "2px solid oklch(0.85 0.02 60)",
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
                   cursor: "pointer",
-                  position: "relative",
                 }}
               >
                 <div
@@ -205,16 +217,11 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 style={{
+                  ...POSTER_BASE,
                   cursor: "pointer",
-                  width: 220,
-                  height: 320,
-                  flexShrink: 0,
-                  borderRadius: 12,
-                  overflow: "visible",
                   border: "2px solid #fde047",
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
-                  position: "relative",
                 }}
               >
                 <div
@@ -258,15 +265,10 @@ export function NoticeModalBoard({ isOpen, onClose }) {
               {/* 포스터 3: 빈 박스 (투표는 2번째 포스터에서만) */}
               <motion.div
                 style={{
-                  width: 220,
-                  height: 320,
-                  flexShrink: 0,
-                  borderRadius: 12,
-                  overflow: "visible",
+                  ...POSTER_BASE,
                   border: "2px solid rgba(249,168,212,0.35)",
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)",
-                  position: "relative",
                 }}
               >
                 <div
