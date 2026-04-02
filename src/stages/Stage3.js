@@ -1570,6 +1570,13 @@ export function Stage3() {
             islandStaticColliders,
           );
 
+          // 섬 GLB는 backgroundLoader에서 이미 `scene.add(model)`로 들어와 있기 때문에,
+          // 카메라 인트로 시작 타이밍을 뒤로 미루면 섬(특히 하단)이 회전 시작 전 잠깐 보일 수 있음.
+          // 따라서 gumFollowers.init() 같은 비동기 로딩보다 먼저 카메라 인트로를 활성화한다.
+          if (isStage3Active) {
+            startCameraIntro(center, backgroundBounds);
+          }
+
           // 유저를 따라다니는 껌딱지(사이드 캐릭터) 2마리
           gumFollowers = createGumFollowersController({
             scene,
@@ -1598,7 +1605,6 @@ export function Stage3() {
           if (!isStage3Active) return;
           registerIslandInteractions(model);
           syncPortalPlaneToIntPortalObject(model);
-          startCameraIntro(center, backgroundBounds);
         },
       });
 
