@@ -35,6 +35,8 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   const despawnTimeoutsRef = useRef(new Map());
   const floatTimerRef = useRef(new Map());
   const playCountRef = useRef(0);
+  const winScoreAudioRef = useRef(null);
+  const winScoreAudioSrcRef = useRef("");
 
   const clearSpawnTimer = useCallback(() => {
     if (spawnTimerRef.current) {
@@ -53,10 +55,45 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     floatTimerRef.current.clear();
   }, []);
 
+  // 결과(최종 점수) 사운드: 미리 preload 해서 타임아웃 순간 딜레이 최소화
+  useEffect(() => {
+    try {
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const src = base + "/static/sounds/Win Score 1.mp3";
+      winScoreAudioSrcRef.current = src;
+      if (!winScoreAudioRef.current) {
+        winScoreAudioRef.current = new window.Audio();
+        winScoreAudioRef.current.preload = "auto";
+        winScoreAudioRef.current.volume = 0.7;
+      }
+      const a = winScoreAudioRef.current;
+      a.src = src;
+      a.load?.();
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const timer = useGameTimer(() => {
     clearSpawnTimer();
     clearDespawnTimeouts();
     clearFloatTimers();
+    // 시간 초과로 게임이 끝나고 최종 점수 모달이 뜰 때 1회 재생
+    try {
+      const a = winScoreAudioRef.current;
+      if (
+        a &&
+        winScoreAudioSrcRef.current &&
+        a.src !== winScoreAudioSrcRef.current
+      ) {
+        a.src = winScoreAudioSrcRef.current;
+      }
+      a.pause();
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } catch {
+      // ignore
+    }
     setGameState("result");
   });
   const timeLeft = timer.timeLeft;
