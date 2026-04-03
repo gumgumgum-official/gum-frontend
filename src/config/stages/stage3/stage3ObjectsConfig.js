@@ -39,14 +39,12 @@ export const STAGE3_OBJECTS_CONFIG = {
   },
 
   /**
-   * 포탈 논리 평면(스테이지 전환).
-   * GLB에 `INT_Portal`이 있으면 배경 로드 후 그 월드 위치·법선으로 덮어씀.
-   * 없을 때만 `position` / `normal` 폴백.
+   * 포탈: GLB의 `INT_Portal` 메시를 클릭하면 `targetStage`로 전환합니다.
+   * `position` / `normal` / `halfWidth`는 예전 평면 통과 로직용으로 남겨 두었으며 현재는 사용하지 않습니다.
    */
   portal_bright: {
     position: { x: -3, y: -0.3, z: 12 },
     normal: { x: 0, y: 0, z: 1 },
-    /** 포탈 폭(미터): 캐릭터가 이 안쪽에서만 통과로 인정 */
     halfWidth: 4,
     targetStage: 6,
   },

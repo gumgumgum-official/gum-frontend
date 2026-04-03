@@ -143,15 +143,15 @@
  */
 
 /**
- * Stage3 포탈 전용 설정 (평면 통과 시 스테이지 전환)
+ * Stage3 포탈 설정 (`INT_Portal` 클릭 시 `targetStage`로 전환)
  * @typedef {Object} Stage3PortalConfig
  * @extends Stage3PropConfig
  * @property {string} [path]
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
- * @property {{x: number, y?: number, z: number}} [normal] - 수직 포탈 평면 법선; y 생략 시 0(수평 XZ 성분만 사용)
- * @property {number} [halfWidth] - 포탈 반폭 (수평 허용 거리)
+ * @property {{x: number, y?: number, z: number}} [normal] - 레거시(평면 통과 시 사용, 현재 미사용)
+ * @property {number} [halfWidth] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [targetStage] - 전환할 Stage 번호
  */
 

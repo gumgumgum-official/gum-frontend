@@ -155,14 +155,7 @@ export function Stage3() {
   const _introTargetPos = new THREE.Vector3();
   const _introTargetLookAt = new THREE.Vector3();
   const _introLerpLookAt = new THREE.Vector3();
-  const _portalSyncPos = new THREE.Vector3();
-  const _portalSyncNormal = new THREE.Vector3();
-  const _portalSyncQuat = new THREE.Quaternion();
   const _iceCartWorld = new THREE.Vector3();
-
-  /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
-  let portalPlaneConfig = null;
-  let prevPortalSignedDist = null;
 
   function getCharacterFollowPose(outPos, outLookAt) {
     if (!character) return false;
@@ -276,102 +269,6 @@ export function Stage3() {
       resetLetterFall();
     }
   };
-
-  /**
-   * GLB의 INT_Portal 월드 위치·방향으로 논리 포탈 평면을 맞춤.
-   * (config `portal_bright.position`은 예전 섬 좌표라 island4 등에서는 실제와 어긋남)
-   */
-  function syncPortalPlaneToIntPortalObject(islandModel) {
-    const portalCfg = config.portal_bright;
-    if (!portalCfg?.targetStage) return;
-
-    /** @type {THREE.Object3D | null} */
-    let portalRoot = null;
-    islandModel.updateMatrixWorld(true);
-    islandModel.traverse((obj) => {
-      const n = typeof obj.name === "string" ? obj.name.trim() : "";
-      if (/^INT_Portal$/i.test(n)) portalRoot = obj;
-    });
-
-    const halfWidth = portalCfg.halfWidth ?? 3;
-    const targetStage = portalCfg.targetStage;
-
-    if (!portalRoot) {
-      if (import.meta.env.DEV) {
-        console.warn(
-          "[Stage3] INT_Portal 노드 없음 — portal_bright config 좌표만 사용합니다.",
-        );
-      }
-      return;
-    }
-
-    portalRoot.getWorldPosition(_portalSyncPos);
-    _portalSyncNormal.set(0, 0, 1);
-    portalRoot.getWorldQuaternion(_portalSyncQuat);
-    _portalSyncNormal.applyQuaternion(_portalSyncQuat);
-    _portalSyncNormal.y = 0;
-    if (_portalSyncNormal.lengthSq() < 1e-10) {
-      _portalSyncNormal.set(1, 0, 0);
-      _portalSyncNormal.applyQuaternion(_portalSyncQuat);
-      _portalSyncNormal.y = 0;
-    }
-    if (_portalSyncNormal.lengthSq() < 1e-10) {
-      const fc = portalCfg.normal ?? { x: 0, z: 1 };
-      const fl = Math.hypot(fc.x, fc.z) || 1;
-      portalPlaneConfig = {
-        px: _portalSyncPos.x,
-        pz: _portalSyncPos.z,
-        nx: fc.x / fl,
-        nz: fc.z / fl,
-        halfWidth,
-        targetStage,
-      };
-    } else {
-      _portalSyncNormal.normalize();
-      portalPlaneConfig = {
-        px: _portalSyncPos.x,
-        pz: _portalSyncPos.z,
-        nx: _portalSyncNormal.x,
-        nz: _portalSyncNormal.z,
-        halfWidth,
-        targetStage,
-      };
-    }
-    prevPortalSignedDist = null;
-    if (import.meta.env.DEV) {
-      console.log("[Stage3] 포탈 평면 INT_Portal에 맞춤:", portalPlaneConfig);
-    }
-  }
-
-  /** 포탈 평면 통과 시 stage:switch 이벤트 dispatch */
-  function checkPortalPlaneCrossing() {
-    const plane = portalPlaneConfig;
-    if (!plane || !character) return;
-    const pos = character.getPosition?.();
-    if (!pos) return;
-
-    const dx = pos.x - plane.px;
-    const dz = pos.z - plane.pz;
-    const signedDist = dx * plane.nx + dz * plane.nz;
-    const lateral = Math.abs(-dx * plane.nz + dz * plane.nx);
-    if (lateral > plane.halfWidth) return;
-
-    if (prevPortalSignedDist !== null) {
-      const crossed =
-        (prevPortalSignedDist > 0 && signedDist < 0) ||
-        (prevPortalSignedDist < 0 && signedDist > 0);
-      if (crossed) {
-        window.dispatchEvent(
-          new CustomEvent("stage:switch", {
-            detail: { targetStage: plane.targetStage },
-          }),
-        );
-        prevPortalSignedDist = null;
-        return;
-      }
-    }
-    prevPortalSignedDist = signedDist;
-  }
 
   function resolveIntPointerTarget(hitObject) {
     let p = hitObject;
@@ -1533,24 +1430,6 @@ export function Stage3() {
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
-      prevPortalSignedDist = null;
-
-      /** @type {import("../types.js").Stage3PortalConfig | undefined} */
-      const portalCfg = config.portal_bright;
-      if (portalCfg?.targetStage != null) {
-        const { x: nx, z: nz } = portalCfg.normal ?? { x: 0, z: 1 };
-        const len = Math.hypot(nx, nz) || 1;
-        portalPlaneConfig = {
-          px: portalCfg.position?.x ?? 0,
-          pz: portalCfg.position?.z ?? 0,
-          nx: nx / len,
-          nz: nz / len,
-          halfWidth: portalCfg.halfWidth ?? 3,
-          targetStage: portalCfg.targetStage,
-        };
-      } else {
-        portalPlaneConfig = null;
-      }
 
       character = createCharacterController({
         scene,
@@ -1662,7 +1541,6 @@ export function Stage3() {
           }
 
           registerIslandInteractions(model);
-          syncPortalPlaneToIntPortalObject(model);
 
           gumFollowers = createGumFollowersController({
             scene,
@@ -1714,7 +1592,6 @@ export function Stage3() {
       if (gumFollowers) {
         gumFollowers.update(delta);
       }
-      checkPortalPlaneCrossing();
     },
 
     cleanup(scene) {

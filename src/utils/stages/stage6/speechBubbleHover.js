@@ -45,8 +45,11 @@ export function createSpeechBubbleHover({
   const canvas = renderer.domElement;
 
   onPointerMove = (e) => {
-    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    const rect = canvas.getBoundingClientRect();
+    const rw = rect.width || 1;
+    const rh = rect.height || 1;
+    mouse.x = ((e.clientX - rect.left) / rw) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rh) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
 
     const targets = characterModels.map((c) => c.model);
@@ -67,8 +70,8 @@ export function createSpeechBubbleHover({
         _box.getSize(_size);
         _projected.y += _size.y * bubbleOffsetY;
         _projected.project(camera);
-        const x = (_projected.x * 0.5 + 0.5) * window.innerWidth;
-        const y = (-_projected.y * 0.5 + 0.5) * window.innerHeight;
+        const x = rect.left + (_projected.x * 0.5 + 0.5) * rw;
+        const y = rect.top + (-_projected.y * 0.5 + 0.5) * rh;
         speechBubbleEl.textContent = entry.message;
         speechBubbleEl.style.left = `${x}px`;
         speechBubbleEl.style.top = `${y}px`;
