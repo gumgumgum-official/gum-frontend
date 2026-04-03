@@ -73,7 +73,14 @@ export function createCharacterController({
 
           const { groundOffset } = config.character;
           characterYPosition = backgroundMaxY - characterMinY + groundOffset;
-          characterModel.position.set(0, characterYPosition, 0);
+
+          let spawnX = 0;
+          let spawnZ = 0;
+          if (bounds && !bounds.isEmpty()) {
+            spawnX = (bounds.min.x + bounds.max.x) * 0.5;
+            spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
+          }
+          characterModel.position.set(spawnX, characterYPosition, spawnZ);
 
           characterModel.traverse((child) => {
             if (child.isMesh) {
@@ -105,7 +112,7 @@ export function createCharacterController({
 
           scene.add(characterModel);
           console.log(
-            `✅ Stage3 캐릭터 모델 로드 완료 (y: ${characterYPosition.toFixed(2)})`,
+            `✅ Stage3 캐릭터 모델 로드 완료 (xz: ${spawnX.toFixed(2)}, ${spawnZ.toFixed(2)}, y: ${characterYPosition.toFixed(2)})`,
           );
           inspectGLTF(gltf, "캐릭터 모델");
         },
@@ -157,16 +164,25 @@ export function createCharacterController({
         let newX = characterModel.position.x + _moveVector.x;
         let newZ = characterModel.position.z + _moveVector.z;
 
-        newX = THREE.MathUtils.clamp(
-          newX,
+        // 패딩 때문에 low>high가 되면 Three clamp가 한 점으로 몰아 이동이 0이 된다.
+        const minCx = Math.min(
           backgroundBounds.min.x + boundsPadding,
           backgroundBounds.max.x - boundsPadding,
         );
-        newZ = THREE.MathUtils.clamp(
-          newZ,
+        const maxCx = Math.max(
+          backgroundBounds.min.x + boundsPadding,
+          backgroundBounds.max.x - boundsPadding,
+        );
+        const minCz = Math.min(
           backgroundBounds.min.z + boundsPadding,
           backgroundBounds.max.z - boundsPadding,
         );
+        const maxCz = Math.max(
+          backgroundBounds.min.z + boundsPadding,
+          backgroundBounds.max.z - boundsPadding,
+        );
+        newX = THREE.MathUtils.clamp(newX, minCx, maxCx);
+        newZ = THREE.MathUtils.clamp(newZ, minCz, maxCz);
 
         const slid = slideMoveXZAgainstAABBs(
           oldX,

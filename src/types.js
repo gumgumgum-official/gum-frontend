@@ -46,6 +46,7 @@
  * @property {number} [envMapIntensity]
  * @property {boolean} [castShadow]
  * @property {boolean} [receiveShadow]
+ * @property {boolean} [useStaticObstacleColliders] - Stage3: `INT_`/`OBJ_` 메시 기반 XZ 정적 충돌(기본 true). false면 바운딩 클램프만 사용(디버그·임시)
  */
 
 /**
@@ -159,7 +160,7 @@
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
- * @property {string[]} [spawnPaths] - 레거시: 별도 GLB 스폰 경로
+ * @property {string[]} [spawnPaths] - 카트 클릭 시 복제해 스폰할 GLB 경로(public 기준, 예: /models/…)
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxSpawns] - 스폰 최대 개수
  * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
