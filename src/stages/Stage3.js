@@ -6,6 +6,10 @@
  */
 import * as THREE from "three";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../utils/common/gltfTemplateCache.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
@@ -30,6 +34,7 @@ import {
 } from "../utils/stages/stage3/mirrorModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
+import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -471,23 +476,8 @@ export function Stage3() {
     if (canvasRef) canvasRef.style.cursor = "default";
   }
 
-  function disposeIceCreamTemplateScene(root) {
-    root.traverse((child) => {
-      if (!child.isMesh) return;
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) {
-        const m = child.material;
-        if (Array.isArray(m)) m.forEach((x) => x.dispose());
-        else m.dispose();
-      }
-    });
-  }
-
   function disposeIceCreamTemplates() {
-    for (let i = 0; i < iceCreamTemplates.length; i++) {
-      const t = iceCreamTemplates[i];
-      if (t?.scene) disposeIceCreamTemplateScene(t.scene);
-    }
+    // 템플릿 `scene`은 전역 GLTF 캐시 템플릿이므로 dispose하지 않는다(재진입·스폰 clone만 dispose).
     iceCreamTemplates.length = 0;
   }
 
@@ -505,11 +495,10 @@ export function Stage3() {
       }
       return;
     }
-    const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
     const loads = paths.map(async (rel) => {
-      const url = rel.startsWith("http") ? rel : base + rel;
+      const url = rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel);
       try {
-        return await glbLoader.loadAsync(url);
+        return await loadGltfTemplateCached(url);
       } catch (e) {
         if (import.meta.env.DEV) {
           console.warn(
@@ -522,9 +511,6 @@ export function Stage3() {
     });
     const results = await Promise.all(loads);
     if (!isStage3Active) {
-      for (const g of results) {
-        if (g?.scene) disposeIceCreamTemplateScene(g.scene);
-      }
       return;
     }
     for (const g of results) {
@@ -1623,13 +1609,11 @@ export function Stage3() {
         glbLoader,
         config,
         getIsActive: () => isStage3Active,
-        onReady: async ({
-          model,
-          center,
-          backgroundMaxY,
-          backgroundBounds,
-        }) => {
+        onReady: ({ model, center, backgroundMaxY, backgroundBounds }) => {
           backgroundModel = model;
+          if (isStage3Active) {
+            playStage3IntroAudioTwice();
+          }
           debugControls.setOrbitTarget(center);
           if (import.meta.env.DEV) {
             console.log("✅ Stage3 배경 모델 로드 완료");
@@ -1677,7 +1661,9 @@ export function Stage3() {
             startCameraIntro(center, backgroundBounds);
           }
 
-          // 유저를 따라다니는 껌딱지(사이드 캐릭터) 2마리
+          registerIslandInteractions(model);
+          syncPortalPlaneToIntPortalObject(model);
+
           gumFollowers = createGumFollowersController({
             scene,
             glbLoader,
@@ -1688,31 +1674,24 @@ export function Stage3() {
               moving: character?.getIsMoving?.() ?? false,
             }),
           });
-          // 캐릭터 모델 로딩 타이밍과 무관하게, 껌딱지는 init이 끝나는 즉시 update에서 따라오게 처리
-          try {
-            await gumFollowers.init({
+
+          void gumFollowers
+            .init({
               backgroundMaxY,
               isCancelled: () => !isStage3Active || gumCancelled,
+            })
+            .catch((e) => {
+              if (import.meta.env.DEV) {
+                console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
+              }
+              gumFollowers?.cleanup?.();
+              gumFollowers = null;
             });
-          } catch (e) {
-            if (import.meta.env.DEV) {
-              console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
-            }
-            gumFollowers?.cleanup?.();
-            gumFollowers = null;
-          }
-
-          if (!isStage3Active) return;
-          try {
-            await preloadIceCreamTemplates();
-          } catch (e) {
+          void preloadIceCreamTemplates().catch((e) => {
             if (import.meta.env.DEV) {
               console.warn("[Stage3] 아이스크림 preload 오류:", e ?? "");
             }
-          }
-          if (!isStage3Active) return;
-          registerIslandInteractions(model);
-          syncPortalPlaneToIntPortalObject(model);
+          });
         },
       });
 

@@ -13,7 +13,7 @@ const DEFAULT_DRACO_PATH = "/draco/";
  * GLB/GLTF 전용 로더 생성 (DRACO 지원, 싱글톤 권장)
  * @param {Object} options
  * @param {string} [options.dracoPath='/draco/'] - DRACO 디코더 경로 (public 기준)
- * @returns {{ load, loadAsync }}
+ * @returns {{ load, loadAsync, preloadDecoders }}
  */
 export function createGLBLoader(options = {}) {
   const dracoPath = options.dracoPath ?? DEFAULT_DRACO_PATH;
@@ -25,6 +25,11 @@ export function createGLBLoader(options = {}) {
   gltfLoader.setDRACOLoader(dracoLoader);
 
   return {
+    /** Draco WASM/JS 워커를 미리 올려 이후 첫 메시 디코드 지연을 줄인다. */
+    preloadDecoders() {
+      dracoLoader.preload();
+      return this;
+    },
     /**
      * GLB/GLTF 로드 (콜백)
      * @param {string} path - URL (예: '/models/xxx.glb')
