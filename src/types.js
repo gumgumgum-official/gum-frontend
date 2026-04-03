@@ -120,6 +120,7 @@
 /**
  * Stage3 캐릭터 이동·카메라 설정
  * @typedef {Object} Stage3CharacterConfig
+ * @property {number} [scale] - 캐릭터 루트 스케일 배율
  * @property {number} groundOffset - 배경 위 y 여유 공간
  * @property {number} moveSpeed - 이동 속도
  * @property {number} boundsPadding - 바운드 경계 여유 공간
@@ -127,6 +128,7 @@
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
  * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정
+ * @property {{x?: number, z?: number}} [spawnOffset] - 섬 바운딩 XZ 중심 기준 스폰 추가 오프셋(m)
  * @property {Stage3GumFollowersConfig} gumFollowers
  */
 

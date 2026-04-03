@@ -3,7 +3,12 @@
  * GLB 로드, AnimationMixer 설정, 이동/회전/바운드 클램핑, 카메라 추적을 담당합니다.
  */
 import * as THREE from "three";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { inspectGLTF } from "../../common/modelInspector.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../../common/gltfTemplateCache.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 
 /**
@@ -22,6 +27,8 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *   update: (delta: number, camera: import("three").Camera) => void,
  *   cleanup: () => void,
  *   getPosition: () => import("three").Vector3 | null,
+ *   getYaw: () => number | null,
+ *   getIsMoving: () => boolean,
  * }}
  */
 export function createCharacterController({
@@ -30,6 +37,7 @@ export function createCharacterController({
   config,
   getKeys,
 }) {
+  void glbLoader;
   let characterModel = null;
   let characterYPosition = 0;
   let characterMixer = null;
@@ -54,16 +62,15 @@ export function createCharacterController({
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
 
-      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-      const characterPath =
-        base +
-        (config.characterModelPath ?? "/models/common/user_walking_color.glb");
-      glbLoader.load(characterPath, {
-        onLoad: (gltf) => {
-          characterModel = gltf.scene;
+      const relChar =
+        config.characterModelPath ?? "/models/common/user_walking_color.glb";
+      const characterUrl = resolvePublicAssetUrl(relChar);
+      loadGltfTemplateCached(characterUrl).then(
+        (gltf) => {
+          characterModel = SkeletonUtils.clone(gltf.scene);
 
-          const { scale = 1, collisionRadius: radiusCfg } =
-            config.character ?? {};
+          const scale = config.character?.scale ?? 1;
+          const radiusCfg = config.character?.collisionRadius;
           characterModel.scale.setScalar(scale);
           collisionRadius =
             radiusCfg != null ? radiusCfg : Math.max(0.2, scale * 0.22);
@@ -71,7 +78,7 @@ export function createCharacterController({
           const characterBox = new THREE.Box3().setFromObject(characterModel);
           const characterMinY = characterBox.min.y;
 
-          const { groundOffset } = config.character;
+          const groundOffset = config.character?.groundOffset ?? 0;
           characterYPosition = backgroundMaxY - characterMinY + groundOffset;
 
           let spawnX = 0;
@@ -79,6 +86,11 @@ export function createCharacterController({
           if (bounds && !bounds.isEmpty()) {
             spawnX = (bounds.min.x + bounds.max.x) * 0.5;
             spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
+          }
+          const off = config.character?.spawnOffset;
+          if (off) {
+            spawnX += off.x ?? 0;
+            spawnZ += off.z ?? 0;
           }
           characterModel.position.set(spawnX, characterYPosition, spawnZ);
 
@@ -116,15 +128,12 @@ export function createCharacterController({
           );
           inspectGLTF(gltf, "캐릭터 모델");
         },
-        onProgress: (xhr) => {
-          if (xhr.total > 0) {
-            console.log(
-              `Stage3 캐릭터: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-            );
-          }
-        },
-        onError: (err) => console.error("❌ Stage3 캐릭터 로드 에러:", err),
-      });
+        (err) =>
+          console.error(
+            "❌ Stage3 캐릭터 로드 에러:",
+            err instanceof Error ? err : new Error(String(err)),
+          ),
+      );
     },
 
     /**
