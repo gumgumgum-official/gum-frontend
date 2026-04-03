@@ -69,6 +69,18 @@ export function loadStage3Background({
         backgroundBounds = box.clone();
       }
 
+      const boundsPad = config.character?.boundsPadding ?? 0.5;
+      const spanX = backgroundBounds.max.x - backgroundBounds.min.x;
+      const spanZ = backgroundBounds.max.z - backgroundBounds.min.z;
+      if (spanX <= 2 * boundsPad + 1e-3 || spanZ <= 2 * boundsPad + 1e-3) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "⚠️ Island XZ 바운딩이 이동 패딩 대비 너무 작습니다. 전체 모델 바운딩으로 대체합니다.",
+          );
+        }
+        backgroundBounds = box.clone();
+      }
+
       // 발 높이: 전체 씬 center.y는 물·배경에 끌려 낮게 잡히기 쉬움.
       // island의 min이 물/절벽 아래까지 포함되면 min+(max-min)*t 만으로는 지면보다 낮아질 수 있어
       // max.y 근처 후보와 둘 중 더 높은 쪽을 택한다.

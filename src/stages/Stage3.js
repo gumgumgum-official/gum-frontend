@@ -5,12 +5,14 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
-import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
-import { collectIslandStaticColliderBoxes } from "../utils/stages/stage3/islandStaticColliders.js";
+import {
+  collectIslandStaticColliderBoxes,
+  filterCollidersExcludingDominantTerrain,
+} from "../utils/stages/stage3/islandStaticColliders.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
@@ -151,6 +153,7 @@ export function Stage3() {
   const _portalSyncPos = new THREE.Vector3();
   const _portalSyncNormal = new THREE.Vector3();
   const _portalSyncQuat = new THREE.Quaternion();
+  const _iceCartWorld = new THREE.Vector3();
 
   /** 포탈 평면 통과 감지: { px, pz, nx, nz, halfWidth, targetStage } */
   let portalPlaneConfig = null;
@@ -441,7 +444,12 @@ export function Stage3() {
     _iceRaycaster.setFromCamera(_icePointer, cameraRef);
     const hits = _iceRaycaster.intersectObjects(intRaycastMeshes, false);
     if (hits.length === 0) return null;
-    return resolveIntPointerTarget(hits[0].object);
+    // 같은 화면 위치에서 가장 앞이 INT_StreetLight 등(매핑 없음)이면 null이 되어 카트 클릭이 무시됨 → 뒤쪽 히트까지 순회
+    for (let i = 0; i < hits.length; i++) {
+      const resolved = resolveIntPointerTarget(hits[i].object);
+      if (resolved) return resolved;
+    }
+    return null;
   }
 
   let _pointerMoveRafId = 0;
@@ -461,6 +469,72 @@ export function Stage3() {
 
   function handlePointerLeave() {
     if (canvasRef) canvasRef.style.cursor = "default";
+  }
+
+  function disposeIceCreamTemplateScene(root) {
+    root.traverse((child) => {
+      if (!child.isMesh) return;
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        const m = child.material;
+        if (Array.isArray(m)) m.forEach((x) => x.dispose());
+        else m.dispose();
+      }
+    });
+  }
+
+  function disposeIceCreamTemplates() {
+    for (let i = 0; i < iceCreamTemplates.length; i++) {
+      const t = iceCreamTemplates[i];
+      if (t?.scene) disposeIceCreamTemplateScene(t.scene);
+    }
+    iceCreamTemplates.length = 0;
+  }
+
+  /**
+   * 카트 클릭 스폰용 GLB를 섬 로드 직후 모두 받을 때까지 기다린다.
+   * 이전 방식(setup에서 비동기만 시작)은 클릭 시점에 템플릿 배열이 비어 조용히 무시되기 쉬움.
+   */
+  async function preloadIceCreamTemplates() {
+    const paths = config.icecreamCart?.spawnPaths;
+    if (!paths || paths.length === 0) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] icecreamCart.spawnPaths 없음 — 카트 클릭 스폰 비활성",
+        );
+      }
+      return;
+    }
+    const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+    const loads = paths.map(async (rel) => {
+      const url = rel.startsWith("http") ? rel : base + rel;
+      try {
+        return await glbLoader.loadAsync(url);
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[Stage3] 아이스크림 템플릿 로드 실패 (${rel}):`,
+            e ?? "",
+          );
+        }
+        return null;
+      }
+    });
+    const results = await Promise.all(loads);
+    if (!isStage3Active) {
+      for (const g of results) {
+        if (g?.scene) disposeIceCreamTemplateScene(g.scene);
+      }
+      return;
+    }
+    for (const g of results) {
+      if (g?.scene) iceCreamTemplates.push({ scene: g.scene });
+    }
+    if (import.meta.env.DEV) {
+      console.log(
+        `[Stage3] 아이스크림 템플릿 preload 완료: ${iceCreamTemplates.length}개`,
+      );
+    }
   }
 
   /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
@@ -492,7 +566,14 @@ export function Stage3() {
     event.stopPropagation();
 
     if (target === "icecream") {
-      if (iceCreamTemplates.length === 0) return;
+      if (iceCreamTemplates.length === 0) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] 아이스크림 템플릿이 비어 있습니다. GLB 경로·네트워크를 확인하세요.",
+          );
+        }
+        return;
+      }
       spawnIceCreamFromCart();
       return;
     }
@@ -569,12 +650,14 @@ export function Stage3() {
 
     const template =
       iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
-    const clone = SkeletonUtils.clone(template.scene);
-    const cartPos = iceCreamCartRef.position;
+    const clone = template.scene.clone(true);
+    clone.frustumCulled = false;
+    iceCreamCartRef.updateMatrixWorld(true);
+    iceCreamCartRef.getWorldPosition(_iceCartWorld);
     const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
-    const sx = cartPos.x + (Math.random() - 0.5) * 1.5;
-    const sy = cartPos.y + 0.5 + Math.random() * 0.5;
-    const sz = cartPos.z + (Math.random() - 0.5) * 1.5;
+    const sx = _iceCartWorld.x + (Math.random() - 0.5) * 1.5;
+    const sy = _iceCartWorld.y + 0.5 + Math.random() * 0.5;
+    const sz = _iceCartWorld.z + (Math.random() - 0.5) * 1.5;
 
     clone.position.set(sx, sy, sz);
     clone.scale.setScalar(spawnScale);
@@ -590,10 +673,11 @@ export function Stage3() {
     const box = new THREE.Box3().setFromObject(clone);
     const size = new THREE.Vector3();
     box.getSize(size);
+    const minHalf = 0.08;
     const halfExtents = new CANNON.Vec3(
-      size.x * 0.5,
-      size.y * 0.5,
-      size.z * 0.5,
+      Math.max(size.x * 0.5, minHalf),
+      Math.max(size.y * 0.5, minHalf),
+      Math.max(size.z * 0.5, minHalf),
     );
     const boxShape = new CANNON.Box(halfExtents);
     const body = new CANNON.Body({
@@ -1555,11 +1639,30 @@ export function Stage3() {
           stage3GroundY = backgroundMaxY;
           loadLatestLetter(scene, this.camera, backgroundMaxY);
 
-          const islandStaticColliders = collectIslandStaticColliderBoxes(model);
+          const useStatic = config.model.useStaticObstacleColliders !== false;
+          const rawColliders = useStatic
+            ? collectIslandStaticColliderBoxes(model)
+            : [];
+          const islandStaticColliders = useStatic
+            ? filterCollidersExcludingDominantTerrain(
+                rawColliders,
+                backgroundBounds,
+              )
+            : [];
           if (import.meta.env.DEV) {
-            console.log(
-              `[Stage3] INT_/OBJ_ 메시 충돌 AABB: ${islandStaticColliders.length}개 (INT_Portal 제외)`,
-            );
+            if (!useStatic) {
+              console.log(
+                "[Stage3] 정적 장애물 충돌 비활성화(model.useStaticObstacleColliders). 바운딩만 사용.",
+              );
+            } else {
+              const dropped =
+                rawColliders.length - islandStaticColliders.length;
+              console.log(
+                `[Stage3] INT_/OBJ_ 충돌 AABB: ${islandStaticColliders.length}개 적용` +
+                  (dropped > 0 ? ` (${dropped}개 넓은 슬라브 후보 제외)` : "") +
+                  " (INT_Portal 제외)",
+              );
+            }
           }
           character.setup(
             backgroundMaxY,
@@ -1599,6 +1702,14 @@ export function Stage3() {
             gumFollowers = null;
           }
 
+          if (!isStage3Active) return;
+          try {
+            await preloadIceCreamTemplates();
+          } catch (e) {
+            if (import.meta.env.DEV) {
+              console.warn("[Stage3] 아이스크림 preload 오류:", e ?? "");
+            }
+          }
           if (!isStage3Active) return;
           registerIslandInteractions(model);
           syncPortalPlaneToIntPortalObject(model);
@@ -1703,7 +1814,7 @@ export function Stage3() {
       }
       iceCreamPhysicsWorld = null;
       iceCreamCartRef = null;
-      iceCreamTemplates.length = 0;
+      disposeIceCreamTemplates();
 
       if (debugControls) {
         debugControls.dispose();
