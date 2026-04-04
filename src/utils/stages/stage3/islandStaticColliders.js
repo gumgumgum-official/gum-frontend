@@ -82,6 +82,54 @@ export function collectIslandStaticColliderBoxes(islandRoot) {
 }
 
 /**
+ * XZ 면적이 배경 바운딩과 거의 같은 메시는 지형(바닥)로 보고 충돌에서 제외한다.
+ * GLB에서 지형까지 OBJ_/INT_ 아래에 두면 거대 AABB가 생기고, 원·AABB 검사가
+ * 항상 겹친다고 나와 이동이 전부 막히는 경우가 있다.
+ * @param {IslandColliderAabb[]} boxes
+ * @param {import("three").Box3} backgroundBounds
+ * @param {number} [axisCoverRatio=0.58] - 박스 가로·세로 각각이 배경의 이 비율 이상이면 제외
+ * @param {number} [footprintAreaRatio=0.42] - XZ 면적 비가 배경의 이 비율 이상이면 제외
+ * @param {number} [maxSlabThicknessY=3.5] - 이 높이 이하이면서 넓은 판이면 지형으로 보고 제외
+ * @returns {IslandColliderAabb[]}
+ */
+export function filterCollidersExcludingDominantTerrain(
+  boxes,
+  backgroundBounds,
+  axisCoverRatio = 0.58,
+  footprintAreaRatio = 0.42,
+  maxSlabThicknessY = 3.5,
+) {
+  if (!backgroundBounds || backgroundBounds.isEmpty()) return boxes;
+  const bgW = backgroundBounds.max.x - backgroundBounds.min.x;
+  const bgD = backgroundBounds.max.z - backgroundBounds.min.z;
+  if (bgW <= 1e-6 || bgD <= 1e-6) return boxes;
+
+  const bgArea = bgW * bgD;
+
+  return boxes.filter((b) => {
+    const w = b.maxX - b.minX;
+    const d = b.maxZ - b.minZ;
+    const covX = w / bgW;
+    const covZ = d / bgD;
+    const footprint = w * d;
+    const h = b.maxY - b.minY;
+
+    if (covX >= axisCoverRatio && covZ >= axisCoverRatio) return false;
+    if (footprint >= footprintAreaRatio * bgArea) return false;
+    // 한 축은 거의 전체, 다른 축도 상당히 넓음 → 바닥/절벽 슬라브류
+    const covMax = Math.max(covX, covZ);
+    const covMin = Math.min(covX, covZ);
+    if (covMax >= 0.82 && covMin >= 0.28) return false;
+
+    if (h <= maxSlabThicknessY && covMin >= 0.2 && footprint >= 0.07 * bgArea) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+/**
  * XZ 평면에서 원과 축정렬 박스 교차
  * @param {number} cx
  * @param {number} cz

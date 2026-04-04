@@ -46,6 +46,7 @@
  * @property {number} [envMapIntensity]
  * @property {boolean} [castShadow]
  * @property {boolean} [receiveShadow]
+ * @property {boolean} [useStaticObstacleColliders] - Stage3: `INT_`/`OBJ_` 메시 기반 XZ 정적 충돌(기본 true). false면 바운딩 클램프만 사용(디버그·임시)
  */
 
 /**
@@ -119,6 +120,7 @@
 /**
  * Stage3 캐릭터 이동·카메라 설정
  * @typedef {Object} Stage3CharacterConfig
+ * @property {number} [scale] - 캐릭터 루트 스케일 배율
  * @property {number} groundOffset - 배경 위 y 여유 공간
  * @property {number} moveSpeed - 이동 속도
  * @property {number} boundsPadding - 바운드 경계 여유 공간
@@ -126,6 +128,7 @@
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
  * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정
+ * @property {{x?: number, z?: number}} [spawnOffset] - 섬 바운딩 XZ 중심 기준 스폰 추가 오프셋(m)
  * @property {Stage3GumFollowersConfig} gumFollowers
  */
 
@@ -140,15 +143,15 @@
  */
 
 /**
- * Stage3 포탈 전용 설정 (평면 통과 시 스테이지 전환)
+ * Stage3 포탈 설정 (`INT_Portal` 클릭 시 `targetStage`로 전환)
  * @typedef {Object} Stage3PortalConfig
  * @extends Stage3PropConfig
  * @property {string} [path]
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
- * @property {{x: number, y?: number, z: number}} [normal] - 수직 포탈 평면 법선; y 생략 시 0(수평 XZ 성분만 사용)
- * @property {number} [halfWidth] - 포탈 반폭 (수평 허용 거리)
+ * @property {{x: number, y?: number, z: number}} [normal] - 레거시(평면 통과 시 사용, 현재 미사용)
+ * @property {number} [halfWidth] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [targetStage] - 전환할 Stage 번호
  */
 
@@ -159,7 +162,7 @@
  * @property {{x?: number, y?: number, z?: number}} [position]
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
- * @property {string[]} [spawnPaths] - 레거시: 별도 GLB 스폰 경로
+ * @property {string[]} [spawnPaths] - 카트 클릭 시 복제해 스폰할 GLB 경로(public 기준, 예: /models/…)
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxSpawns] - 스폰 최대 개수
  * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)

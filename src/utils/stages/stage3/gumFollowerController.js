@@ -6,6 +6,7 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { loadGltfTemplateCached } from "../../common/gltfTemplateCache.js";
 
 /**
  * @param {{
@@ -21,6 +22,7 @@ export function createGumFollowersController({
   config,
   getUserState,
 }) {
+  void glbLoader;
   const gumCfg = config.character?.gumFollowers ?? null;
   const gumModelCfg = gumCfg?.models;
   const gumBehaviorCfg = gumCfg?.behavior;
@@ -99,21 +101,11 @@ export function createGumFollowersController({
     }
 
     const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-    const fullPath = base + modelPath;
-    const gltf = await glbLoader.loadAsync(fullPath);
-    if (isCancelled?.()) {
-      gltf.scene.traverse((child) => {
-        if (child.isMesh) {
-          child.geometry?.dispose();
-          const mat = child.material;
-          if (mat) {
-            if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-            else mat.dispose();
-          }
-        }
-      });
-      return;
-    }
+    const fullPath = modelPath.startsWith("http")
+      ? modelPath
+      : base + modelPath;
+    const gltf = await loadGltfTemplateCached(fullPath);
+    if (isCancelled?.()) return;
     const baseModel = gltf.scene;
 
     // 원하는 크기로 먼저 스케일을 적용해야, minY 기반 y 보정도 맞게 계산됩니다.
