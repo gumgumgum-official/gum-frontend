@@ -1,9 +1,14 @@
 /**
  * Stage3 배경 GLB 로드 유틸리티
  * 배경 모델을 로드하고, island 바운딩 박스와 최대 Y값을 계산한 뒤 onReady 콜백을 호출합니다.
+ * GLB 본문은 `stage3IslandTemplatePreload`에서 한 번만 디코드하고, 여기서는 깊은 복제본을 씬에 붙입니다.
  */
 import * as THREE from "three";
 import { inspectModel } from "../../common/modelInspector.js";
+import {
+  deepCloneSceneForStage3Instance,
+  preloadStage3IslandTemplate,
+} from "./stage3IslandTemplatePreload.js";
 
 /**
  * @typedef {Object} BackgroundReadyPayload
@@ -24,14 +29,16 @@ import { inspectModel } from "../../common/modelInspector.js";
  */
 export function loadStage3Background({
   scene,
-  glbLoader,
+  glbLoader: _glbLoader,
   config,
   getIsActive,
   onReady,
 }) {
-  glbLoader.load(config.model.path, {
-    onLoad: (gltf) => {
-      const model = gltf.scene;
+  void _glbLoader;
+
+  preloadStage3IslandTemplate(config.model.path)
+    .then((gltf) => {
+      const model = deepCloneSceneForStage3Instance(gltf.scene);
 
       model.position.set(
         config.model.position?.x ?? 0,
@@ -43,7 +50,6 @@ export function loadStage3Background({
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
 
-      // island 객체 탐색 (캐릭터 이동 범위 제한용) — 깊은 계층·대소문자 허용
       let islandObject = null;
       model.traverse((obj) => {
         if (islandObject) return;
@@ -69,9 +75,18 @@ export function loadStage3Background({
         backgroundBounds = box.clone();
       }
 
-      // 발 높이: 전체 씬 center.y는 물·배경에 끌려 낮게 잡히기 쉬움.
-      // island의 min이 물/절벽 아래까지 포함되면 min+(max-min)*t 만으로는 지면보다 낮아질 수 있어
-      // max.y 근처 후보와 둘 중 더 높은 쪽을 택한다.
+      const boundsPad = config.character?.boundsPadding ?? 0.5;
+      const spanX = backgroundBounds.max.x - backgroundBounds.min.x;
+      const spanZ = backgroundBounds.max.z - backgroundBounds.min.z;
+      if (spanX <= 2 * boundsPad + 1e-3 || spanZ <= 2 * boundsPad + 1e-3) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "⚠️ Island XZ 바운딩이 이동 패딩 대비 너무 작습니다. 전체 모델 바운딩으로 대체합니다.",
+          );
+        }
+        backgroundBounds = box.clone();
+      }
+
       let backgroundMaxY = center.y;
       if (islandObject) {
         const t = THREE.MathUtils.clamp(
@@ -97,7 +112,6 @@ export function loadStage3Background({
         );
       }
 
-      /** 클릭 타깃: 이름이 `INT_`로 시작하는 오브젝트 트리만 기본 raycast 유지 */
       const isUnderIntInteractive = (mesh) => {
         let p = mesh;
         while (p) {
@@ -141,19 +155,18 @@ export function loadStage3Background({
 
       scene.add(model);
       if (import.meta.env.DEV) {
-        console.log("✅ Stage3 배경 모델 로드 완료");
+        console.log(
+          "✅ Stage3 배경 모델 로드 완료 (템플릿 재사용 또는 프리로드 완료)",
+        );
       }
       inspectModel(model, null, "배경 모델");
 
       onReady({ model, center, backgroundMaxY, backgroundBounds });
-    },
-    onProgress: (xhr) => {
-      if (import.meta.env.DEV && xhr.total > 0) {
-        console.log(
-          `Stage3 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-        );
-      }
-    },
-    onError: (err) => console.error("❌ Stage3 배경 로드 에러:", err),
-  });
+    })
+    .catch((err) =>
+      console.error(
+        "❌ Stage3 배경 로드 에러:",
+        err instanceof Error ? err : new Error(String(err)),
+      ),
+    );
 }

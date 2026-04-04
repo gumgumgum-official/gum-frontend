@@ -1,10 +1,19 @@
 // ----- 단계 전환 관리
 
+import { stopStage3IntroAudio } from "./stage3IntroAudio.js";
+
 /**
  * Stage 전환을 관리하는 StageManager 생성
  * @param {import("three").WebGLRenderer} renderer
  * @param {import("three").Scene} scene
- * @returns {{ registerStage: function, switchToStage: function, update: function, getCurrentCamera: function, getCurrentStage: function }}
+ * @returns {{
+ *   registerStage: function,
+ *   switchToStage: function,
+ *   update: function,
+ *   getCurrentCamera: function,
+ *   getCurrentStage: function,
+ *   getCurrentStageNumber: function
+ * }}
  */
 export function createStageManager(renderer, scene) {
   let currentStage = null;
@@ -21,6 +30,11 @@ export function createStageManager(renderer, scene) {
     switchToStage(stageNumber) {
       if (currentStageNumber === stageNumber) return;
 
+      // Stage3 인트로 사운드가 다른 스테이지로 넘어가며 남지 않도록 정리
+      if (currentStageNumber === 3 && stageNumber !== 3) {
+        stopStage3IntroAudio();
+      }
+
       // 기존 단계 정리
       if (currentStage && currentStage.cleanup) {
         currentStage.cleanup(scene);
@@ -33,6 +47,7 @@ export function createStageManager(renderer, scene) {
         currentStageNumber = stageNumber;
         currentStage.setup(scene, renderer);
         console.log(`✅ Stage ${stageNumber} 로드 완료`);
+        // Stage3 인트로 MP3는 섬 GLB onReady 이후 재생 (stage3IntroAudio)
       }
     },
 

@@ -10,6 +10,8 @@ import { Stage2 } from "../stages/Stage2.js";
 import { Stage3 } from "../stages/Stage3.js";
 import { Stage6 } from "../stages/Stage6.js";
 import { APP_CONFIG } from "../config/appConfig.js";
+import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
 
 /** Stage 1은 별도 프로젝트(태블릿)에서 구현 */
 const STAGE_FACTORIES = {
@@ -125,6 +127,8 @@ export function initThreeApp(canvasElement, options = {}) {
   );
   scene.add(sunLight);
 
+  getGLBLoader().preloadDecoders();
+
   // Stage Manager
   const stageManager = createStageManager(renderer, scene);
 
@@ -143,6 +147,16 @@ export function initThreeApp(canvasElement, options = {}) {
     safeAllowedStages.includes(initialStage) && typeof initialStage === "number"
       ? initialStage
       : safeAllowedStages[0];
+
+  if (safeAllowedStages.includes(3)) {
+    warmStage3GltfTemplateUrls();
+    void fetch(
+      base + "/static/sounds/20711 finch bird isolated tweet-full.mp3",
+      {
+        priority: "low",
+      },
+    ).catch(() => {});
+  }
 
   if (safeInitialStage != null) {
     try {
