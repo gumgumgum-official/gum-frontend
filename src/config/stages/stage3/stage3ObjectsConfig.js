@@ -2,7 +2,7 @@
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
-    path: "/models/stage3/island7_compression.glb",
+    path: "/models/stage3/island8_compression.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
