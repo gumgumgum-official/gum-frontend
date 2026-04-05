@@ -1,6 +1,6 @@
 /**
  * Stage3: 부셔버리자 (밝은 초원, 스트레스 해소)
- * - gum_server REST 폴링(GET /api/monitors/:id/current)으로 할당된 worry(svgUrl) 우선 낙하
+ * - gum_server: POST .../start 후 GET .../current 폴링으로 worry(svgUrl) 우선 낙하
  * - 폴링에서 busy 미수신 시 fallback으로 "최신 1개"가 낙하
  * - 엔터키로 타격 시 큰 조각이 깔끔하게 부서짐, 4번 치면 사라짐. 조각은 3초 후 페이드아웃
  * @returns {import("../types.js").StageInstance}
@@ -30,6 +30,7 @@ import {
   MONITOR_POLL_MS,
   fetchMonitorCurrent,
   getMonitorDeviceId,
+  postMonitorStart,
 } from "../lib/monitorCurrentApi.js";
 
 const HANDWRITING_BUCKET = "handwriting";
@@ -158,6 +159,10 @@ export function Stage3() {
   }
 
   function applyMonitorIdleState() {
+    // REST로 busy(worry)를 받은 뒤에는 idle 폴링으로 할당을 지우지 않는다.
+    if (monitorRestAssignmentReceived || assignedWorryId || assignedSvgUrl) {
+      return;
+    }
     assignedWorryId = null;
     assignedSvgUrl = null;
   }
@@ -1381,8 +1386,20 @@ export function Stage3() {
         },
       });
 
-      // gum_server REST: 모니터 현재 할당 폴링
-      startMonitorPolling();
+      // gum_server: start → 그다음 current 폴링 (예약만 있고 start 전이면 서버는 idle)
+      void (async () => {
+        try {
+          const ok = await postMonitorStart();
+          if (!ok) {
+            console.warn(
+              "[Stage3] monitor start 실패 — 폴링은 계속 (fallback 가능)",
+            );
+          }
+        } catch (e) {
+          console.warn("[Stage3] monitor start 예외:", e);
+        }
+        startMonitorPolling();
+      })();
 
       loadStage3Background({
         scene,

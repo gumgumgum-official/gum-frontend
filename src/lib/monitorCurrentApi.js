@@ -1,9 +1,13 @@
 /**
- * gum_server 모니터 REST: GET /api/monitors/:id/current (Stage3 폴링, /start 토스트 공용)
+ * gum_server 모니터 REST
+ * - 흐름: POST .../start → GET .../current 폴링 → POST .../complete
+ * @see 요구사항.md, docs/MONITOR_USER_FLOW.md
  */
 
 /** 모니터 현재 할당 폴링 간격 (ms) — Stage3와 동일 */
 export const MONITOR_POLL_MS = 1500;
+
+const JSON_EMPTY = "{}";
 
 export function normalizeMonitorDeviceId(raw) {
   const s = String(raw ?? "").trim();
@@ -59,7 +63,47 @@ export async function fetchMonitorCurrent() {
 }
 
 /**
- * API.md 기준: 모니터 체험 완료 요청
+ * 서버 상태 조회 (디버깅/운영 보조)
+ * - API.md의 GET /status 응답에는 reservedWorry가 포함될 수 있음
+ * @returns {Promise<object | null>}
+ */
+export async function fetchGumServerStatus() {
+  const base = getGumServerBaseUrl();
+  const url = `${base}/status`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    console.warn("[gum status] HTTP 오류:", res.status);
+    return null;
+  }
+  return res.json();
+}
+
+/**
+ * 체험 시작 — 이후 GET /current에서 busy + worry 가능
+ * POST /api/monitors/:monitorId/start
+ * @returns {Promise<boolean>} 성공 여부
+ */
+export async function postMonitorStart() {
+  const base = getGumServerBaseUrl();
+  const monitorId = getMonitorDeviceId();
+  const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/start`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON_EMPTY,
+  });
+  if (!res.ok) {
+    console.warn("[monitor start] HTTP 오류:", res.status);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 체험 완료 — 시작 화면 복귀 시
  * POST /api/monitors/:monitorId/complete
  * @returns {Promise<boolean>} 성공 여부
  */
@@ -70,6 +114,7 @@ export async function postMonitorComplete() {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON_EMPTY,
   });
   if (!res.ok) {
     console.warn("[monitor complete] HTTP 오류:", res.status);

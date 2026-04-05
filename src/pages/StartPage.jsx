@@ -3,8 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import styles from "./Page.module.css";
 import {
   MONITOR_POLL_MS,
+  fetchGumServerStatus,
   fetchMonitorCurrent,
   getMonitorArrivalMessage,
+  getMonitorDeviceId,
   postMonitorComplete,
 } from "../lib/monitorCurrentApi.js";
 
@@ -16,6 +18,19 @@ export function StartPage() {
   useEffect(() => {
     const poll = async () => {
       try {
+        // 요구사항: 예약(reservedWorry) 단계에서는 /current가 idle만 줄 수 있음.
+        // 시작 화면 토스트는 /status의 reservedWorry(있으면) 또는 /current busy(worry)를 기준으로 표시.
+        const statusData = await fetchGumServerStatus();
+        const effectiveMonitorId = getMonitorDeviceId();
+        const statusMonitor =
+          statusData?.monitors?.[effectiveMonitorId ?? "monitor-1"] ?? null;
+        const reservedWorry = statusMonitor?.reservedWorry;
+        if (reservedWorry) {
+          const msg = getMonitorArrivalMessage(reservedWorry);
+          setToastMessage(msg);
+          return;
+        }
+
         const data = await fetchMonitorCurrent();
         if (data == null) return;
 
@@ -55,6 +70,7 @@ export function StartPage() {
         console.warn("[StartPage] monitor complete 요청 실패:", e);
       })
       .finally(() => {
+        setToastMessage(null);
         params.delete("complete");
         const nextQuery = params.toString();
         navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
