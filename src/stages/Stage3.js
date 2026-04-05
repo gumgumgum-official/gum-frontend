@@ -1139,8 +1139,9 @@ export function Stage3() {
         console.log("[Stage3] 0키: 할당 글자 로드 후 낙하");
       } else {
         loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
-      if (import.meta.env.DEV) {
-        console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
+        if (import.meta.env.DEV) {
+          console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
+        }
       }
     }
   }
