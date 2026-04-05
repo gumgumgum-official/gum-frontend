@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "VITE_ENABLE_MSW=true vite",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src/**/*.{js,jsx}",
@@ -22,6 +23,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
+    "msw": "^2.12.14",
     "postcss": "^8.5.8",
     "prettier": "^3.8.0",
     "tailwindcss": "^3.4.19",
@@ -46,6 +48,11 @@
     ],
     "src/**/*.{css,html}": [
       "prettier --write"
+    ]
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
     ]
   }
 }
