@@ -35,6 +35,8 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   const despawnTimeoutsRef = useRef(new Map());
   const floatTimerRef = useRef(new Map());
   const playCountRef = useRef(0);
+  const winScoreAudioRef = useRef(null);
+  const winScoreAudioSrcRef = useRef("");
 
   const clearSpawnTimer = useCallback(() => {
     if (spawnTimerRef.current) {
@@ -53,10 +55,45 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
     floatTimerRef.current.clear();
   }, []);
 
+  // 결과(최종 점수) 사운드: 미리 preload 해서 타임아웃 순간 딜레이 최소화
+  useEffect(() => {
+    try {
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const src = base + "/static/sounds/Win Score 1.mp3";
+      winScoreAudioSrcRef.current = src;
+      if (!winScoreAudioRef.current) {
+        winScoreAudioRef.current = new window.Audio();
+        winScoreAudioRef.current.preload = "auto";
+        winScoreAudioRef.current.volume = 0.7;
+      }
+      const a = winScoreAudioRef.current;
+      a.src = src;
+      a.load?.();
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const timer = useGameTimer(() => {
     clearSpawnTimer();
     clearDespawnTimeouts();
     clearFloatTimers();
+    // 시간 초과로 게임이 끝나고 최종 점수 모달이 뜰 때 1회 재생
+    try {
+      const a = winScoreAudioRef.current;
+      if (
+        a &&
+        winScoreAudioSrcRef.current &&
+        a.src !== winScoreAudioSrcRef.current
+      ) {
+        a.src = winScoreAudioSrcRef.current;
+      }
+      a.pause();
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } catch {
+      // ignore
+    }
     setGameState("result");
   });
   const timeLeft = timer.timeLeft;
@@ -200,17 +237,22 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   }, [startGame]);
 
   return (
-    <div className="w-full min-h-screen flex items-center justify-center p-4 font-sans">
+    <div className="w-full h-full flex items-center justify-center p-4 font-sans">
       {/* Outer modal card */}
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 18 }}
-        className="w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl"
+        className="w-full rounded-3xl overflow-hidden shadow-2xl"
         style={{
           background: "var(--card)",
           border: "3px solid var(--wood)",
           boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+          // 너무 꽉 차지 않게 "게시판보단 약간" 작은 크기
+          width: "min(80vw, 1250px)",
+          height: "min(78vh, 840px)",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {/* Title banner – wood sign style */}
@@ -236,13 +278,13 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
           </button>
         </div>
 
-        {/* Body: flex 2:1 - fixed height to keep modal size consistent */}
-        <div className="flex flex-col md:flex-row h-[380px]">
+        {/* Body: stretch to fill the modal height */}
+        <div className="flex flex-col md:flex-row flex-1 min-h-0">
           {/* ── LEFT: Game Canvas ───────────────────────────────────── */}
           <div
             className="flex-[2] relative overflow-hidden border-b md:border-b-0 md:border-r border-border"
             style={{
-              minHeight: 380,
+              minHeight: 0,
               background:
                 "linear-gradient(to bottom, oklch(0.82 0.12 145), oklch(0.68 0.14 130))",
             }}

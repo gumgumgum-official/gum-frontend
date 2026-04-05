@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createSpeechBubbleHover } from "../utils/stages/stage6/speechBubbleHover.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
@@ -17,6 +18,7 @@ export function Stage6() {
   const characterModels = [];
   const config = STAGE6_CONFIG;
   const glbLoader = getGLBLoader();
+  const fbxLoader = new FBXLoader();
   let speechBubbleHover = null;
   let orbitControls = null;
   const handleKeyDown = (event) => {
@@ -183,6 +185,52 @@ export function Stage6() {
           onError: (err) =>
             console.warn("❌ Stage6 bench 로드 실패:", benchConfig.path, err),
         });
+      }
+
+      // 커튼 FBX 로드
+      const curtainConfig = config.curtain;
+      if (curtainConfig?.path) {
+        fbxLoader.load(
+          curtainConfig.path,
+          (object) => {
+            object.position.set(
+              curtainConfig.position?.x ?? 0,
+              curtainConfig.position?.y ?? 0,
+              curtainConfig.position?.z ?? 0,
+            );
+            object.rotation.set(
+              ((curtainConfig.rotation?.x ?? 0) * Math.PI) / 180,
+              ((curtainConfig.rotation?.y ?? 0) * Math.PI) / 180,
+              ((curtainConfig.rotation?.z ?? 0) * Math.PI) / 180,
+            );
+            object.scale.setScalar(curtainConfig.scale ?? 1);
+
+            object.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                if (curtainConfig.castShadow !== undefined) {
+                  child.castShadow = curtainConfig.castShadow;
+                }
+                if (curtainConfig.receiveShadow !== undefined) {
+                  child.receiveShadow = curtainConfig.receiveShadow;
+                }
+              }
+            });
+
+            objects.push(object);
+            scene.add(object);
+            console.log("✅ Stage6 커튼 FBX 로드 완료");
+          },
+          (xhr) => {
+            if (xhr.total > 0) {
+              console.log(
+                `Stage6 커튼: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
+              );
+            }
+          },
+          (err) => {
+            console.error("❌ Stage6 커튼 로드 에러:", err);
+          },
+        );
       }
 
       console.log("✅ Stage6 생성 완료");

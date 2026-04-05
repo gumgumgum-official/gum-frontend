@@ -6,24 +6,34 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
-import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../utils/common/gltfTemplateCache.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
+import {
+  collectIslandStaticColliderBoxes,
+  filterCollidersExcludingDominantTerrain,
+} from "../utils/stages/stage3/islandStaticColliders.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { inspectModel as _inspectModel } from "../utils/common/modelInspector.js";
+import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
-import {
-  STAGE3_CONFIG,
-  loadIceCreamSpawnModels,
-} from "../config/stages/stage3.js";
+import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import {
   openMinigame,
   closeMinigame,
+  dispatchMinigameClose,
   onMinigameClose,
 } from "../utils/stages/stage3/minigameLauncher.js";
+import {
+  openMirrorModal,
+  dispatchMirrorModalClose,
+} from "../utils/stages/stage3/mirrorModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 import {
@@ -32,6 +42,7 @@ import {
   getMonitorDeviceId,
   postMonitorStart,
 } from "../lib/monitorCurrentApi.js";
+import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -77,11 +88,16 @@ export function Stage3() {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
+  let isStage3Active = true;
 
   // 낙하 글자 1개 (할당된 svgUrl 우선)
   let letterState = null;
   let letterLoadInProgress = false;
   const fragments = [];
+  /** Fragment 풀: { group, velocity, angularVelocity } 재사용 (GC 감소) */
+  const fragmentPool = [];
+  const FRAGMENT_POOL_MAX = 32;
 
   // gum_server REST 폴링으로 할당된 글자
   let assignedWorryId = null; // string
@@ -95,13 +111,13 @@ export function Stage3() {
   let monitorFallbackTimeoutId = null;
 
   // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
+  // island2.glb 내 INT_icecream 루트 (클릭 → 스폰, cannon-es)
   let iceCreamCartRef = null;
-  /** 게시판 클릭 → 모달 */
+  /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
   let noticeRef = null;
-  /** 게임기 클릭 → 미니게임 */
+  /** island2.glb 내 INT_gameMachine 루트 */
   let gameMachineRef = null;
   let unlistenMinigameClose = null;
-  let noticeModalEl = null;
   let noticePaperAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
   const spawnedIceCreams = []; // { group, body }
@@ -109,6 +125,28 @@ export function Stage3() {
   let iceCreamGroundBody = null;
   const _icePointer = new THREE.Vector2();
   const _iceRaycaster = new THREE.Raycaster();
+  const INT_PREFIX = "INT_";
+  const INT_SUFFIX_TO_TARGET = {
+    notice: "notice",
+    gamemachine: "gameMachine",
+    mirror: "mirror",
+    icecream: "icecream",
+    portal: "portal",
+  };
+  /**
+   * GLB마다 INT_ 접미사 표기가 다름 (예: INT_notice vs INT_Notice, INT_IceCart).
+   * 레이 히트·ref 등록 시 canonical 타깃으로 정규화한다.
+   * @param {string} suffix - `INT_` 제외 접미사
+   * @returns {"notice" | "gameMachine" | "mirror" | "icecream" | "portal" | null}
+   */
+  function intSuffixToTarget(suffix) {
+    const lower = suffix.toLowerCase();
+    // GLB마다 INT suffix 표기가 다를 수 있어 대표 별칭(예: IceCart)을 정규화한다.
+    if (lower === "icecart") return "icecream";
+    return INT_SUFFIX_TO_TARGET[lower] ?? null;
+  }
+  /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
+  const intRaycastMeshes = [];
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -117,6 +155,141 @@ export function Stage3() {
     "ArrowRight",
   ]);
   let character = null;
+  let gumFollowers = null;
+  /** 껌딱지 init(GLB await) 도중 cleanup 시 scene.add 방지용 */
+  let gumCancelled = false;
+  /**
+   * 카메라 인트로 상태
+   * - stage 시작 시 섬 전체를 위에서 시계방향으로 천천히(부분 호) 보여준 뒤
+   * - 캐릭터 기준 카메라 포즈로 줌인 전환 후 추적 모드로 넘어간다.
+   */
+  const cameraIntro = {
+    active: false,
+    transitioning: false,
+    completed: false,
+    elapsed: 0,
+    transitionElapsed: 0,
+    /** 인트로 회전 구간 길이 — 클수록 같은 sweep 각에서 더 천천히 회전 */
+    durationSec: 4.5,
+    transitionSec: 2.0,
+    /** 시계방향으로 도는 각(rad). durationSec 단축에 맞춰 속도 유지하도록 각도도 함께 축소 */
+    sweepAngleRad: Math.PI * 0.39,
+    center: new THREE.Vector3(),
+    radius: 20,
+    height: 18,
+    startAngle: 0,
+    lookAtY: 0,
+    fromPos: new THREE.Vector3(),
+    fromLookAt: new THREE.Vector3(),
+    toPos: new THREE.Vector3(),
+    toLookAt: new THREE.Vector3(),
+  };
+  const _introTargetPos = new THREE.Vector3();
+  const _introTargetLookAt = new THREE.Vector3();
+  const _introLerpLookAt = new THREE.Vector3();
+  const _iceCartWorld = new THREE.Vector3();
+
+  function getCharacterFollowPose(outPos, outLookAt) {
+    if (!character) return false;
+    const pos = character.getPosition?.();
+    if (!pos) return false;
+    const camOffset = config.character?.cameraOffset ?? { x: 0, y: 3, z: 8 };
+    const lookAtHeight = config.character?.lookAtHeightOffset ?? 1;
+    outPos.set(pos.x + camOffset.x, pos.y + camOffset.y, pos.z + camOffset.z);
+    outLookAt.copy(pos);
+    outLookAt.y += lookAtHeight;
+    return true;
+  }
+
+  function startCameraIntro(center, bounds) {
+    if (!cameraRef) return;
+    cameraIntro.active = true;
+    cameraIntro.transitioning = false;
+    cameraIntro.completed = false;
+    cameraIntro.elapsed = 0;
+    cameraIntro.transitionElapsed = 0;
+    cameraIntro.center.copy(center);
+    const size = new THREE.Vector3();
+    bounds.getSize(size);
+    const horizontalSize = Math.max(size.x, size.z);
+    // 수평 반경을 살짝 줄여 더 “정수리에 가깝게”
+    cameraIntro.radius = Math.max(13, horizontalSize * 0.76);
+    // 더 높은 위치 + 시선은 바운딩 중심보다 약간 아래(섬 윗면 쪽)로 두어 내려다보기 강화
+    cameraIntro.height = center.y + Math.max(60, size.y * 1.2 + 16);
+    const minY = bounds.min.y;
+    const maxY = bounds.max.y;
+    const targetLookY = center.y - Math.min(size.y * 0.14, 4);
+    cameraIntro.lookAtY = THREE.MathUtils.clamp(
+      targetLookY,
+      minY + size.y * 0.05,
+      maxY - 0.3,
+    );
+    // 궤도 각: x = center.x + sin(θ)*r, z = center.z + cos(θ)*r, 시간에 따라 θ 감소 = 시계방향 스윕
+    // 시작점을 시계 반대 방향으로 약 60° 옮김 → θ에 π/3 더하기
+    const baseAngle = Math.atan2(
+      cameraRef.position.x - center.x,
+      cameraRef.position.z - center.z,
+    );
+    cameraIntro.startAngle = baseAngle + Math.PI / 2;
+
+    const orbit = debugControls?.getOrbitControls?.();
+    if (orbit) orbit.enabled = false;
+  }
+
+  function updateCameraIntro(delta) {
+    if (!cameraRef || !cameraIntro.active || cameraIntro.completed) return;
+
+    if (!cameraIntro.transitioning) {
+      cameraIntro.elapsed += delta;
+      const t = Math.min(1, cameraIntro.elapsed / cameraIntro.durationSec);
+      const angle = cameraIntro.startAngle - cameraIntro.sweepAngleRad * t; // 시계방향
+      cameraRef.position.set(
+        cameraIntro.center.x + Math.sin(angle) * cameraIntro.radius,
+        cameraIntro.height,
+        cameraIntro.center.z + Math.cos(angle) * cameraIntro.radius,
+      );
+      cameraRef.lookAt(
+        cameraIntro.center.x,
+        cameraIntro.lookAtY,
+        cameraIntro.center.z,
+      );
+
+      if (
+        t >= 1 &&
+        getCharacterFollowPose(_introTargetPos, _introTargetLookAt)
+      ) {
+        cameraIntro.transitioning = true;
+        cameraIntro.transitionElapsed = 0;
+        cameraIntro.fromPos.copy(cameraRef.position);
+        cameraIntro.fromLookAt.set(
+          cameraIntro.center.x,
+          cameraIntro.lookAtY,
+          cameraIntro.center.z,
+        );
+      }
+      return;
+    }
+
+    if (!getCharacterFollowPose(cameraIntro.toPos, cameraIntro.toLookAt))
+      return;
+    cameraIntro.transitionElapsed += delta;
+    const t = Math.min(
+      1,
+      cameraIntro.transitionElapsed / cameraIntro.transitionSec,
+    );
+    const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+    cameraRef.position.copy(cameraIntro.fromPos).lerp(cameraIntro.toPos, eased);
+    _introLerpLookAt
+      .copy(cameraIntro.fromLookAt)
+      .lerp(cameraIntro.toLookAt, eased);
+    cameraRef.lookAt(_introLerpLookAt);
+
+    if (t >= 1) {
+      cameraIntro.active = false;
+      cameraIntro.transitioning = false;
+      cameraIntro.completed = true;
+    }
+  }
 
   const handleStageKeyDown = (event) => {
     if (event.key === "Enter") {
@@ -129,29 +302,103 @@ export function Stage3() {
     }
   };
 
-  /** 레이캐스트로 포인터 아래 클릭 가능 오브젝트 반환: "icecream" | "notice" | "gameMachine" | null */
-  function getPointerHitTarget(clientX, clientY) {
-    if (!cameraRef || !canvasRef || !sceneRef) return null;
-    const rect = canvasRef.getBoundingClientRect();
-    _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    _iceRaycaster.setFromCamera(_icePointer, cameraRef);
-    const hits = _iceRaycaster.intersectObjects(sceneRef.children, true);
-    if (hits.length === 0) return null;
-    let obj = hits[0].object;
-    while (obj && obj !== sceneRef) {
-      if (iceCreamCartRef && obj === iceCreamCartRef) return "icecream";
-      if (noticeRef && obj === noticeRef) return "notice";
-      if (gameMachineRef && obj === gameMachineRef) return "gameMachine";
-      obj = obj.parent;
+  function resolveIntPointerTarget(hitObject) {
+    let p = hitObject;
+    while (p) {
+      if (typeof p.name === "string" && p.name.startsWith(INT_PREFIX)) {
+        const suffix = p.name.slice(INT_PREFIX.length);
+        return intSuffixToTarget(suffix);
+      }
+      p = p.parent;
     }
     return null;
   }
 
+  /** island2 로드 후: INT_* 노드에서 레이캐스트 메시·refs 등록 */
+  function registerIslandInteractions(islandModel) {
+    intRaycastMeshes.length = 0;
+    iceCreamCartRef = null;
+    noticeRef = null;
+    gameMachineRef = null;
+    if (unlistenMinigameClose) {
+      unlistenMinigameClose();
+      unlistenMinigameClose = null;
+    }
+
+    const meshSet = new Set();
+    const rootNames = [];
+    islandModel.traverse((obj) => {
+      if (typeof obj.name !== "string" || !obj.name.startsWith(INT_PREFIX)) {
+        return;
+      }
+      rootNames.push(obj.name);
+      const suffix = obj.name.slice(INT_PREFIX.length);
+      const intTarget = intSuffixToTarget(suffix);
+      if (intTarget === "gameMachine") gameMachineRef = obj;
+      if (intTarget === "notice") noticeRef = obj;
+      if (intTarget === "icecream") iceCreamCartRef = obj;
+      obj.traverse((child) => {
+        if (child.isMesh) meshSet.add(child);
+      });
+    });
+    intRaycastMeshes.push(...meshSet);
+
+    if (gameMachineRef) {
+      unlistenMinigameClose = onMinigameClose(() => {
+        closeMinigame({
+          camera: cameraRef,
+          orbitControls: debugControls?.getOrbitControls?.() ?? null,
+        });
+      });
+    }
+
+    if (rootNames.length > 0 && import.meta.env.DEV) {
+      const uniq = [...new Set(rootNames)];
+      console.log("[Stage3] island INT_ 노드:", uniq.join(", "));
+      for (const full of uniq) {
+        const suf = full.startsWith(INT_PREFIX)
+          ? full.slice(INT_PREFIX.length)
+          : full;
+        if (intSuffixToTarget(suf) == null) {
+          console.log(
+            `[Stage3] INT_ '${full}' → 아직 클릭 핸들러 없음 (매핑 추가 또는 GLB 이름 변경)`,
+          );
+        }
+      }
+    }
+  }
+
+  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "mirror" | "portal" | null */
+  function getPointerHitTarget(clientX, clientY) {
+    if (!cameraRef || !canvasRef || !sceneRef) return null;
+    if (intRaycastMeshes.length === 0) return null;
+    const rect = canvasRef.getBoundingClientRect();
+    _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    _iceRaycaster.setFromCamera(_icePointer, cameraRef);
+    const hits = _iceRaycaster.intersectObjects(intRaycastMeshes, false);
+    if (hits.length === 0) return null;
+    // 같은 화면 위치에서 가장 앞이 INT_StreetLight 등(매핑 없음)이면 null이 되어 카트 클릭이 무시됨 → 뒤쪽 히트까지 순회
+    for (let i = 0; i < hits.length; i++) {
+      const resolved = resolveIntPointerTarget(hits[i].object);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
+
+  let _pointerMoveRafId = 0;
+  let _lastPointerEvent = null;
   function handlePointerMove(event) {
     if (!canvasRef) return;
-    const target = getPointerHitTarget(event.clientX, event.clientY);
-    canvasRef.style.cursor = target ? "pointer" : "default";
+    _lastPointerEvent = event;
+    if (_pointerMoveRafId !== 0) return;
+    _pointerMoveRafId = requestAnimationFrame(() => {
+      _pointerMoveRafId = 0;
+      const e = _lastPointerEvent;
+      if (!e || !canvasRef) return;
+      const target = getPointerHitTarget(e.clientX, e.clientY);
+      canvasRef.style.cursor = target ? "pointer" : "default";
+    });
   }
 
   function handlePointerLeave() {
@@ -253,6 +500,54 @@ export function Stage3() {
   }
 
   /** 게시판 모달 생성 및 표시 */
+  function disposeIceCreamTemplates() {
+    // 템플릿 `scene`은 전역 GLTF 캐시 템플릿이므로 dispose하지 않는다(재진입·스폰 clone만 dispose).
+    iceCreamTemplates.length = 0;
+  }
+
+  /**
+   * 카트 클릭 스폰용 GLB를 섬 로드 직후 모두 받을 때까지 기다린다.
+   * 이전 방식(setup에서 비동기만 시작)은 클릭 시점에 템플릿 배열이 비어 조용히 무시되기 쉬움.
+   */
+  async function preloadIceCreamTemplates() {
+    const paths = config.icecreamCart?.spawnPaths;
+    if (!paths || paths.length === 0) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] icecreamCart.spawnPaths 없음 — 카트 클릭 스폰 비활성",
+        );
+      }
+      return;
+    }
+    const loads = paths.map(async (rel) => {
+      const url = rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel);
+      try {
+        return await loadGltfTemplateCached(url);
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[Stage3] 아이스크림 템플릿 로드 실패 (${rel}):`,
+            e ?? "",
+          );
+        }
+        return null;
+      }
+    });
+    const results = await Promise.all(loads);
+    if (!isStage3Active) {
+      return;
+    }
+    for (const g of results) {
+      if (g?.scene) iceCreamTemplates.push({ scene: g.scene });
+    }
+    if (import.meta.env.DEV) {
+      console.log(
+        `[Stage3] 아이스크림 템플릿 preload 완료: ${iceCreamTemplates.length}개`,
+      );
+    }
+  }
+
+  /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
   function showNoticeModal() {
     const paperPaths = config.notice?.paperSoundPaths ?? [];
     if (paperPaths.length > 0) {
@@ -268,68 +563,10 @@ export function Stage3() {
       noticePaperAudio.src = src;
       noticePaperAudio.play().catch(() => {});
     }
-    if (noticeModalEl) {
-      noticeModalEl.style.display = "flex";
-      return;
-    }
-    noticeModalEl = document.createElement("div");
-    noticeModalEl.className = "stage3-notice-modal-backdrop";
-    noticeModalEl.innerHTML = `
-      <div class="stage3-notice-modal">
-        <button type="button" class="stage3-notice-modal-close" aria-label="닫기">×</button>
-        <div class="stage3-notice-modal-content">게시판</div>
-      </div>
-    `;
-    Object.assign(noticeModalEl.style, {
-      position: "fixed",
-      inset: "0",
-      background: "rgba(0,0,0,0.35)",
-      backdropFilter: "blur(6px)",
-      WebkitBackdropFilter: "blur(6px)",
-      zIndex: "9999",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "16px",
-    });
-    const modalBox = noticeModalEl.querySelector(".stage3-notice-modal");
-    if (modalBox && "style" in modalBox)
-      Object.assign(modalBox.style, {
-        background: "#fff",
-        borderRadius: "12px",
-        padding: "24px 28px",
-        maxWidth: "400px",
-        width: "100%",
-        position: "relative",
-        boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
-      });
-    const closeBtn = noticeModalEl.querySelector(".stage3-notice-modal-close");
-    if (closeBtn && "style" in closeBtn)
-      Object.assign(closeBtn.style, {
-        position: "absolute",
-        top: "12px",
-        right: "12px",
-        width: "32px",
-        height: "32px",
-        border: "none",
-        background: "transparent",
-        fontSize: "24px",
-        lineHeight: "1",
-        cursor: "pointer",
-        color: "#666",
-      });
-    closeBtn.addEventListener("click", closeNoticeModal);
-    noticeModalEl.addEventListener("click", (e) => {
-      if (e.target === noticeModalEl) closeNoticeModal();
-    });
-    document.body.appendChild(noticeModalEl);
+    window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
   }
 
-  function closeNoticeModal() {
-    if (noticeModalEl) noticeModalEl.style.display = "none";
-  }
-
-  /** 아이스크림 카트 / 게시판 클릭 핸들러 */
+  /** island INT_* 클릭 핸들러 */
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
     const target = getPointerHitTarget(event.clientX, event.clientY);
@@ -339,7 +576,14 @@ export function Stage3() {
     event.stopPropagation();
 
     if (target === "icecream") {
-      if (iceCreamTemplates.length === 0) return;
+      if (iceCreamTemplates.length === 0) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] 아이스크림 템플릿이 비어 있습니다. GLB 경로·네트워크를 확인하세요.",
+          );
+        }
+        return;
+      }
       spawnIceCreamFromCart();
       return;
     }
@@ -352,6 +596,18 @@ export function Stage3() {
         gameMachineRef,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
+    }
+    if (target === "mirror") {
+      openMirrorModal();
+      return;
+    }
+    if (target === "portal") {
+      const targetStage = config.portal_bright?.targetStage ?? 6;
+      window.dispatchEvent(
+        new CustomEvent("stage:switch", {
+          detail: { targetStage },
+        }),
+      );
     }
   }
 
@@ -384,28 +640,34 @@ export function Stage3() {
 
   function spawnIceCreamFromCart() {
     if (!iceCreamCartRef) {
-      console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
+      }
       return;
     }
     if (!sceneRef) return;
-    const maxSpawns = config.icecreamCart?.maxSpawns ?? 15;
+    const maxSpawns = config.icecreamCart?.maxSpawns ?? 10;
     if (spawnedIceCreams.length >= maxSpawns) return;
     if (iceCreamTemplates.length === 0) {
-      console.warn(
-        "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
-      );
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
+        );
+      }
       return;
     }
     initIceCreamPhysics();
 
     const template =
       iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
-    const clone = SkeletonUtils.clone(template.scene);
-    const cartPos = iceCreamCartRef.position;
+    const clone = template.scene.clone(true);
+    clone.frustumCulled = false;
+    iceCreamCartRef.updateMatrixWorld(true);
+    iceCreamCartRef.getWorldPosition(_iceCartWorld);
     const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
-    const sx = cartPos.x + (Math.random() - 0.5) * 1.5;
-    const sy = cartPos.y + 0.5 + Math.random() * 0.5;
-    const sz = cartPos.z + (Math.random() - 0.5) * 1.5;
+    const sx = _iceCartWorld.x + (Math.random() - 0.5) * 1.5;
+    const sy = _iceCartWorld.y + 0.5 + Math.random() * 0.5;
+    const sz = _iceCartWorld.z + (Math.random() - 0.5) * 1.5;
 
     clone.position.set(sx, sy, sz);
     clone.scale.setScalar(spawnScale);
@@ -421,10 +683,11 @@ export function Stage3() {
     const box = new THREE.Box3().setFromObject(clone);
     const size = new THREE.Vector3();
     box.getSize(size);
+    const minHalf = 0.08;
     const halfExtents = new CANNON.Vec3(
-      size.x * 0.5,
-      size.y * 0.5,
-      size.z * 0.5,
+      Math.max(size.x * 0.5, minHalf),
+      Math.max(size.y * 0.5, minHalf),
+      Math.max(size.z * 0.5, minHalf),
     );
     const boxShape = new CANNON.Box(halfExtents);
     const body = new CANNON.Body({
@@ -456,7 +719,8 @@ export function Stage3() {
 
   function updateSpawnedIceCreams(delta) {
     if (!iceCreamPhysicsWorld) return;
-    iceCreamPhysicsWorld.step(1 / 60, delta, 3);
+    const substeps = config.icecreamCart?.physicsSubsteps ?? 2;
+    iceCreamPhysicsWorld.step(1 / 60, delta, substeps);
     for (let i = 0; i < spawnedIceCreams.length; i++) {
       const s = spawnedIceCreams[i];
       s.group.position.copy(s.body.position);
@@ -470,9 +734,23 @@ export function Stage3() {
     const sessionId = getSessionId();
     let list = [];
     for (const folder of [sessionId, sessionId + "/"]) {
-      const { data: files, error } = await supabase.storage
-        .from(HANDWRITING_BUCKET)
-        .list(folder.replace(/\/$/, ""), { limit: 500 });
+      let files;
+      let error;
+      try {
+        const res = await supabase.storage
+          .from(HANDWRITING_BUCKET)
+          .list(folder.replace(/\/$/, ""), { limit: 500 });
+        files = res.data;
+        error = res.error;
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] handwriting Storage 목록 실패(네트워크 전환 등) — DB 폴백 시도:",
+            e?.message ?? e,
+          );
+        }
+        break;
+      }
       if (!error && Array.isArray(files)) {
         const svgFiles = files.filter(
           (f) => f.name && String(f.name).toLowerCase().endsWith(".svg"),
@@ -489,18 +767,24 @@ export function Stage3() {
       }
     }
     if (list.length === 0) {
-      const { data: rows } = await supabase
-        .from(HANDWRITING_TABLE)
-        .select("storage_path, created_at")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true })
-        .limit(500);
-      if (Array.isArray(rows) && rows.length > 0) {
-        list = rows.map((r) => ({
-          path: String(r.storage_path ?? ""),
-          id: String(r.storage_path ?? "").replace(/\.svg$/i, ""),
-          createdAt: r.created_at ?? null,
-        }));
+      try {
+        const { data: rows } = await supabase
+          .from(HANDWRITING_TABLE)
+          .select("storage_path, created_at")
+          .eq("session_id", sessionId)
+          .order("created_at", { ascending: true })
+          .limit(500);
+        if (Array.isArray(rows) && rows.length > 0) {
+          list = rows.map((r) => ({
+            path: String(r.storage_path ?? ""),
+            id: String(r.storage_path ?? "").replace(/\.svg$/i, ""),
+            createdAt: r.created_at ?? null,
+          }));
+        }
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn("[Stage3] handwriting DB 조회 실패:", e?.message ?? e);
+        }
       }
     }
     if (list.length === 0) return null;
@@ -716,6 +1000,86 @@ export function Stage3() {
           nextSvgUrl = null;
         }
       }
+      const metadata = await getLatestHandwritingMetadata();
+      if (!metadata?.url) {
+        if (import.meta.env.DEV) {
+          console.log("[Stage3] 표시할 handwriting 없음");
+        }
+        return;
+      }
+      let shapes = await loadSVGShapes(metadata.url);
+      if (shapes.length === 0) return;
+      shapes = expandShapesStroke(shapes, 1.3);
+
+      const group = new THREE.Group();
+      group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
+      // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
+      const extrudeSettings = {
+        depth: 0.18,
+        bevelEnabled: true,
+        bevelThickness: 0.03,
+        bevelSize: 0.02,
+        bevelSegments: 8,
+      };
+      const meshes = [];
+      shapes.forEach((shape) => {
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x2e2e2e,
+          metalness: 0.1,
+          roughness: 0.8,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.scale.set(STAGE3_LETTER_SCALE, STAGE3_LETTER_SCALE, 1.45);
+        group.add(mesh);
+        meshes.push(mesh);
+      });
+      centerGroupGeometries(meshes);
+      group.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(group);
+      const letterBottomOffset = Math.max(0, -box.min.y);
+      const landingY = groundY + letterBottomOffset;
+
+      const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
+      group.position.set(0, startY, 0);
+      group.rotation.set(0, 0, 0);
+      if (!isStage3Active) {
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          }
+        });
+        return;
+      }
+      scene.add(group);
+      const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0: 전반적으로 더 빠르게
+      const gravity = STAGE3_GRAVITY * speedFactor;
+      const initialVy = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
+      letterState = {
+        group,
+        velocity: {
+          y: initialVy,
+          rotationX: 0,
+          rotationY: 0,
+          rotationZ: 0,
+        },
+        gravity,
+        groundY,
+        landingY,
+        bounces: 0,
+        landed: false,
+        hitCount: 0,
+      };
+      if (import.meta.env.DEV) {
+        console.log("[Stage3] 최신 글자 1개 낙하 시작 (2배 크기)");
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] 글자 로드 실패:", e);
+      }
     } finally {
       letterLoadInProgress = false;
     }
@@ -758,7 +1122,9 @@ export function Stage3() {
       s.bounces = 0;
       s.landed = false;
       s.hitCount = 0;
-      console.log("[Stage3] 0키: 글자 재낙하");
+      if (import.meta.env.DEV) {
+        console.log("[Stage3] 0키: 글자 재낙하");
+      }
       return;
     }
     if (sceneRef && cameraRef && stage3GroundY > 0) {
@@ -773,6 +1139,7 @@ export function Stage3() {
         console.log("[Stage3] 0키: 할당 글자 로드 후 낙하");
       } else {
         loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
+      if (import.meta.env.DEV) {
         console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
       }
     }
@@ -1120,6 +1487,40 @@ export function Stage3() {
     return best;
   }
 
+  /** 풀에서 fragment 슬롯 할당 (없으면 새로 생성). geom, mat은 caller가 생성 후 전달 */
+  function allocFragment(geom, mat) {
+    if (fragmentPool.length > 0) {
+      const slot = fragmentPool.pop();
+      slot.group.geometry = geom;
+      slot.group.material = mat.clone();
+      return slot;
+    }
+    const mesh = new THREE.Mesh(geom, mat.clone());
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return {
+      group: mesh,
+      velocity: new THREE.Vector3(),
+      angularVelocity: new THREE.Vector3(),
+    };
+  }
+
+  /** fragment 슬롯을 풀에 반환 (geometry/material dispose) */
+  function releaseFragment(f) {
+    sceneRef.remove(f.group);
+    if (f.group.geometry) {
+      f.group.geometry.dispose();
+      f.group.geometry = null;
+    }
+    if (f.group.material) {
+      f.group.material.dispose();
+      f.group.material = null;
+    }
+    if (fragmentPool.length < FRAGMENT_POOL_MAX) {
+      fragmentPool.push(f);
+    }
+  }
+
   function createFragmentMeshes(fragTriangles, mat, groundY) {
     for (const triList of fragTriangles) {
       if (triList.length === 0) continue;
@@ -1130,30 +1531,28 @@ export function Stage3() {
       fragCenter.multiplyScalar(1 / (triList.length * 3));
       const geom = trianglesToGeometry(triList, fragCenter);
       if (!geom) continue;
-      const mesh = new THREE.Mesh(geom, mat.clone());
-      mesh.position.copy(fragCenter);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.rotation.set(
+      const slot = allocFragment(geom, mat);
+      slot.group.position.copy(fragCenter);
+      slot.group.rotation.set(
         Math.random() * Math.PI,
         Math.random() * Math.PI,
         Math.random() * Math.PI,
       );
-      const velocity = new THREE.Vector3(
+      slot.velocity.set(
         (Math.random() - 0.5) * 6,
         Math.random() * 2 + 3,
         (Math.random() - 0.5) * 6,
       );
-      const angularVelocity = new THREE.Vector3(
+      slot.angularVelocity.set(
         (Math.random() - 0.5) * 4,
         (Math.random() - 0.5) * 4,
         (Math.random() - 0.5) * 4,
       );
-      sceneRef.add(mesh);
+      sceneRef.add(slot.group);
       fragments.push({
-        group: mesh,
-        velocity,
-        angularVelocity,
+        group: slot.group,
+        velocity: slot.velocity,
+        angularVelocity: slot.angularVelocity,
         age: 0,
         groundY,
       });
@@ -1181,9 +1580,7 @@ export function Stage3() {
       if (tris.length === 0) return;
       const { remaining, fragments: fragTriangles } =
         partitionTrianglesOneSlice(tris, mesh, FRACTION_PER_HIT);
-      sceneRef.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (mesh.material) mesh.material.dispose();
+      releaseFragment(frag);
       fragments.splice(fragIdx, 1);
       createFragmentMeshes(fragTriangles, mat, target.groundY);
       if (remaining.length > 0) {
@@ -1194,23 +1591,23 @@ export function Stage3() {
         fragCenter.multiplyScalar(1 / (remaining.length * 3));
         const geom = trianglesToGeometry(remaining, fragCenter);
         if (geom) {
-          const m = new THREE.Mesh(geom, mat.clone());
-          m.position.copy(fragCenter);
-          m.castShadow = true;
-          m.receiveShadow = true;
-          sceneRef.add(m);
+          const slot = allocFragment(geom, mat);
+          slot.group.position.copy(fragCenter);
+          slot.velocity.set(
+            (Math.random() - 0.5) * 5,
+            Math.random() * 1.5 + 2.5,
+            (Math.random() - 0.5) * 5,
+          );
+          slot.angularVelocity.set(
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 3,
+          );
+          sceneRef.add(slot.group);
           fragments.push({
-            group: m,
-            velocity: new THREE.Vector3(
-              (Math.random() - 0.5) * 5,
-              Math.random() * 1.5 + 2.5,
-              (Math.random() - 0.5) * 5,
-            ),
-            angularVelocity: new THREE.Vector3(
-              (Math.random() - 0.5) * 3,
-              (Math.random() - 0.5) * 3,
-              (Math.random() - 0.5) * 3,
-            ),
+            group: slot.group,
+            velocity: slot.velocity,
+            angularVelocity: slot.angularVelocity,
             age: 0,
             groundY: target.groundY,
           });
@@ -1318,9 +1715,7 @@ export function Stage3() {
         if (f.group.material) f.group.material.opacity = opacity;
       }
       if (f.age >= FRAGMENT_FADE_END) {
-        sceneRef.remove(f.group);
-        if (f.group.geometry) f.group.geometry.dispose();
-        if (f.group.material) f.group.material.dispose();
+        releaseFragment(f);
         fragments.splice(i, 1);
       }
     }
@@ -1330,6 +1725,8 @@ export function Stage3() {
     camera: null,
 
     setup(scene, renderer) {
+      isStage3Active = true;
+      gumCancelled = false;
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
@@ -1405,15 +1802,16 @@ export function Stage3() {
         scene,
         glbLoader,
         config,
-        onReady: async ({
-          model,
-          center,
-          backgroundMaxY,
-          backgroundBounds,
-        }) => {
+        getIsActive: () => isStage3Active,
+        onReady: ({ model, center, backgroundMaxY, backgroundBounds }) => {
           backgroundModel = model;
+          if (isStage3Active) {
+            playStage3IntroAudioTwice();
+          }
           debugControls.setOrbitTarget(center);
-          console.log("✅ Stage3 배경 모델 로드 완료");
+          if (import.meta.env.DEV) {
+            console.log("✅ Stage3 배경 모델 로드 완료");
+          }
 
           cameraRef = this.camera;
           stage3GroundY = backgroundMaxY;
@@ -1435,152 +1833,80 @@ export function Stage3() {
             }, STAGE3_MONITOR_FALLBACK_TIMEOUT_MS);
           }
 
-          character.setup(backgroundMaxY, backgroundBounds);
-
-          const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-          const stage3Props = [
-            { key: "tree1", name: "tree1" },
-            { key: "notice", name: "notice" },
-            { key: "portal_bright", name: "portal_bright" },
-            { key: "statue", name: "statue" },
-            { key: "well", name: "well" },
-            { key: "clock", name: "clock" },
-            { key: "water", name: "water" },
-            { key: "gameMachine", name: "gameMachine" },
-            { key: "bench", name: "bench" },
-            { key: "signs", name: "signs" },
-          ];
-
-          // 병렬 로드: 아이스크림 카트, 스폰 템플릿, props (tree1 포함)
-          const loadTasks = [];
-          const iceCart = config.icecreamCart;
-          if (iceCart) {
-            loadTasks.push({
-              type: "iceCart",
-              promise: glbLoader.loadAsync(base + iceCart.path),
-              data: iceCart,
-            });
-          }
-          loadTasks.push({
-            type: "spawn",
-            promise: loadIceCreamSpawnModels(),
-            data: null,
-          });
-          for (const { key, name } of stage3Props) {
-            const prop = config[key];
-            if (!prop) continue;
-            loadTasks.push({
-              type: "prop",
-              key,
-              name,
-              promise: glbLoader.loadAsync(base + prop.path),
-              data: prop,
-            });
-          }
-
-          const results = await Promise.allSettled(
-            loadTasks.map((t) => t.promise),
-          );
-
-          loadTasks.forEach((task, i) => {
-            const result = results[i];
-            if (result.status === "rejected") {
-              if (task.type === "iceCart") {
-                console.warn(
-                  "❌ Stage3 아이스크림 카트 로드 실패:",
-                  base + task.data.path,
-                  result.reason,
-                );
-              } else if (task.type === "spawn") {
-                console.warn(
-                  "[Stage3] 아이스크림 스폰 모델 로드 실패:",
-                  result.reason,
-                );
-              } else {
-                console.warn(
-                  `❌ Stage3 ${task.name} 로드 실패:`,
-                  base + task.data.path,
-                  result.reason,
-                );
-              }
-              return;
-            }
-            const value = result.value;
-
-            if (task.type === "iceCart") {
-              const iceCreamCart = value.scene;
-              const d = task.data;
-              iceCreamCart.position.set(
-                d.position?.x ?? 0,
-                backgroundMaxY + (d.position?.y ?? 0),
-                d.position?.z ?? 0,
-              );
-              iceCreamCart.rotation.set(
-                ((d.rotation?.x ?? 0) * Math.PI) / 180,
-                ((d.rotation?.y ?? 0) * Math.PI) / 180,
-                ((d.rotation?.z ?? 0) * Math.PI) / 180,
-              );
-              iceCreamCart.scale.setScalar(d.scale ?? 1);
-              iceCreamCart.traverse((child) => {
-                if (child.isMesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-              iceCreamCart.userData.isIceCreamCart = true;
-              scene.add(iceCreamCart);
-              objects.push(iceCreamCart);
-              iceCreamCartRef = iceCreamCart;
+          const useStatic = config.model.useStaticObstacleColliders !== false;
+          const rawColliders = useStatic
+            ? collectIslandStaticColliderBoxes(model)
+            : [];
+          const islandStaticColliders = useStatic
+            ? filterCollidersExcludingDominantTerrain(
+                rawColliders,
+                backgroundBounds,
+              )
+            : [];
+          if (import.meta.env.DEV) {
+            if (!useStatic) {
               console.log(
-                "✅ Stage3 아이스크림 카트 로드 완료:",
-                base + d.path,
-              );
-            } else if (task.type === "spawn") {
-              iceCreamTemplates.push(...value);
-              console.log(
-                "✅ Stage3 아이스크림 스폰 템플릿 로드 완료:",
-                value.length,
-                "개",
+                "[Stage3] 정적 장애물 충돌 비활성화(model.useStaticObstacleColliders). 바운딩만 사용.",
               );
             } else {
-              const model = value.scene;
-              const d = task.data;
-              model.position.set(
-                d.position?.x ?? 0,
-                backgroundMaxY + (d.position?.y ?? 0),
-                d.position?.z ?? 0,
+              const dropped =
+                rawColliders.length - islandStaticColliders.length;
+              console.log(
+                `[Stage3] INT_/OBJ_ 충돌 AABB: ${islandStaticColliders.length}개 적용` +
+                  (dropped > 0 ? ` (${dropped}개 넓은 슬라브 후보 제외)` : "") +
+                  " (INT_Portal 제외)",
               );
-              model.rotation.set(
-                ((d.rotation?.x ?? 0) * Math.PI) / 180,
-                ((d.rotation?.y ?? 0) * Math.PI) / 180,
-                ((d.rotation?.z ?? 0) * Math.PI) / 180,
-              );
-              model.scale.setScalar(d.scale ?? 1);
-              model.traverse((child) => {
-                if (child.isMesh) {
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              });
-              scene.add(model);
-              objects.push(model);
-              if (task.key === "notice") noticeRef = model;
-              if (task.key === "gameMachine") {
-                gameMachineRef = model;
-                unlistenMinigameClose = onMinigameClose(() => {
-                  closeMinigame({
-                    camera: cameraRef,
-                    orbitControls: debugControls?.getOrbitControls?.() ?? null,
-                  });
-                });
+            }
+          }
+          character.setup(
+            backgroundMaxY,
+            backgroundBounds,
+            islandStaticColliders,
+          );
+
+          // 섬 GLB는 backgroundLoader에서 이미 `scene.add(model)`로 들어와 있기 때문에,
+          // 카메라 인트로 시작 타이밍을 뒤로 미루면 섬(특히 하단)이 회전 시작 전 잠깐 보일 수 있음.
+          // 따라서 gumFollowers.init() 같은 비동기 로딩보다 먼저 카메라 인트로를 활성화한다.
+          if (isStage3Active) {
+            startCameraIntro(center, backgroundBounds);
+          }
+
+          registerIslandInteractions(model);
+
+          gumFollowers = createGumFollowersController({
+            scene,
+            glbLoader,
+            config,
+            getUserState: () => ({
+              position: character?.getPosition?.() ?? null,
+              yaw: character?.getYaw?.() ?? null,
+              moving: character?.getIsMoving?.() ?? false,
+            }),
+          });
+
+          void gumFollowers
+            .init({
+              backgroundMaxY,
+              isCancelled: () => !isStage3Active || gumCancelled,
+            })
+            .catch((e) => {
+              if (import.meta.env.DEV) {
+                console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
               }
-              console.log(`✅ Stage3 ${task.name} 로드 완료:`, base + d.path);
+              gumFollowers?.cleanup?.();
+              gumFollowers = null;
+            });
+          void preloadIceCreamTemplates().catch((e) => {
+            if (import.meta.env.DEV) {
+              console.warn("[Stage3] 아이스크림 preload 오류:", e ?? "");
             }
           });
         },
       });
 
-      console.log("✅ Stage3 생성 완료");
+      if (import.meta.env.DEV) {
+        console.log("✅ Stage3 생성 완료");
+      }
     },
 
     update(delta) {
@@ -1589,11 +1915,22 @@ export function Stage3() {
       updateFragments(delta);
       updateSpawnedIceCreams(delta);
       if (character) {
-        character.update(delta, this.camera, { skipCameraFollow: true });
+        character.update(delta, this.camera, {
+          skipCameraFollow: cameraIntro.active || !cameraIntro.completed,
+        });
+      }
+      updateCameraIntro(delta);
+      if (gumFollowers) {
+        gumFollowers.update(delta);
       }
     },
 
     cleanup(scene) {
+      isStage3Active = false;
+      gumCancelled = true;
+      cameraIntro.active = false;
+      cameraIntro.transitioning = false;
+      cameraIntro.completed = false;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,
@@ -1603,7 +1940,15 @@ export function Stage3() {
         character.cleanup();
         character = null;
       }
+      if (gumFollowers) {
+        gumFollowers.cleanup();
+        gumFollowers = null;
+      }
       if (canvasRef) {
+        if (_pointerMoveRafId !== 0) {
+          cancelAnimationFrame(_pointerMoveRafId);
+          _pointerMoveRafId = 0;
+        }
         canvasRef.removeEventListener("pointerdown", handlePointerDown, {
           capture: true,
         });
@@ -1612,12 +1957,16 @@ export function Stage3() {
         canvasRef.style.cursor = "default";
         canvasRef = null;
       }
-      closeNoticeModal();
-      if (noticeModalEl && noticeModalEl.parentNode) {
-        noticeModalEl.parentNode.removeChild(noticeModalEl);
-        noticeModalEl = null;
-      }
+      window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
       noticeRef = null;
+      closeMinigame({
+        camera: cameraRef ?? this.camera,
+        orbitControls: debugControls?.getOrbitControls?.() ?? null,
+      });
+      cameraRef = null;
+      dispatchMinigameClose();
+      dispatchMirrorModalClose();
+      intRaycastMeshes.length = 0;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
         unlistenMinigameClose = null;
@@ -1652,7 +2001,7 @@ export function Stage3() {
       }
       iceCreamPhysicsWorld = null;
       iceCreamCartRef = null;
-      iceCreamTemplates.length = 0;
+      disposeIceCreamTemplates();
 
       if (monitorFallbackTimeoutId) {
         window.clearTimeout(monitorFallbackTimeoutId);
@@ -1667,12 +2016,13 @@ export function Stage3() {
       }
 
       removeAllLetterGroupsFromScene(scene);
-      fragments.forEach((f) => {
-        scene.remove(f.group);
-        if (f.group.geometry) f.group.geometry.dispose();
-        if (f.group.material) f.group.material.dispose();
-      });
+      fragments.forEach((f) => releaseFragment(f));
       fragments.length = 0;
+      fragmentPool.forEach((slot) => {
+        if (slot.group.geometry) slot.group.geometry.dispose();
+        if (slot.group.material) slot.group.material.dispose();
+      });
+      fragmentPool.length = 0;
 
       objects.forEach((obj) => {
         scene.remove(obj);
@@ -1709,7 +2059,9 @@ export function Stage3() {
       }
 
       scene.background = null;
-      console.log("🧹 Stage3 정리 완료");
+      if (import.meta.env.DEV) {
+        console.log("🧹 Stage3 정리 완료");
+      }
     },
   };
 }

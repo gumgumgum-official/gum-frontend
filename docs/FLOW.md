@@ -21,21 +21,20 @@
 
 ## 3. Phase ↔ Stage 매핑
 
-PRD의 Phase와 코드의 Stage는 1:1로 대응합니다. **본 프로젝트(gum-frontend)는 Stage 2~6만 포함**합니다.
+PRD의 Phase와 코드의 Stage는 1:1로 대응합니다. **본 프로젝트(gum-frontend)는 Stage 2, 3, 6만 포함**합니다.
 
 | Phase | Stage | 내용 | 프로젝트 |
 | :---- | :---- | :--- | :------- |
 | Phase 1 | Stage 1 | 입국 신고서 (태블릿 폼 UI) | 별도 프로젝트 |
 | Phase 2 | Stage 2 | 고민 시각화 (Beam Projector, 3D 텍스트 투하) | gum-frontend |
-| Phase 3 | Stage 3 | 부셔버리자 (Cannon-es 파편, 꽃) | gum-frontend |
-| Phase 4 | Stage 4 | 털어버리자 (Confetti, 댄스) | gum-frontend |
-| Phase 5 | Stage 5 | 난 너의 편 (Raycasting 포옹, 폴라로이드) | gum-frontend |
+| Phase 3 | Stage 3 | 부셔버리자 (Cannon-es 파편, 꽃, 포탈) | gum-frontend |
+| Phase 4 | Stage 4 | (미사용) | - |
+| Phase 5 | Stage 5 | (미사용) | - |
 | Phase 6 | Stage 6 | 헤어짐 (배웅, 말풍선) | gum-frontend |
 
 ## 4. 유저 시나리오 (User Journey)
 
 - **입장**: 입국 신고서 작성 (아이패드, 별도 프로젝트)
 - **관찰**: 내 고민이 섬으로 떨어지는 것을 빔 프로젝터로 확인
-- **체험**: 체험 존 이동 후 버튼을 눌러 고민을 부수고 꽃을 피움
-- **교감**: 껌딱지들과 춤추고 포옹하며 위로를 얻음
+- **체험**: 체험 존 이동 후 고민을 부수고 꽃을 피움, 포탈 통과로 Stage 6 이동
 - **퇴장**: 공항 배경에서 껌딱지들의 배웅을 받으며 종료
