@@ -4,6 +4,7 @@ import { BeamPage } from "./pages/BeamPage.jsx";
 import { KioskPage } from "./pages/KioskPage.jsx";
 import { DevPage } from "./pages/DevPage.jsx";
 import { MemoryTestPage } from "./pages/MemoryTestPage.jsx";
+import { StartPage } from "./pages/StartPage.jsx";
 import { NoticeModalBoard } from "./components/NoticeModalBoard.jsx";
 
 export function App() {
@@ -27,11 +28,12 @@ export function App() {
         onClose={() => setShowNoticeModal(false)}
       />
       <Routes>
+        <Route path="/start" element={<StartPage />} />
         <Route path="/beam" element={<BeamPage />} />
         <Route path="/kiosk" element={<KioskPage />} />
         <Route path="/dev" element={<DevPage />} />
         <Route path="/memory-test" element={<MemoryTestPage />} />
-        <Route path="/" element={<Navigate to="/dev" replace />} />
+        <Route path="/" element={<Navigate to="/start" replace />} />
         <Route path="*" element={<Navigate to="/dev" replace />} />
       </Routes>
     </BrowserRouter>

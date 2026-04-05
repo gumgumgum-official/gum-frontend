@@ -1,6 +1,7 @@
 /**
  * Stage3: 부셔버리자 (밝은 초원, 스트레스 해소)
- * - 최신 handwriting 1개가 2배 크기로 낙하
+ * - gum_server: POST .../start 후 GET .../current 폴링으로 worry(svgUrl) 우선 낙하
+ * - 폴링에서 busy 미수신 시 fallback으로 "최신 1개"가 낙하
  * - 엔터키로 타격 시 큰 조각이 깔끔하게 부서짐, 4번 치면 사라짐. 조각은 3초 후 페이드아웃
  * @returns {import("../types.js").StageInstance}
  */
@@ -18,6 +19,7 @@ import {
   filterCollidersExcludingDominantTerrain,
 } from "../utils/stages/stage3/islandStaticColliders.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
+import { inspectModel as _inspectModel } from "../utils/common/modelInspector.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
@@ -34,6 +36,12 @@ import {
 } from "../utils/stages/stage3/mirrorModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
+import {
+  MONITOR_POLL_MS,
+  fetchMonitorCurrent,
+  getMonitorDeviceId,
+  postMonitorStart,
+} from "../lib/monitorCurrentApi.js";
 import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
 
 const HANDWRITING_BUCKET = "handwriting";
@@ -41,6 +49,15 @@ const HANDWRITING_TABLE = "handwriting_files";
 
 /** Stage2 대비 4배 크기 (글자 일부도 크게 보이도록) */
 const STAGE3_LETTER_SCALE = 0.006 * 0.75 * 4;
+// Z 방향 입체감은 살짝만 주고 거의 평면에 가깝게
+const STAGE3_LETTER_Z_SCALE = 1.0;
+const STAGE3_LETTER_COLOR = 0x111111;
+// Stage3 전용: 글자 겹침 줄이기 위해 스트로크 확장 값을 과하지 않게 유지
+const STAGE3_STROKE_OUTLINE = 1.6;
+const STAGE3_STROKE_FILL = 1.3;
+// OUTLINE/FILL 레이어 간 Z 오프셋도 최소화해서 볼륨감 과한 느낌을 줄임
+const STAGE3_OUTLINE_Z_OFFSET = 0.004;
+const STAGE3_FILL_Z_OFFSET = 0.008;
 const STAGE3_SPAWN_HEIGHT = 5;
 // 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
 const STAGE3_GRAVITY = -35;
@@ -55,6 +72,9 @@ const FRAGMENT_BOUNCE_RESTITUTION = 0.35;
 const FRAGMENT_GROUND_FRICTION = 0.82;
 const FRAGMENT_FADE_START = 3; // 땅에 떨어진 뒤 3초 뒤부터
 const FRAGMENT_FADE_END = 5;
+
+/** REST에서 busy를 한 번도 못 받았을 때만 Supabase fallback (ms) */
+const STAGE3_MONITOR_FALLBACK_TIMEOUT_MS = 5000;
 
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
@@ -71,7 +91,7 @@ export function Stage3() {
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
 
-  // 낙하 글자 1개 (최신 것만)
+  // 낙하 글자 1개 (할당된 svgUrl 우선)
   let letterState = null;
   let letterLoadInProgress = false;
   const fragments = [];
@@ -79,6 +99,18 @@ export function Stage3() {
   const fragmentPool = [];
   const FRAGMENT_POOL_MAX = 32;
 
+  // gum_server REST 폴링으로 할당된 글자
+  let assignedWorryId = null; // string
+  let assignedSvgUrl = null; // string
+  /** REST로 busy(worry)를 한 번이라도 받으면 true → Supabase fallback 타이머 미실행 유지 */
+  let monitorRestAssignmentReceived = false;
+  let monitorPollIntervalId = null;
+  let monitorPollInFlight = false;
+  let pendingSvgUrlToLoad = null;
+  let pendingSvgUrlDebugId = null;
+  let monitorFallbackTimeoutId = null;
+
+  // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
   // island2.glb 내 INT_icecream 루트 (클릭 → 스폰, cannon-es)
   let iceCreamCartRef = null;
   /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
@@ -373,6 +405,101 @@ export function Stage3() {
     if (canvasRef) canvasRef.style.cursor = "default";
   }
 
+  function applyMonitorIdleState() {
+    // REST로 busy(worry)를 받은 뒤에는 idle 폴링으로 할당을 지우지 않는다.
+    if (monitorRestAssignmentReceived || assignedWorryId || assignedSvgUrl) {
+      return;
+    }
+    assignedWorryId = null;
+    assignedSvgUrl = null;
+  }
+
+  function applyMonitorBusyWorry(worry) {
+    const worryId = worry?.worryId ?? worry?.id ?? worry?.seq;
+    const svgUrl = worry?.svgUrl;
+    if (worryId == null || worryId === "" || !svgUrl) {
+      console.warn("[Stage3] monitor busy 응답에 worryId/svgUrl 누락:", worry);
+      return;
+    }
+    const wid = String(worryId);
+    const surl = String(svgUrl);
+    if (assignedWorryId === wid && assignedSvgUrl === surl) {
+      return;
+    }
+
+    if (!monitorRestAssignmentReceived) {
+      monitorRestAssignmentReceived = true;
+      if (monitorFallbackTimeoutId) {
+        window.clearTimeout(monitorFallbackTimeoutId);
+        monitorFallbackTimeoutId = null;
+      }
+    }
+
+    assignedWorryId = wid;
+    assignedSvgUrl = surl;
+
+    if (sceneRef && cameraRef && stage3GroundY > 0) {
+      loadLetterFromSvgUrl(
+        sceneRef,
+        cameraRef,
+        stage3GroundY,
+        assignedSvgUrl,
+        assignedWorryId,
+      );
+    } else {
+      console.log(
+        "[Stage3] monitor busy 수신 (배경 아직 준비 전) → background ready 시 로드",
+      );
+    }
+  }
+
+  async function pollMonitorCurrent() {
+    if (monitorPollInFlight) return;
+    monitorPollInFlight = true;
+    try {
+      const data = await fetchMonitorCurrent();
+      if (data == null) return;
+      const status = data?.status;
+
+      if (status === "idle") {
+        applyMonitorIdleState();
+        return;
+      }
+
+      if (status === "busy" && data.worry) {
+        applyMonitorBusyWorry(data.worry);
+        return;
+      }
+
+      if (status === "busy") {
+        console.warn("[Stage3] monitor busy인데 worry 없음:", data);
+      }
+    } catch (e) {
+      console.warn("[Stage3] monitor current 폴링 실패:", e);
+    } finally {
+      monitorPollInFlight = false;
+    }
+  }
+
+  function startMonitorPolling() {
+    if (monitorPollIntervalId != null) return;
+    void pollMonitorCurrent();
+    monitorPollIntervalId = window.setInterval(() => {
+      void pollMonitorCurrent();
+    }, MONITOR_POLL_MS);
+    console.log(
+      `[Stage3] gum_server REST 폴링 시작 (${MONITOR_POLL_MS}ms), monitor="${getMonitorDeviceId()}"`,
+    );
+  }
+
+  function stopMonitorPolling() {
+    if (monitorPollIntervalId != null) {
+      window.clearInterval(monitorPollIntervalId);
+      monitorPollIntervalId = null;
+    }
+  }
+
+  /** 게시판 모달 생성 및 표시 */
   function disposeIceCreamTemplates() {
     // 템플릿 `scene`은 전역 GLTF 캐시 템플릿이므로 dispose하지 않는다(재진입·스폰 clone만 dispose).
     iceCreamTemplates.length = 0;
@@ -718,13 +845,161 @@ export function Stage3() {
     letterState = null;
   }
 
-  async function loadLatestLetter(scene, camera, groundY) {
-    if (letterLoadInProgress) return;
-    letterLoadInProgress = true;
+  async function loadLetterFromSvgUrl(scene, camera, groundY, svgUrl, debugId) {
+    if (!svgUrl) return;
 
+    // 로딩 중 중복 요청이 들어오면 마지막 요청만 저장했다가 이어서 처리
+    if (letterLoadInProgress) {
+      pendingSvgUrlToLoad = svgUrl;
+      pendingSvgUrlDebugId = debugId;
+      return;
+    }
+
+    letterLoadInProgress = true;
     removeAllLetterGroupsFromScene(scene);
 
+    let nextSvgUrl = svgUrl;
+    let nextDebugId = debugId;
+
     try {
+      // pending을 포함해 "하나라도 더 있으면" 순차 처리
+      // (연속 REST 할당에도 마지막 SVG가 반영되도록)
+      while (nextSvgUrl) {
+        const currentSvgUrl = nextSvgUrl;
+        const currentDebugId = nextDebugId;
+        nextSvgUrl = null;
+        nextDebugId = null;
+
+        try {
+          let shapes = await loadSVGShapes(currentSvgUrl);
+          if (!Array.isArray(shapes) || shapes.length === 0) return;
+
+          const outlineShapes = expandShapesStroke(
+            shapes,
+            STAGE3_STROKE_OUTLINE,
+          );
+          const fillShapes = expandShapesStroke(shapes, STAGE3_STROKE_FILL);
+
+          const group = new THREE.Group();
+          group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
+
+          // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
+          const extrudeSettings = {
+            depth: 0.18,
+            bevelEnabled: true,
+            bevelThickness: 0.035,
+            bevelSize: 0.025,
+            bevelSegments: 8,
+          };
+
+          const meshes = [];
+          const sharedMaterialOptions = {
+            color: STAGE3_LETTER_COLOR,
+            metalness: 0.1,
+            roughness: 0.8,
+          };
+
+          outlineShapes.forEach((shape, index) => {
+            const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            const material = new THREE.MeshStandardMaterial(
+              sharedMaterialOptions,
+            );
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.scale.set(
+              STAGE3_LETTER_SCALE,
+              STAGE3_LETTER_SCALE,
+              STAGE3_LETTER_Z_SCALE,
+            );
+            group.add(mesh);
+            meshes.push(mesh);
+
+            const fillShape = fillShapes[index];
+            if (!fillShape) return;
+
+            const fillGeometry = new THREE.ExtrudeGeometry(
+              fillShape,
+              extrudeSettings,
+            );
+            const fillMaterial = new THREE.MeshStandardMaterial(
+              sharedMaterialOptions,
+            );
+            const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+            fillMesh.castShadow = true;
+            fillMesh.receiveShadow = true;
+            fillMesh.scale.set(
+              STAGE3_LETTER_SCALE,
+              STAGE3_LETTER_SCALE,
+              STAGE3_LETTER_Z_SCALE,
+            );
+            group.add(fillMesh);
+            meshes.push(fillMesh);
+          });
+
+          centerGroupGeometries(meshes);
+          meshes.forEach((mesh) => {
+            if (!mesh.geometry || !mesh.geometry.boundingBox) {
+              mesh.geometry?.computeBoundingBox();
+            }
+          });
+
+          // outline: 먼저 push 된 메쉬, fill: 그 다음 메쉬
+          // meshes 배열에서 짝수 index를 OUTLINE, 홀수 index를 FILL로 간주
+          meshes.forEach((mesh, idx) => {
+            mesh.position.z +=
+              idx % 2 === 0 ? -STAGE3_OUTLINE_Z_OFFSET : STAGE3_FILL_Z_OFFSET;
+          });
+
+          group.updateMatrixWorld(true);
+          const box = new THREE.Box3().setFromObject(group);
+          const letterBottomOffset = Math.max(0, -box.min.y);
+          const landingY = groundY + letterBottomOffset;
+
+          const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
+          group.position.set(0, startY, 0);
+          group.rotation.set(0, 0, 0);
+          scene.add(group);
+
+          const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0
+          const gravity = STAGE3_GRAVITY * speedFactor;
+          const initialVy =
+            (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
+
+          letterState = {
+            group,
+            velocity: {
+              y: initialVy,
+              rotationX: 0,
+              rotationY: 0,
+              rotationZ: 0,
+            },
+            gravity,
+            groundY,
+            landingY,
+            bounces: 0,
+            landed: false,
+            hitCount: 0,
+          };
+
+          console.log(
+            `[Stage3] 글자 낙하 시작 (debugId=${currentDebugId ?? "unknown"})`,
+          );
+        } catch (e) {
+          console.warn("[Stage3] svg 로드 실패:", e);
+        }
+
+        // while 내부에서 계속 로딩이 필요할 경우 pending을 소비
+        if (pendingSvgUrlToLoad) {
+          nextSvgUrl = pendingSvgUrlToLoad;
+          nextDebugId = pendingSvgUrlDebugId;
+          pendingSvgUrlToLoad = null;
+          pendingSvgUrlDebugId = null;
+          removeAllLetterGroupsFromScene(scene);
+        } else {
+          nextSvgUrl = null;
+        }
+      }
       const metadata = await getLatestHandwritingMetadata();
       if (!metadata?.url) {
         if (import.meta.env.DEV) {
@@ -810,6 +1085,21 @@ export function Stage3() {
     }
   }
 
+  async function loadLatestLetter(scene, camera, groundY) {
+    const metadata = await getLatestHandwritingMetadata();
+    if (!metadata?.url) {
+      console.log("[Stage3] 표시할 handwriting 없음");
+      return;
+    }
+    await loadLetterFromSvgUrl(
+      scene,
+      camera,
+      groundY,
+      metadata.url,
+      metadata.id,
+    );
+  }
+
   /** 0키: 글자 다시 떨어뜨리기 (디버깅용). 이미 없으면 최신 글자 재로드 후 낙하 */
   function resetLetterFall() {
     if (letterState) {
@@ -838,9 +1128,20 @@ export function Stage3() {
       return;
     }
     if (sceneRef && cameraRef && stage3GroundY > 0) {
-      loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
-      if (import.meta.env.DEV) {
-        console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
+      if (assignedSvgUrl) {
+        loadLetterFromSvgUrl(
+          sceneRef,
+          cameraRef,
+          stage3GroundY,
+          assignedSvgUrl,
+          assignedWorryId,
+        );
+        console.log("[Stage3] 0키: 할당 글자 로드 후 낙하");
+      } else {
+        loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
+        if (import.meta.env.DEV) {
+          console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
+        }
       }
     }
   }
@@ -1483,6 +1784,21 @@ export function Stage3() {
         },
       });
 
+      // gum_server: start → 그다음 current 폴링 (예약만 있고 start 전이면 서버는 idle)
+      void (async () => {
+        try {
+          const ok = await postMonitorStart();
+          if (!ok) {
+            console.warn(
+              "[Stage3] monitor start 실패 — 폴링은 계속 (fallback 가능)",
+            );
+          }
+        } catch (e) {
+          console.warn("[Stage3] monitor start 예외:", e);
+        }
+        startMonitorPolling();
+      })();
+
       loadStage3Background({
         scene,
         glbLoader,
@@ -1500,7 +1816,23 @@ export function Stage3() {
 
           cameraRef = this.camera;
           stage3GroundY = backgroundMaxY;
-          loadLatestLetter(scene, this.camera, backgroundMaxY);
+          if (assignedSvgUrl) {
+            loadLetterFromSvgUrl(
+              scene,
+              this.camera,
+              backgroundMaxY,
+              assignedSvgUrl,
+              assignedWorryId,
+            );
+          } else {
+            // 우선순위: REST busy(1순위)를 기다리고,
+            // 일정 시간 동안 busy가 없을 때만 fallback(2순위)로 최신 글자를 로드
+            const stageCamera = this.camera;
+            monitorFallbackTimeoutId = window.setTimeout(() => {
+              if (monitorRestAssignmentReceived || assignedSvgUrl) return;
+              loadLatestLetter(scene, stageCamera, backgroundMaxY);
+            }, STAGE3_MONITOR_FALLBACK_TIMEOUT_MS);
+          }
 
           const useStatic = config.model.useStaticObstacleColliders !== false;
           const rawColliders = useStatic
@@ -1671,6 +2003,13 @@ export function Stage3() {
       iceCreamPhysicsWorld = null;
       iceCreamCartRef = null;
       disposeIceCreamTemplates();
+
+      if (monitorFallbackTimeoutId) {
+        window.clearTimeout(monitorFallbackTimeoutId);
+        monitorFallbackTimeoutId = null;
+      }
+
+      stopMonitorPolling();
 
       if (debugControls) {
         debugControls.dispose();
