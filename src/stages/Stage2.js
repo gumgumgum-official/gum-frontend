@@ -21,18 +21,18 @@ import { getSessionId } from "../lib/session.js";
 // ----------------------------------------
 // [검증용] 예전 수동 측정값 주석 처리 — island.glb 자동 계산만 사용하는지 검증하려면 아래 사용 안 함.
 // 검증 끝나면 주석 해제하고 getSpawnBounds/loadCharacters fallback 다시 ISLAND_BOUNDS로.
-// const ISLAND_BOUNDS = {
-//   minX: -8.06,
-//   maxX: 7.94,
-//   minZ: -3.21,
-//   maxZ: 6.89,
-// };
+const LEGACY_ISLAND_BOUNDS = {
+  minX: -8.06,
+  maxX: 7.94,
+  minZ: -3.21,
+  maxZ: 6.89,
+};
 const GROUND_Y = 0.7;
 /** 글자끼리 최소 거리(m). 이 값보다 가깝게 스폰되지 않음. */
 const MIN_DISTANCE_BETWEEN = 5.2;
 // island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
-const ISLAND_BOUNDS_INSET_RATIO = 0.15;
+const ISLAND_BOUNDS_INSET_RATIO = 0.08;
 // 스폰 시 그 안에서 다시 앞·뒤·좌우 살짝만 더 빼기 (섬 전체에 퍼지도록 작게)
 const SPAWN_INSET_RATIO = 0.05;
 const SPAWN_INSET_SIDE_RATIO = 0.06;
@@ -40,8 +40,14 @@ const SPAWN_INSET_BOTTOM_RATIO = 0.1;
 const SPAWN_HEIGHT_MIN = 3; // 낙하 시작 높이 하한 (빨리 보이게)
 const SPAWN_HEIGHT_MAX = 14; // 최대 시작 높이 (너무 높으면 오래 걸림)
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
-const FALL_GRAVITY_MAX = -22 * 0.15;
-const FALL_INITIAL_VY_MAX = -6 * 0.15;
+// 기존 대비 약 20% 빠르게 (체감 속도 개선)
+const FALL_SPEED_MULTIPLIER = 1.2;
+const FALL_GRAVITY_MAX = -22 * 0.15 * FALL_SPEED_MULTIPLIER;
+const FALL_INITIAL_VY_MAX = -6 * 0.15 * FALL_SPEED_MULTIPLIER;
+// Stage3(운석)처럼 "통통" 한 번만 바운스
+// 너무 크게 튀지 않게(얌전하게) 탄성 낮춤
+const LETTER_BOUNCE_RESTITUTION = 0.22;
+const LETTER_MAX_BOUNCES = 1;
 
 /** 자식/손자 중 name이 일치하는 첫 오브젝트 반환 (디자이너가 넣은 Walkable 등) */
 function findChildByName(obj, name) {
@@ -52,6 +58,21 @@ function findChildByName(obj, name) {
     if (found) return found;
   }
   return null;
+}
+
+/**
+ * island.glb 기반 자동 계산 bounds가 너무 좁게 잡히는 경우(메쉬/스케일/원점 이슈 등),
+ * 예전 수동 측정값(LEGACY_ISLAND_BOUNDS)으로 안전하게 fallback 한다.
+ */
+function getSafeIslandBounds(bounds) {
+  if (!bounds) return LEGACY_ISLAND_BOUNDS;
+  const w = bounds.maxX - bounds.minX;
+  const d = bounds.maxZ - bounds.minZ;
+  // 섬이 이보다 작게 잡히면 스폰 영역이 과도하게 좁아져 겹침이 급증하므로 fallback
+  if (!Number.isFinite(w) || !Number.isFinite(d) || w < 6 || d < 6) {
+    return LEGACY_ISLAND_BOUNDS;
+  }
+  return bounds;
 }
 
 export function Stage2() {
@@ -73,14 +94,17 @@ export function Stage2() {
       islandBounds = null;
       return;
     }
-    const root = roots[0];
-    const box = new THREE.Box3().setFromObject(root);
+    // collision.glb가 여러 조각(여러 root)으로 로드되는 경우가 있어,
+    // 첫 번째 root만 쓰면 "맨 위/왼쪽/오른쪽/아래" 일부만 잡혀 스폰 영역이 과도하게 좁아질 수 있다.
+    // 따라서 전체 roots를 union(Box3) 해서 섬 전체 XZ 범위를 구한다.
+    const box = new THREE.Box3();
+    roots.forEach((r) => box.expandByObject(r));
     const minX = box.min.x;
     const maxX = box.max.x;
     const minZ = box.min.z;
     const maxZ = box.max.z;
     islandBounds = { minX, maxX, minZ, maxZ };
-    const p = root.position;
+    const p = roots[0]?.position ?? { x: 0, y: 0, z: 0 };
     console.log(
       `📐 [Stage2] collision (prop[0]) position: x=${p.x.toFixed(2)}, y=${p.y.toFixed(2)}, z=${p.z.toFixed(2)}`,
     );
@@ -577,6 +601,67 @@ const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files"; // session_id, storage_path, created_at, client_id
 const STAGGER_MS = 90; // 첫 글자 즉시, 이후 글자는 이 간격으로 순차 스폰
 
+// ------------------------------------------------------------
+// 글씨 스케일 정규화 (입력 크기 무관)
+// - 최대 기준: '남친이랑 맨날 싸움' SVG
+// - 최소: 그 75%  (0.75~1.0 범위 랜덤)
+// ------------------------------------------------------------
+const REFERENCE_SVG_URL =
+  "https://cffuybxttyrfjetyqrww.supabase.co/storage/v1/object/public/handwriting/exhibition-2026/2216b9af-0c5f-43dd-b41c-8f87de5046a7_2026-03-17T07:06:57.209Z_84brj4j.svg";
+// 기존 Stage2에서 체감 “최대 크기”로 보이던 값 유지 (reference가 이 크기를 1.0으로 삼음)
+const BASE_MAX_SCALE = 0.006 * 0.75;
+const RANDOM_SCALE_MIN = 0.5;
+const RANDOM_SCALE_MAX = 0.75;
+// 입력 SVG가 극단적으로 작거나 클 때 스케일 폭주 방지용 클램프
+const NORMALIZED_SCALE_MIN = BASE_MAX_SCALE * 0.35;
+const NORMALIZED_SCALE_MAX = BASE_MAX_SCALE * 2.2;
+
+let referenceLocalHeight = null;
+let referenceHeightPromise = null;
+
+function computeLocalHeightFromShapes(shapes, extrudeSettings) {
+  if (!Array.isArray(shapes) || shapes.length === 0) return null;
+  const box = new THREE.Box3();
+  const temp = new THREE.Box3();
+  let hasAny = false;
+  for (const shape of shapes) {
+    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geometry.computeBoundingBox();
+    if (geometry.boundingBox) {
+      temp.copy(geometry.boundingBox);
+      box.union(temp);
+      hasAny = true;
+    }
+    geometry.dispose();
+  }
+  if (!hasAny) return null;
+  const h = box.max.y - box.min.y;
+  if (!Number.isFinite(h) || h <= 1e-6) return null;
+  return h;
+}
+
+function ensureReferenceLocalHeight(extrudeSettings) {
+  if (referenceLocalHeight && Number.isFinite(referenceLocalHeight)) return;
+  if (referenceHeightPromise) return;
+  referenceHeightPromise = (async () => {
+    try {
+      let shapes = await loadSVGShapes(REFERENCE_SVG_URL);
+      if (!Array.isArray(shapes) || shapes.length === 0) return;
+      shapes = expandShapesStroke(shapes, 1.3);
+      const h = computeLocalHeightFromShapes(shapes, extrudeSettings);
+      if (h && Number.isFinite(h)) {
+        referenceLocalHeight = h;
+        console.log(
+          `[Stage2] 기준 글씨(reference) 높이 측정 완료: h=${referenceLocalHeight.toFixed(2)}`,
+        );
+      }
+    } catch (e) {
+      // 네트워크/권한/일시 오류 등일 수 있어 조용히 fallback 유지
+      console.warn("[Stage2] 기준 글씨(reference) 로드/측정 실패:", e);
+    }
+  })();
+}
+
 async function loadInitialHandwritings(
   scene,
   camera,
@@ -767,7 +852,6 @@ async function createFallingText(
     shapes = expandShapesStroke(shapes, 1.3);
 
     const group = new THREE.Group();
-    const scale = 0.006 * 0.75; // 현재 대비 75% 크기
     // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
     const extrudeSettings = {
       depth: 0.05,
@@ -776,6 +860,25 @@ async function createFallingText(
       bevelSize: 0.02,
       bevelSegments: 8,
     };
+
+    // reference 기준 높이 측정은 한 번만(비동기) 수행
+    ensureReferenceLocalHeight(extrudeSettings);
+
+    const localHeight = computeLocalHeightFromShapes(shapes, extrudeSettings);
+    const randomFactor =
+      RANDOM_SCALE_MIN + Math.random() * (RANDOM_SCALE_MAX - RANDOM_SCALE_MIN);
+    const normalizedScale =
+      referenceLocalHeight && localHeight
+        ? BASE_MAX_SCALE * (referenceLocalHeight / localHeight) * randomFactor
+        : BASE_MAX_SCALE * randomFactor;
+    const finalScaleRaw = Number.isFinite(normalizedScale)
+      ? normalizedScale
+      : BASE_MAX_SCALE * randomFactor;
+    const finalScale = THREE.MathUtils.clamp(
+      finalScaleRaw,
+      NORMALIZED_SCALE_MIN,
+      NORMALIZED_SCALE_MAX,
+    );
 
     const meshes = [];
     shapes.forEach((shape) => {
@@ -788,7 +891,7 @@ async function createFallingText(
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.scale.set(scale, scale, 1.45);
+      mesh.scale.set(finalScale, finalScale, 1.45);
       group.add(mesh);
       meshes.push(mesh);
     });
@@ -833,6 +936,7 @@ async function createFallingText(
       },
       gravity,
       groundY: GROUND_Y,
+      bounces: 0,
       landed: initial,
     };
 
@@ -865,6 +969,23 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
     const nextY = group.position.y + velocity.y * delta;
 
     if (nextY <= groundY) {
+      // Stage3처럼 첫 충돌 시 한 번만 가볍게 바운스해서 "통통" 무게감 표현
+      if ((ft.bounces ?? 0) < LETTER_MAX_BOUNCES && Math.abs(velocity.y) > 2) {
+        group.position.y = groundY;
+        const vyUp = -velocity.y * LETTER_BOUNCE_RESTITUTION; // 위로 튀는 속도(양수)
+        velocity.y = vyUp;
+        ft.bounces = (ft.bounces ?? 0) + 1;
+
+        // 바운스 구간에서도 더 얌전하게: "약 0.15~0.55바퀴"만 랜덤 (칼처럼)
+        const T = (2 * vyUp) / Math.max(1e-6, -gravity); // 올라갔다 내려오는 대략 시간
+        const sign = Math.random() < 0.5 ? -1 : 1;
+        const turnsY = 0.15 + Math.random() * 0.4; // 0.15~0.55
+        velocity.rotationY = (sign * 2 * Math.PI * turnsY) / Math.max(1e-3, T);
+        velocity.rotationX = 0;
+        velocity.rotationZ = 0;
+        continue;
+      }
+
       group.position.y = groundY;
       velocity.y = 0;
       velocity.rotationX = 0;
@@ -900,9 +1021,9 @@ function setReadableRotationTowardCamera(group, camera, _groundY) {
 }
 
 /**
- * 낙하 시간에 맞춰 정수 바퀴만큼 회전하도록 각속도를 계산.
+ * 낙하 시간에 맞춰 "최대 한 바퀴 정도"만 돌도록 각속도를 계산.
  * - startY, groundY, initialVy, gravity로 낙하 시간 T를 근사 계산.
- * - X/Z축은 0~1바퀴, Y축은 1~3바퀴 정도만 랜덤으로 돌도록 설정.
+ * - 너무 팔랑팔랑하지 않도록 Y축만 0.35~1.0바퀴, X/Z는 회전하지 않음.
  */
 function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
   const height = startY - groundY;
@@ -930,17 +1051,13 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
     return { x: 0, y: 0, z: 0 };
   }
 
-  const pickTurns = (min, max) => {
-    const n = min + Math.floor(Math.random() * (max - min + 1));
-    if (n === 0) return 0;
-    const sign = Math.random() < 0.5 ? -1 : 1;
-    return (sign * 2 * Math.PI * n) / T;
-  };
+  const sign = Math.random() < 0.5 ? -1 : 1;
+  const turnsY = 0.35 + Math.random() * 0.65; // 0.35~1.0 바퀴
 
   return {
-    x: pickTurns(0, 1),
-    y: pickTurns(1, 3),
-    z: pickTurns(0, 1),
+    x: 0,
+    y: (sign * 2 * Math.PI * turnsY) / T,
+    z: 0,
   };
 }
 
@@ -948,15 +1065,7 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
  * 스폰용 XZ 범위 — island.glb 범위에서 inset만 적용 (inset 작으면 섬 전체에 고르게 퍼짐)
  */
 function getSpawnBounds(bounds) {
-  // 검증: island.glb 계산값만 사용 (예전 수동 측정값 fallback 주석 처리)
-  const b =
-    bounds ??
-    (() => {
-      console.warn(
-        "[Stage2] getSpawnBounds: island bounds 없음 — island.glb 자동 계산만 사용 중.",
-      );
-      return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
-    })();
+  const b = getSafeIslandBounds(bounds);
   const fullW = b.maxX - b.minX;
   const fullD = b.maxZ - b.minZ;
   const insetX = fullW * SPAWN_INSET_SIDE_RATIO;
@@ -990,10 +1099,17 @@ function pickSpawnXZ(fallingTextsArr, _isInitial, _bounds) {
     return d;
   };
 
-  for (let tryCount = 0; tryCount < 120; tryCount++) {
-    const x = minX + Math.random() * (maxX - minX);
-    const z = minZ + Math.random() * (maxZ - minZ);
-    if (minDist(x, z) >= MIN_DISTANCE_BETWEEN) return { x, z };
+  // 스폰 영역이 좁아지면 MIN_DISTANCE_BETWEEN 고정값 때문에 자리가 안 나서 겹침이 급증할 수 있음.
+  // -> 영역/상황에 맞게 최소거리를 단계적으로 완화하면서 "최대한 안 겹치게" 배치한다.
+  const MIN_DIST_FLOOR = 2.0;
+  let required = MIN_DISTANCE_BETWEEN;
+  for (let pass = 0; pass < 4; pass++) {
+    for (let tryCount = 0; tryCount < 120; tryCount++) {
+      const x = minX + Math.random() * (maxX - minX);
+      const z = minZ + Math.random() * (maxZ - minZ);
+      if (minDist(x, z) >= required) return { x, z };
+    }
+    required = Math.max(MIN_DIST_FLOOR, required * 0.82);
   }
 
   // 실패 시: 그리드 후보 중 "가장 가까운 글자와의 거리"가 최대인 점 선택 (겹침 최소화)
