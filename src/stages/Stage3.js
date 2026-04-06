@@ -18,6 +18,7 @@ import {
   collectIslandStaticColliderBoxes,
   filterCollidersExcludingDominantTerrain,
 } from "../utils/stages/stage3/islandStaticColliders.js";
+import { applyPortalVortexToModel } from "../utils/stages/stage3/portalVortexMaterial.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { inspectModel as _inspectModel } from "../utils/common/modelInspector.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
@@ -88,6 +89,8 @@ export function Stage3() {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** `Portal_Vortex` ShaderMaterial — cleanup 시 null */
+  let portalVortexMaterial = null;
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
 
@@ -1914,6 +1917,7 @@ export function Stage3() {
           }
 
           registerIslandInteractions(model);
+          portalVortexMaterial = applyPortalVortexToModel(model);
 
           gumFollowers = createGumFollowersController({
             scene,
@@ -1953,6 +1957,9 @@ export function Stage3() {
 
     update(delta) {
       if (debugControls) debugControls.update(delta);
+      if (portalVortexMaterial) {
+        portalVortexMaterial.uniforms.uTime.value += delta;
+      }
       updateLetter(delta, this.camera);
       updateFragments(delta);
       updateSpawnedIceCreams(delta);
@@ -2085,6 +2092,7 @@ export function Stage3() {
 
       if (backgroundModel) {
         scene.remove(backgroundModel);
+        portalVortexMaterial = null;
         backgroundModel.traverse((child) => {
           if (child.isMesh) {
             if (child.geometry) child.geometry.dispose();
