@@ -49,6 +49,36 @@ export function createCharacterController({
   let staticColliderBoxes = [];
   let collisionRadius = 0.55;
   let stopOnNextLoop = false;
+  /** @type {HTMLAudioElement | null} */
+  let walkAudio = null;
+
+  const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
+  const WALK_SOUND_VOLUME = 0.1;
+
+  function ensureWalkAudio() {
+    if (walkAudio) return walkAudio;
+    walkAudio = new window.Audio();
+    walkAudio.preload = "auto";
+    walkAudio.loop = true;
+    walkAudio.volume = WALK_SOUND_VOLUME;
+    walkAudio.src = resolvePublicAssetUrl(WALK_SOUND_REL);
+    return walkAudio;
+  }
+
+  function syncWalkSound(moving) {
+    if (!moving) {
+      if (walkAudio && !walkAudio.paused) {
+        walkAudio.pause();
+        walkAudio.currentTime = 0;
+      }
+      return;
+    }
+    const a = ensureWalkAudio();
+    if (a.paused) {
+      a.volume = WALK_SOUND_VOLUME;
+      a.play().catch(() => {});
+    }
+  }
 
   // 매 프레임 재사용할 Vector3 인스턴스 (GC 압박 방지)
   const _moveVector = new THREE.Vector3();
@@ -235,6 +265,8 @@ export function createCharacterController({
         characterMixer.update(delta);
       }
 
+      syncWalkSound(moved);
+
       // 카메라 추적 (OrbitControls 사용 시에는 스킵)
       if (!options.skipCameraFollow) {
         _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
@@ -248,6 +280,11 @@ export function createCharacterController({
     },
 
     cleanup() {
+      if (walkAudio) {
+        walkAudio.pause();
+        walkAudio.src = "";
+        walkAudio = null;
+      }
       if (characterModel) {
         scene.remove(characterModel);
         characterModel.traverse((child) => {
