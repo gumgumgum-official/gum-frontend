@@ -7,6 +7,7 @@ import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { createSpeechBubbleHover } from "../utils/stages/stage6/speechBubbleHover.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 
@@ -20,6 +21,43 @@ export function Stage6() {
   const fbxLoader = new FBXLoader();
   let speechBubbleHover = null;
   let orbitControls = null;
+  let airplaneCallSignTimeoutId = 0;
+  /** @type {HTMLAudioElement | null} */
+  let airplaneCallSignAudio = null;
+
+  const AIRPLANE_CALL_SIGN_DELAY_MS = 1500;
+  const AIRPLANE_CALL_SIGN_VOLUME = 0.55;
+
+  function cancelAirplaneCallSignScheduled() {
+    if (airplaneCallSignTimeoutId) {
+      window.clearTimeout(airplaneCallSignTimeoutId);
+      airplaneCallSignTimeoutId = 0;
+    }
+    if (airplaneCallSignAudio) {
+      airplaneCallSignAudio.pause();
+      airplaneCallSignAudio.currentTime = 0;
+      airplaneCallSignAudio.src = "";
+      airplaneCallSignAudio = null;
+    }
+  }
+
+  function scheduleAirplaneCallSign() {
+    cancelAirplaneCallSignScheduled();
+    airplaneCallSignTimeoutId = window.setTimeout(() => {
+      airplaneCallSignTimeoutId = 0;
+      if (!airplaneCallSignAudio) {
+        airplaneCallSignAudio = new window.Audio();
+        airplaneCallSignAudio.preload = "auto";
+        airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
+        airplaneCallSignAudio.src = resolvePublicAssetUrl(
+          "/static/sounds/airport/airplane_call_sign.mp3",
+        );
+      }
+      airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
+      airplaneCallSignAudio.currentTime = 0;
+      airplaneCallSignAudio.play().catch(() => {});
+    }, AIRPLANE_CALL_SIGN_DELAY_MS);
+  }
 
   return {
     camera: null,
@@ -225,6 +263,8 @@ export function Stage6() {
         );
       }
 
+      scheduleAirplaneCallSign();
+
       console.log("✅ Stage6 생성 완료");
     },
 
@@ -233,6 +273,7 @@ export function Stage6() {
     },
 
     cleanup(scene) {
+      cancelAirplaneCallSignScheduled();
       if (orbitControls) {
         orbitControls.dispose();
         orbitControls = null;
