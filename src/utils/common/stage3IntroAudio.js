@@ -4,6 +4,8 @@
  * — 인트로가 모두 끝나면 잔잔한 배경 루프를 이어서 재생한다.
  */
 
+import { STAGE3_AUDIO_CONFIG } from "../../config/stages/stage3/stage3AudioConfig.js";
+
 let hasPlayedStage3Intro = false;
 /** @type {HTMLAudioElement | null} */
 let stage3IntroAudio = null;
@@ -20,10 +22,11 @@ let unlistenStage3IntroEnded = null;
 /** @type {(() => void) | null} */
 let unlistenStage3IntroMeta = null;
 
-const STAGE3_INTRO_BASE_VOLUME = 0.6;
+const STAGE3_INTRO_BASE_VOLUME = STAGE3_AUDIO_CONFIG.introVolume ?? 0.6;
 const STAGE3_INTRO_FADE_OUT_SEC = 1.6;
 /** 인트로 종료 후 이어지는 배경 루프 최종 볼륨 */
-const STAGE3_BACKGROUND_VOLUME = 0.06;
+const STAGE3_BACKGROUND_VOLUME =
+  STAGE3_AUDIO_CONFIG.backgroundAmbientVolume ?? 0.03;
 /** 새소리가 완전히 끝난 뒤 배경 페이드 인까지의 공백 (초) */
 const STAGE3_BACKGROUND_DELAY_AFTER_INTRO_SEC = 0.3;
 /** 배경을 0 → 목표 볼륨까지 올리는 시간 (초) */
