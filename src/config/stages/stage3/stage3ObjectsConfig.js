@@ -26,7 +26,9 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/models/stage3/rainbow_icecream.glb",
     ],
     spawnScale: 0.4,
-    maxSpawns: 10,
+    // 원본 GLB 스케일 편차 방지용: 스폰 모델의 최대 외곽 길이(월드 단위) 상한
+    maxVisualSize: 0.55,
+    maxSpawns: 20,
     physicsSubsteps: 2,
   },
 
