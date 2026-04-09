@@ -165,6 +165,7 @@
  * @property {number} [scale]
  * @property {string[]} [spawnPaths] - 카트 클릭 시 복제해 스폰할 GLB 경로(public 기준, 예: /models/…)
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
+ * @property {number} [maxVisualSize] - 스폰 아이스크림의 최대 외곽 길이(월드 단위)
  * @property {number} [maxSpawns] - 스폰 최대 개수
  * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
  */
