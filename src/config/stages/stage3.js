@@ -3,6 +3,7 @@
 
 import { STAGE3_CHARACTER_CONFIG } from "./stage3/stage3CharacterConfig.js";
 import { STAGE3_OBJECTS_CONFIG } from "./stage3/stage3ObjectsConfig.js";
+import { STAGE3_AUDIO_CONFIG } from "./stage3/stage3AudioConfig.js";
 
 /** @type {import("../../types.js").Stage3Config} */
 export const STAGE3_CONFIG = {
@@ -17,6 +18,7 @@ export const STAGE3_CONFIG = {
   background: {
     color: 0x98d8aa, // 밝은 초원
   },
+  audio: STAGE3_AUDIO_CONFIG,
   ...STAGE3_CHARACTER_CONFIG,
   ...STAGE3_OBJECTS_CONFIG,
 };

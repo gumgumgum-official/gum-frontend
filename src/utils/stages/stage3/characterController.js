@@ -53,14 +53,18 @@ export function createCharacterController({
   let walkAudio = null;
 
   const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
-  const WALK_SOUND_VOLUME = 0.1;
+
+  function getWalkSoundVolume() {
+    const v = config.character?.walkSoundVolume;
+    return THREE.MathUtils.clamp(typeof v === "number" ? v : 0.04, 0, 1);
+  }
 
   function ensureWalkAudio() {
     if (walkAudio) return walkAudio;
     walkAudio = new window.Audio();
     walkAudio.preload = "auto";
     walkAudio.loop = true;
-    walkAudio.volume = WALK_SOUND_VOLUME;
+    walkAudio.volume = getWalkSoundVolume();
     walkAudio.src = resolvePublicAssetUrl(WALK_SOUND_REL);
     return walkAudio;
   }
@@ -74,8 +78,8 @@ export function createCharacterController({
       return;
     }
     const a = ensureWalkAudio();
+    a.volume = getWalkSoundVolume();
     if (a.paused) {
-      a.volume = WALK_SOUND_VOLUME;
       a.play().catch(() => {});
     }
   }

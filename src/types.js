@@ -126,6 +126,7 @@
  * @property {number} boundsPadding - 바운드 경계 여유 공간
  * @property {{x: number, y: number, z: number}} cameraOffset - 캐릭터 뒤 카메라 오프셋
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
+ * @property {number} [walkSoundVolume] - 이동(걷기) 루프 사운드 볼륨 0~1
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
  * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정
  * @property {{x?: number, z?: number}} [spawnOffset] - 섬 바운딩 XZ 중심 기준 스폰 추가 오프셋(m)
@@ -169,9 +170,17 @@
  */
 
 /**
+ * Stage3 인트로·배경 루프 볼륨
+ * @typedef {Object} Stage3AudioConfig
+ * @property {number} [introVolume] - 인트로(새소리) 0~1
+ * @property {number} [backgroundAmbientVolume] - 배경 루프 목표 볼륨 0~1
+ */
+
+/**
  * @typedef {Object} Stage3Config
  * @property {StageCameraConfig} camera
  * @property {{color: number}} background
+ * @property {Stage3AudioConfig} [audio]
  * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
