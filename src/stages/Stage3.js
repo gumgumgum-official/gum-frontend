@@ -57,6 +57,12 @@ const FRAGMENT_FADE_START = 3; // 땅에 떨어진 뒤 3초 뒤부터
 const FRAGMENT_FADE_END = 5;
 const STAGE3_ICECREAM_DEBUG_BOX_ONLY = false;
 
+/** 아이스크림이 지면에 처음 닿을 때 재생 (랜덤 1종) */
+const ICECREAM_LAND_SOUND_PATHS = [
+  "/static/sounds/icecream/icecream_sound.mp3",
+  "/static/sounds/icecream/icecream_sound2.mp3",
+];
+
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
@@ -89,7 +95,7 @@ export function Stage3() {
   let unlistenMinigameClose = null;
   let noticePaperAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
-  const spawnedIceCreams = []; // { group, body }
+  const spawnedIceCreams = []; // { group, body, landSoundHandler?, landSoundPlayed? }
   let iceCreamPhysicsWorld = null;
   let iceCreamGroundBody = null;
   const _icePointer = new THREE.Vector2();
@@ -615,6 +621,10 @@ export function Stage3() {
   function removeSpawnedIceCreamAt(index) {
     const item = spawnedIceCreams[index];
     if (!item) return;
+    if (item.body && item.landSoundHandler) {
+      item.body.removeEventListener("collide", item.landSoundHandler);
+      item.landSoundHandler = undefined;
+    }
     if (iceCreamPhysicsWorld && item.body) {
       iceCreamPhysicsWorld.removeBody(item.body);
     }
@@ -884,7 +894,26 @@ export function Stage3() {
 
     iceCreamPhysicsWorld.addBody(body);
     sceneRef.add(groupForScene);
-    spawnedIceCreams.push({ group: groupForScene, body });
+    const iceEntry = { group: groupForScene, body };
+    const landHandler = (e) => {
+      if (iceEntry.landSoundPlayed) return;
+      if (e.body !== iceCreamGroundBody) return;
+      iceEntry.landSoundPlayed = true;
+      if (ICECREAM_LAND_SOUND_PATHS.length === 0) return;
+      const path =
+        ICECREAM_LAND_SOUND_PATHS[
+          Math.floor(Math.random() * ICECREAM_LAND_SOUND_PATHS.length)
+        ];
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const landAudio = new window.Audio();
+      landAudio.volume = 0.5;
+      landAudio.src = base + path;
+      landAudio.play().catch(() => {});
+    };
+    iceEntry.landSoundHandler = landHandler;
+    iceEntry.landSoundPlayed = false;
+    body.addEventListener("collide", landHandler);
+    spawnedIceCreams.push(iceEntry);
   }
 
   function updateSpawnedIceCreams(delta) {
@@ -1946,6 +1975,10 @@ export function Stage3() {
       }
 
       spawnedIceCreams.forEach((s) => {
+        if (s.body && s.landSoundHandler) {
+          s.body.removeEventListener("collide", s.landSoundHandler);
+          s.landSoundHandler = undefined;
+        }
         if (iceCreamPhysicsWorld && s.body) {
           iceCreamPhysicsWorld.removeBody(s.body);
         }
