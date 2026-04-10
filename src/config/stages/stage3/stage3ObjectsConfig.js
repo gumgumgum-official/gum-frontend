@@ -25,9 +25,31 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/models/stage3/icecream.glb",
       "/models/stage3/rainbow_icecream.glb",
     ],
-    spawnScale: 0.4,
+    spawnScale: 0.65,
     // 원본 GLB 스케일 편차 방지용: 스폰 모델의 최대 외곽 길이(월드 단위) 상한
-    maxVisualSize: 0.55,
+    maxVisualSize: 1.75,
+    // 원본 GLB가 너무 작게 잡히는 경우 가시성 보장용 최소 외곽 길이
+    minVisualSize: 0.6,
+    /** 카트 중심에서 스폰 지점까지 최소 거리(m) */
+    spawnRadiusMin: 0.52,
+    /** 카트 중심에서 스폰 지점까지 최대 거리(m) */
+    spawnRadiusMax: 1.95,
+    /** 스폰 높이: 카트 중심 Y + 이 값과 지면+0.45 중 큰 값 */
+    spawnHeightAboveCart: 0.8,
+    /** 스폰 높이 ± 무작위 흔들림(m) */
+    spawnHeightJitter: 0.28,
+    /** 튀어나갈 때 수평 속도 최소(m/s), 여기에 launchHorizontalSpread만큼 무작위 가산 */
+    launchHorizontalMin: 3.7,
+    launchHorizontalSpread: 2,
+    /** 수직 초기 속도 최소(m/s), 여기에 launchUpSpread만큼 무작위 가산 */
+    launchUpMin: 4.2,
+    launchUpSpread: 2.4,
+    /** 캐릭터 방향으로 던질 때 좌우 흔들림(라디안). 0이면 정확히 캐릭터 쪽 */
+    launchTowardPlayerSpread: 0.28,
+    /**
+     * 아이스크림 물리 바닥 = 처리지 Y + 이 값. 섬 메시가 더 높게 보이면 파묻혀 보이므로 올려 맞춤(m).
+     */
+    physicsGroundYOffset: 0.48,
     maxSpawns: 20,
     physicsSubsteps: 2,
   },
