@@ -166,6 +166,17 @@
  * @property {string[]} [spawnPaths] - 카트 클릭 시 복제해 스폰할 GLB 경로(public 기준, 예: /models/…)
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
  * @property {number} [maxVisualSize] - 스폰 아이스크림의 최대 외곽 길이(월드 단위)
+ * @property {number} [minVisualSize] - 스폰 아이스크림의 최소 외곽 길이(월드 단위)
+ * @property {number} [spawnRadiusMin] - 카트 중심 주변 스폰 최소 반경(m)
+ * @property {number} [spawnRadiusMax] - 카트 중심 주변 스폰 최대 반경(m)
+ * @property {number} [spawnHeightAboveCart] - 카트 중심 Y 위 추가 높이(m)
+ * @property {number} [spawnHeightJitter] - 스폰 높이 무작위 오차(m)
+ * @property {number} [launchHorizontalMin] - 스폰 직후 수평 속도 하한(m/s)
+ * @property {number} [launchHorizontalSpread] - 수평 속도 무작위 가산(m/s)
+ * @property {number} [launchUpMin] - 수직 초기 속도 하한(m/s)
+ * @property {number} [launchUpSpread] - 수직 초기 속도 무작위 가산(m/s)
+ * @property {number} [launchTowardPlayerSpread] - 캐릭터 방향 발사 시 좌우 무작위 각(rad)
+ * @property {number} [physicsGroundYOffset] - 아이스크림 Cannon 지면 Y 보정(m)
  * @property {number} [maxSpawns] - 스폰 최대 개수
  * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
  */

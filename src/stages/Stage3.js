@@ -55,8 +55,7 @@ const FRAGMENT_BOUNCE_RESTITUTION = 0.35;
 const FRAGMENT_GROUND_FRICTION = 0.82;
 const FRAGMENT_FADE_START = 3; // 땅에 떨어진 뒤 3초 뒤부터
 const FRAGMENT_FADE_END = 5;
-// 디버그용: 아이스크림 메시 대신 바운딩 박스만 렌더해서 스폰 위치를 확인한다.
-const STAGE3_ICECREAM_DEBUG_BOX_ONLY = true;
+const STAGE3_ICECREAM_DEBUG_BOX_ONLY = false;
 
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
@@ -519,7 +518,12 @@ export function Stage3() {
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
     const target = getPointerHitTarget(event.clientX, event.clientY);
-    if (!target) return;
+    if (!target) {
+      if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
+        spawnIceCreamFromCart();
+      }
+      return;
+    }
 
     event.preventDefault();
     event.stopPropagation();
@@ -571,6 +575,20 @@ export function Stage3() {
   let _iceCreamGroundMat = null;
   let _iceCreamMat = null;
 
+  /** 캐릭터용 처리지 Y + 보정(섬 실제 메시와 무한 평면 높이 차이) */
+  function getIceCreamPhysicsGroundY() {
+    return (
+      stage3GroundY +
+      Number(config.icecreamCart?.["physicsGroundYOffset"] ?? 0.45)
+    );
+  }
+
+  function syncIceCreamGroundPlane() {
+    if (!iceCreamGroundBody) return;
+    const y = getIceCreamPhysicsGroundY();
+    iceCreamGroundBody.position.set(0, y, 0);
+  }
+
   /** 아이스크림용 물리 월드 초기화 (지면, 중력) */
   function initIceCreamPhysics() {
     if (iceCreamPhysicsWorld) return;
@@ -585,7 +603,7 @@ export function Stage3() {
       material: _iceCreamGroundMat,
     });
     iceCreamGroundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-    iceCreamGroundBody.position.set(0, stage3GroundY, 0);
+    iceCreamGroundBody.position.set(0, getIceCreamPhysicsGroundY(), 0);
     iceCreamPhysicsWorld.addBody(iceCreamGroundBody);
     iceCreamPhysicsWorld.addContactMaterial(
       new CANNON.ContactMaterial(_iceCreamGroundMat, _iceCreamMat, {
@@ -616,13 +634,13 @@ export function Stage3() {
   }
 
   function spawnIceCreamFromCart() {
-    if (!iceCreamCartRef) {
+    if (!sceneRef) return;
+    if (!iceCreamCartRef && !STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
       if (import.meta.env.DEV) {
         console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
       }
       return;
     }
-    if (!sceneRef) return;
     const maxSpawns = config.icecreamCart?.maxSpawns ?? 10;
     if (spawnedIceCreams.length >= maxSpawns) {
       if (import.meta.env.DEV) {
@@ -632,109 +650,66 @@ export function Stage3() {
       }
       removeSpawnedIceCreamAt(0);
     }
-    if (iceCreamTemplates.length === 0) {
+    if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
+      const debugHalf = 0.45;
+      const debugMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(debugHalf * 2, debugHalf * 2, debugHalf * 2),
+        new THREE.MeshBasicMaterial({
+          color: 0xff3355,
+          wireframe: false,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.9,
+        }),
+      );
+      const charPos = character?.getPosition?.() ?? null;
+      if (charPos) {
+        debugMesh.position.set(charPos.x, charPos.y + 1.4, charPos.z);
+      } else if (cameraRef) {
+        cameraRef.getWorldDirection(_iceSpawnDir);
+        debugMesh.position
+          .copy(cameraRef.position)
+          .add(_iceSpawnDir.multiplyScalar(3));
+      } else {
+        debugMesh.position.set(0, stage3GroundY + 1.5, 0);
+      }
+      debugMesh.name = "DEBUG_IceCreamBox";
+      debugMesh.renderOrder = 999;
+      sceneRef.add(debugMesh);
+      spawnedIceCreams.push({ group: debugMesh, body: null });
       if (import.meta.env.DEV) {
-        console.warn(
-          "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
+        console.log(
+          `[Stage3][DEBUG] 네모 스폰: (${debugMesh.position.x.toFixed(2)}, ${debugMesh.position.y.toFixed(2)}, ${debugMesh.position.z.toFixed(2)})`,
         );
       }
       return;
     }
     initIceCreamPhysics();
-
-    const template =
-      iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
-    const clone = template.scene.clone(true);
-    clone.frustumCulled = false;
-    iceCreamCartRef.updateMatrixWorld(true);
-    iceCreamCartRef.getWorldPosition(_iceCartWorld);
-    const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
-    // 카트 "앞쪽"을 캐릭터 방향으로 잡아(없으면 카트 로컬 -Z), 같은 면에서 튀어나오게 고정한다.
-    const charPos = character?.getPosition?.() ?? null;
-    if (charPos) {
-      _iceSpawnDir.set(
-        charPos.x - _iceCartWorld.x,
-        0,
-        charPos.z - _iceCartWorld.z,
-      );
-    } else {
-      _iceSpawnDir.set(0, 0, -1);
-      _iceSpawnDir.applyQuaternion(
-        iceCreamCartRef.getWorldQuaternion(_iceCartQuat),
-      );
-      _iceSpawnDir.y = 0;
-    }
-    if (_iceSpawnDir.lengthSq() < 1e-6) {
-      _iceSpawnDir.set(-1, 0, 0);
-    } else {
-      _iceSpawnDir.normalize();
-    }
-    _iceSpawnRight.set(-_iceSpawnDir.z, 0, _iceSpawnDir.x);
-    const forwardOffset = 1.1;
-    const sideJitter = (Math.random() - 0.5) * 0.5;
-    const forwardJitter = (Math.random() - 0.5) * 0.25;
-    const sx =
-      _iceCartWorld.x +
-      _iceSpawnDir.x * (forwardOffset + forwardJitter) +
-      _iceSpawnRight.x * sideJitter;
-    const sz =
-      _iceCartWorld.z +
-      _iceSpawnDir.z * (forwardOffset + forwardJitter) +
-      _iceSpawnRight.z * sideJitter;
-    const sy = Math.max(stage3GroundY + 0.45, _iceCartWorld.y + 0.85);
-
-    // 일부 GLB는 피벗/오프셋이 크게 틀어져 있어, 스폰 전에 모델 중심을 원점으로 정렬한다.
-    clone.position.set(0, 0, 0);
-    clone.scale.setScalar(spawnScale);
-    clone.updateMatrixWorld(true);
-    clone.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+    syncIceCreamGroundPlane();
+    if (iceCreamCartRef) {
+      iceCreamCartRef.updateMatrixWorld(true);
+      const cartBox = new THREE.Box3().setFromObject(iceCreamCartRef);
+      if (!cartBox.isEmpty()) {
+        cartBox.getCenter(_iceCartWorld);
+      } else {
+        iceCreamCartRef.getWorldPosition(_iceCartWorld);
       }
-    });
-
-    // 모델마다 원본 스케일 편차가 커서, 최대 크기를 제한해 과대 스폰을 방지한다.
-    const box = new THREE.Box3().setFromObject(clone);
-    box.getSize(_iceModelSize);
-    const maxVisualSize = Number(
-      config.icecreamCart?.["maxVisualSize"] ?? 0.55,
-    );
-    const maxDim = Math.max(_iceModelSize.x, _iceModelSize.y, _iceModelSize.z);
-    if (maxDim > maxVisualSize) {
-      const fitScale = maxVisualSize / maxDim;
-      clone.scale.multiplyScalar(fitScale);
-      clone.updateMatrixWorld(true);
-      box.setFromObject(clone);
-      box.getSize(_iceModelSize);
-      if (import.meta.env.DEV) {
-        console.log(
-          `[Stage3] 아이스크림 스케일 자동 보정: maxDim=${maxDim.toFixed(2)} -> ${maxVisualSize.toFixed(2)}`,
-        );
-      }
+    } else if (character?.getPosition?.()) {
+      const p = character.getPosition();
+      _iceCartWorld.set(p.x, Math.max(stage3GroundY + 0.5, p.y), p.z);
+    } else {
+      _iceCartWorld.set(0, stage3GroundY + 0.7, 0);
     }
 
-    // 물리 바디: 모델 바운딩 박스 기반
-    box.getCenter(_iceModelCenter);
-    clone.position.sub(_iceModelCenter);
-    clone.position.add(_iceCartWorld);
-    clone.position.x += sx - _iceCartWorld.x;
-    clone.position.y += sy - _iceCartWorld.y;
-    clone.position.z += sz - _iceCartWorld.z;
-    clone.updateMatrixWorld(true);
-
-    box.getSize(_iceModelSize);
-    const minHalf = 0.08;
-    const halfExtents = new CANNON.Vec3(
-      Math.max(_iceModelSize.x * 0.5, minHalf),
-      Math.max(_iceModelSize.y * 0.5, minHalf),
-      Math.max(_iceModelSize.z * 0.5, minHalf),
-    );
+    // 1) 시각 오브젝트 준비: 디버그 모드면 GLB 대신 박스만 생성
+    let clone;
+    /** 물리/월드 위치를 따라가는 루트(메시 중심 보정은 자식에만 둔다) */
+    let spawnRoot = null;
+    let halfExtents;
     if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
-      clone.traverse((child) => {
-        if (child.isMesh) child.visible = false;
-      });
       const debugHalf = 0.18;
+      halfExtents = new CANNON.Vec3(debugHalf, debugHalf, debugHalf);
+      clone = new THREE.Group();
       const debugBox = new THREE.Mesh(
         new THREE.BoxGeometry(debugHalf * 2, debugHalf * 2, debugHalf * 2),
         new THREE.MeshBasicMaterial({
@@ -747,6 +722,142 @@ export function Stage3() {
       );
       debugBox.name = "DEBUG_IceCreamBox";
       clone.add(debugBox);
+    } else {
+      if (iceCreamTemplates.length === 0) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
+          );
+        }
+        return;
+      }
+      const template =
+        iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
+      clone = template.scene.clone(true);
+      clone.frustumCulled = false;
+      const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
+      const maxVisualSize = config.icecreamCart?.maxVisualSize ?? 0.9;
+      const minVisualSize = Number(
+        config.icecreamCart?.["minVisualSize"] ?? 0.35,
+      );
+      clone.position.set(0, 0, 0);
+      clone.scale.setScalar(spawnScale);
+      clone.updateMatrixWorld(true);
+      clone.traverse((child) => {
+        if (!child.isMesh) return;
+        child.visible = true;
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+      });
+      const box = new THREE.Box3().setFromObject(clone);
+      box.getSize(_iceModelSize);
+      const maxDim = Math.max(
+        _iceModelSize.x,
+        _iceModelSize.y,
+        _iceModelSize.z,
+      );
+      if (maxDim > 1e-6 && (maxDim > maxVisualSize || maxDim < minVisualSize)) {
+        const target =
+          maxDim > maxVisualSize
+            ? maxVisualSize
+            : Math.max(minVisualSize, maxDim);
+        const fit = target / maxDim;
+        clone.scale.multiplyScalar(fit);
+        clone.updateMatrixWorld(true);
+        box.setFromObject(clone);
+        box.getSize(_iceModelSize);
+      }
+      box.getCenter(_iceModelCenter);
+      clone.position.sub(_iceModelCenter);
+      clone.updateMatrixWorld(true);
+      spawnRoot = new THREE.Group();
+      spawnRoot.name = "SpawnedIceCreamRoot";
+      spawnRoot.add(clone);
+    }
+
+    // 2) 스폰 위치: 카트 바운딩 중심 주변 수평 원환에서 랜덤
+    const radiusMin = Number(config.icecreamCart?.["spawnRadiusMin"] ?? 0.3);
+    const radiusMax = Number(config.icecreamCart?.["spawnRadiusMax"] ?? 1.15);
+    const span = Math.max(0, radiusMax - radiusMin);
+    const angle = Math.random() * Math.PI * 2;
+    // 균등 분포(원판): r² 균등
+    const t = Math.random();
+    const r = radiusMin + Math.sqrt(t) * span;
+    const dx = Math.cos(angle) * r;
+    const dz = Math.sin(angle) * r;
+    const sx = _iceCartWorld.x + dx;
+    const sz = _iceCartWorld.z + dz;
+    const heightJitter = Number(
+      config.icecreamCart?.["spawnHeightJitter"] ?? 0.2,
+    );
+    const floorY = getIceCreamPhysicsGroundY();
+    const baseY = Math.max(
+      floorY + 0.35,
+      _iceCartWorld.y + (config.icecreamCart?.spawnHeightAboveCart ?? 0.55),
+    );
+    const sy = baseY + (Math.random() * 2 - 1) * Math.max(0, heightJitter);
+
+    // 발사 방향: 기본은 [스폰 지점 → 유저 캐릭터]. 없으면 카트→캐릭 / 카트 앞쪽 폴백.
+    const charPos = character?.getPosition?.() ?? null;
+    if (charPos) {
+      _iceSpawnDir.set(charPos.x - sx, 0, charPos.z - sz);
+    }
+    if (!charPos || _iceSpawnDir.lengthSq() < 1e-6) {
+      if (charPos) {
+        _iceSpawnDir.set(
+          charPos.x - _iceCartWorld.x,
+          0,
+          charPos.z - _iceCartWorld.z,
+        );
+      } else if (iceCreamCartRef) {
+        _iceSpawnDir.set(0, 0, -1);
+        _iceSpawnDir.applyQuaternion(
+          iceCreamCartRef.getWorldQuaternion(_iceCartQuat),
+        );
+        _iceSpawnDir.y = 0;
+      } else {
+        _iceSpawnDir.set(dx, 0, dz);
+      }
+    }
+    if (_iceSpawnDir.lengthSq() < 1e-6) {
+      _iceSpawnDir.set(0, 0, 1);
+    }
+    _iceSpawnDir.normalize();
+    const spreadRad = Number(
+      config.icecreamCart?.["launchTowardPlayerSpread"] ?? 0.28,
+    );
+    if (spreadRad > 0) {
+      const jitter = (Math.random() * 2 - 1) * spreadRad;
+      const c = Math.cos(jitter);
+      const s = Math.sin(jitter);
+      const x = _iceSpawnDir.x;
+      const z = _iceSpawnDir.z;
+      _iceSpawnDir.set(x * c - z * s, 0, x * s + z * c);
+      _iceSpawnDir.normalize();
+    }
+
+    /** @type {THREE.Object3D} */
+    let groupForScene = clone;
+    if (spawnRoot) {
+      spawnRoot.position.set(sx, sy, sz);
+      spawnRoot.updateMatrixWorld(true);
+      groupForScene = spawnRoot;
+    } else {
+      clone.position.set(sx, sy, sz);
+      clone.updateMatrixWorld(true);
+    }
+
+    // 3) 물리 바디 생성
+    if (!halfExtents) {
+      const box = new THREE.Box3().setFromObject(groupForScene);
+      box.getSize(_iceModelSize);
+      const minHalf = 0.08;
+      halfExtents = new CANNON.Vec3(
+        Math.max(_iceModelSize.x * 0.5, minHalf),
+        Math.max(_iceModelSize.y * 0.5, minHalf),
+        Math.max(_iceModelSize.z * 0.5, minHalf),
+      );
     }
     const boxShape = new CANNON.Box(halfExtents);
     const body = new CANNON.Body({
@@ -757,14 +868,14 @@ export function Stage3() {
       linearDamping: 0.1,
       angularDamping: 0.3,
     });
-
-    const angle = Math.random() * Math.PI * 2;
-    const horizontalSpeed = 2.5 + Math.random() * 2;
-    body.velocity.set(
-      Math.cos(angle) * horizontalSpeed,
-      3 + Math.random() * 2,
-      Math.sin(angle) * horizontalSpeed,
-    );
+    const vHoriz =
+      Number(config.icecreamCart?.["launchHorizontalMin"] ?? 3.1) +
+      Math.random() *
+        Number(config.icecreamCart?.["launchHorizontalSpread"] ?? 1.6);
+    const vUp =
+      Number(config.icecreamCart?.["launchUpMin"] ?? 5.6) +
+      Math.random() * Number(config.icecreamCart?.["launchUpSpread"] ?? 3.2);
+    body.velocity.set(_iceSpawnDir.x * vHoriz, vUp, _iceSpawnDir.z * vHoriz);
     body.angularVelocity.set(
       (Math.random() - 0.5) * 4,
       (Math.random() - 0.5) * 4,
@@ -772,8 +883,8 @@ export function Stage3() {
     );
 
     iceCreamPhysicsWorld.addBody(body);
-    sceneRef.add(clone);
-    spawnedIceCreams.push({ group: clone, body });
+    sceneRef.add(groupForScene);
+    spawnedIceCreams.push({ group: groupForScene, body });
   }
 
   function updateSpawnedIceCreams(delta) {
@@ -782,6 +893,7 @@ export function Stage3() {
     iceCreamPhysicsWorld.step(1 / 60, delta, substeps);
     for (let i = 0; i < spawnedIceCreams.length; i++) {
       const s = spawnedIceCreams[i];
+      if (!s.body) continue;
       s.group.position.copy(s.body.position);
       s.group.quaternion.copy(s.body.quaternion);
     }
