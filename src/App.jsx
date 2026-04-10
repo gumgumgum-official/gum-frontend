@@ -5,6 +5,7 @@ import { KioskPage } from "./pages/KioskPage.jsx";
 import { DevPage } from "./pages/DevPage.jsx";
 import { MemoryTestPage } from "./pages/MemoryTestPage.jsx";
 import { NoticeModalBoard } from "./components/NoticeModalBoard.jsx";
+import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
 
 export function App() {
   const [showNoticeModal, setShowNoticeModal] = useState(false);
@@ -26,6 +27,7 @@ export function App() {
         isOpen={showNoticeModal}
         onClose={() => setShowNoticeModal(false)}
       />
+      <GumCardsModalOverlay />
       <Routes>
         <Route path="/beam" element={<BeamPage />} />
         <Route path="/kiosk" element={<KioskPage />} />
