@@ -207,7 +207,7 @@
  * @property {Stage3PropConfig} [gameMachine]
  * @property {Stage3PropConfig} [bench]
  * @property {Stage3PropConfig} [signs]
- * @property {Stage3PropConfig} [mirror]
+ * @property {Stage3PropConfig} [tent]
  */
 
 export {};

@@ -1,20 +1,21 @@
 /**
- * 거울 모달 오버레이: mirror-modal:open 이벤트 수신 시 GumCardsModal 표시
+ * 껌 카드 모달 오버레이: gum-cards-modal:open 수신 시 GumCardsModal 표시
+ * 텐트 효과음은 이 컴포넌트가 아니라 openGumCardsModal() 호출 시 재생됨
  */
 import { useState, useEffect, useCallback } from "react";
 import { GumCardsModal } from "./GumCardsModal.jsx";
 import {
-  dispatchMirrorModalClose,
+  dispatchGumCardsModalClose,
   EVENT_OPEN,
   EVENT_CLOSE,
-} from "../utils/stages/stage3/mirrorModalLauncher.js";
+} from "../utils/stages/stage3/gumCardsModalLauncher.js";
 
-export function MirrorModalOverlay() {
+export function GumCardsModalOverlay() {
   const [visible, setVisible] = useState(false);
 
   const handleClose = useCallback(() => {
     setVisible(false);
-    dispatchMirrorModalClose();
+    dispatchGumCardsModalClose();
   }, []);
 
   useEffect(() => {

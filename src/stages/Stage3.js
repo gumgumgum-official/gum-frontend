@@ -29,9 +29,9 @@ import {
   onMinigameClose,
 } from "../utils/stages/stage3/minigameLauncher.js";
 import {
-  openMirrorModal,
-  dispatchMirrorModalClose,
-} from "../utils/stages/stage3/mirrorModalLauncher.js";
+  openGumCardsModal,
+  dispatchGumCardsModalClose,
+} from "../utils/stages/stage3/gumCardsModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
@@ -62,6 +62,10 @@ const ICECREAM_LAND_SOUND_PATHS = [
   "/static/sounds/icecream/icecream_sound.mp3",
   "/static/sounds/icecream/icecream_sound2.mp3",
 ];
+
+/** 게임기(INT_gameMachine) 클릭 시 — 파일명에 `#` 있으면 Vite 정적 서버가 MP3로 매핑하지 못함 */
+const GAME_MACHINE_CLICK_SOUND_PATH =
+  "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3";
 
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
@@ -94,6 +98,8 @@ export function Stage3() {
   let gameMachineRef = null;
   let unlistenMinigameClose = null;
   let noticePaperAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let gameMachineClickAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
   const spawnedIceCreams = []; // { group, body, landSoundHandler?, landSoundPlayed? }
   let iceCreamPhysicsWorld = null;
@@ -104,7 +110,7 @@ export function Stage3() {
   const INT_SUFFIX_TO_TARGET = {
     notice: "notice",
     gamemachine: "gameMachine",
-    mirror: "mirror",
+    tent: "tent",
     icecream: "icecream",
     portal: "portal",
   };
@@ -117,13 +123,10 @@ export function Stage3() {
    * GLB마다 INT_ 접미사 표기가 다름 (예: INT_notice vs INT_Notice, INT_IceCart).
    * 레이 히트·ref 등록 시 canonical 타깃으로 정규화한다.
    * @param {string} suffix - `INT_` 제외 접미사
-   * @returns {"notice" | "gameMachine" | "mirror" | "icecream" | "portal" | null}
+   * @returns {"notice" | "gameMachine" | "tent" | "icecream" | "portal" | null}
    */
   function intSuffixToTarget(suffix) {
     const lower = normalizeIntNameToken(suffix);
-    if (lower === "tent") {
-      return "mirror";
-    }
     // GLB마다 INT suffix 표기가 다를 수 있어 대표 별칭(예: IceCart)을 정규화한다.
     if (
       lower === "icecart" ||
@@ -413,7 +416,7 @@ export function Stage3() {
     }
   }
 
-  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "mirror" | "portal" | null */
+  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "tent" | "portal" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
     if (intRaycastMeshes.length === 0) return null;
@@ -520,6 +523,31 @@ export function Stage3() {
     window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
   }
 
+  function playGameMachineClickSound() {
+    const src = resolvePublicAssetUrl(GAME_MACHINE_CLICK_SOUND_PATH);
+    if (!gameMachineClickAudio) {
+      gameMachineClickAudio = new window.Audio();
+      gameMachineClickAudio.preload = "auto";
+      gameMachineClickAudio.volume = 0.5;
+    }
+    gameMachineClickAudio.pause();
+    gameMachineClickAudio.currentTime = 0;
+    gameMachineClickAudio.src = src;
+    try {
+      gameMachineClickAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = gameMachineClickAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn("[Stage3] game machine sound play failed:", err, src);
+        }
+      });
+    }
+  }
+
   /** island INT_* 클릭 핸들러 */
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
@@ -558,14 +586,16 @@ export function Stage3() {
       showNoticeModal();
     }
     if (target === "gameMachine") {
+      playGameMachineClickSound();
       openMinigame({
         camera: cameraRef,
         gameMachineRef,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
     }
-    if (target === "mirror") {
-      openMirrorModal();
+    // INT_tent → 껌 카드(타로) 모달 (효과음은 openGumCardsModal 내부)
+    if (target === "tent") {
+      openGumCardsModal();
       return;
     }
     if (target === "portal") {
@@ -1961,7 +1991,7 @@ export function Stage3() {
       });
       cameraRef = null;
       dispatchMinigameClose();
-      dispatchMirrorModalClose();
+      dispatchGumCardsModalClose();
       intRaycastMeshes.length = 0;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
@@ -1972,6 +2002,11 @@ export function Stage3() {
         noticePaperAudio.pause();
         noticePaperAudio.src = "";
         noticePaperAudio = null;
+      }
+      if (gameMachineClickAudio) {
+        gameMachineClickAudio.pause();
+        gameMachineClickAudio.src = "";
+        gameMachineClickAudio = null;
       }
 
       spawnedIceCreams.forEach((s) => {
