@@ -16,7 +16,16 @@ export const STAGE3_CONFIG = {
     lookAt: { x: 0.0, y: 1.0, z: 0.0 },
   },
   background: {
-    color: 0x98d8aa, // 밝은 초원
+    // 위는 연한 라벤더·핑크 하늘, 중간만 살짝 피치(노을), 아래로 로즈/라벤더
+    gradient: {
+      stops: [
+        { t: 0, color: 0xe8d4f0 },
+        { t: 0.12, color: 0xf0c8b8 },
+        { t: 0.48, color: 0xf0c8b8 },
+        { t: 0.74, color: 0xe8b0c8 },
+        { t: 1, color: 0xdcc8e8 },
+      ],
+    },
   },
   audio: STAGE3_AUDIO_CONFIG,
   ...STAGE3_CHARACTER_CONFIG,

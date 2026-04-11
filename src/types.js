@@ -189,9 +189,19 @@
  */
 
 /**
+ * @typedef {Object} Stage3SkyGradientStop
+ * @property {number} t - 0(화면 위)~1(화면 아래)
+ * @property {number} color
+ *
  * @typedef {Object} Stage3Config
  * @property {StageCameraConfig} camera
- * @property {{color: number}} background
+ * @property {{
+ *   gradient: {
+ *     top?: number,
+ *     bottom?: number,
+ *     stops?: Stage3SkyGradientStop[],
+ *   },
+ * }} background
  * @property {Stage3AudioConfig} [audio]
  * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {Stage2ModelConfig} model
