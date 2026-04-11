@@ -144,6 +144,8 @@
  * @property {number} [paperSoundVolume] - 종이 효과음 볼륨 0~1
  * @property {string[]} [tentSoundPaths] - 텐트(INT_tent) 클릭 시 재생할 사운드 경로
  * @property {number} [tentSoundVolume] - 텐트 클릭 효과음 볼륨 0~1
+ * @property {string[]} [wellSoundPaths] - 우물(INT_Well) 클릭 시 재생할 사운드 경로
+ * @property {number} [wellSoundVolume] - 우물 클릭 효과음 볼륨 0~1
  */
 
 /**

@@ -92,6 +92,17 @@ export const STAGE3_OBJECTS_CONFIG = {
   },
 
   /**
+   * GLB `INT_Well` 클릭 시 `static/sounds/well` 중 랜덤 1종 재생.
+   */
+  well: {
+    wellSoundPaths: [
+      "/static/sounds/well/A_single_drip_sound__1.mp3",
+      "/static/sounds/well/A_single_drip_sound__2.mp3",
+    ],
+    wellSoundVolume: 0.15,
+  },
+
+  /**
    * 포탈: GLB의 `INT_Portal` 메시를 클릭하면 `targetStage`로 전환합니다.
    * `position` / `normal` / `halfWidth`는 예전 평면 통과 로직용으로 남겨 두었으며 현재는 사용하지 않습니다.
    */

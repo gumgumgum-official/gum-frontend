@@ -40,6 +40,7 @@ import {
   playRandomNoticePaperSound,
   disposeNoticePaperAudio,
 } from "../utils/common/playNoticePaperSound.js";
+import { playRandomWellClickSound } from "../utils/common/playWellClickSound.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -119,6 +120,8 @@ export function Stage3() {
     tent: "tent",
     icecream: "icecream",
     portal: "portal",
+    well: "well",
+    clock: "clock",
   };
   function normalizeIntNameToken(value) {
     return String(value ?? "")
@@ -129,7 +132,7 @@ export function Stage3() {
    * GLB마다 INT_ 접미사 표기가 다름 (예: INT_notice vs INT_Notice, INT_IceCart).
    * 레이 히트·ref 등록 시 canonical 타깃으로 정규화한다.
    * @param {string} suffix - `INT_` 제외 접미사
-   * @returns {"notice" | "gameMachine" | "tent" | "icecream" | "portal" | null}
+   * @returns {"notice" | "gameMachine" | "tent" | "icecream" | "portal" | "well" | "clock" | null}
    */
   function intSuffixToTarget(suffix) {
     const lower = normalizeIntNameToken(suffix);
@@ -422,7 +425,7 @@ export function Stage3() {
     }
   }
 
-  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "tent" | "portal" | null */
+  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "tent" | "portal" | "well" | "clock" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
     if (intRaycastMeshes.length === 0) return null;
@@ -598,6 +601,16 @@ export function Stage3() {
           detail: { targetStage },
         }),
       );
+      return;
+    }
+    if (target === "well") {
+      playRandomWellClickSound();
+      window.dispatchEvent(new CustomEvent("gum:wellClick"));
+      return;
+    }
+    if (target === "clock") {
+      window.dispatchEvent(new CustomEvent("gum:clockClick"));
+      return;
     }
   }
 
