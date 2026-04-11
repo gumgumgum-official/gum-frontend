@@ -110,3 +110,14 @@ export const CARDS = [
     comfort: "오늘 유독 외로운 것 같으면 내가 꼬옥 안아줄게.",
   },
 ];
+
+/** 카드 선택(앞면에서 뒤집을 때) 재생 — public/static/sounds/card */
+export const GUM_CARDS_PICK_SOUND_PATHS = [
+  "/static/sounds/card/Short_and_light_swis_1.mp3",
+  "/static/sounds/card/Short_and_light_swis_2.mp3",
+  "/static/sounds/card/Short_and_light_swis_3.mp3",
+  "/static/sounds/card/Short_and_light_swis_4.mp3",
+];
+
+/** 카드 선택 효과음 볼륨 (0~1) */
+export const GUM_CARDS_PICK_SOUND_VOLUME = 0.12;
