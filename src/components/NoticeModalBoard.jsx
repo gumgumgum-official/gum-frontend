@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
 
-const NOTICE_POSTER = STAGE3_OBJECTS_CONFIG.notice.posterImages;
+const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
+const NOTICE_POSTER = NOTICE.posterImages;
 
 const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
@@ -162,8 +164,16 @@ export function NoticeModalBoard({ isOpen, onClose }) {
               <motion.div
                 role="button"
                 tabIndex={0}
-                onClick={() => setZoomedPoster("feast")}
-                onKeyDown={(e) => e.key === "Enter" && setZoomedPoster("feast")}
+                onClick={() => {
+                  playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                  setZoomedPoster("feast");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                    setZoomedPoster("feast");
+                  }
+                }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 style={{
@@ -216,8 +226,16 @@ export function NoticeModalBoard({ isOpen, onClose }) {
               <motion.div
                 role="button"
                 tabIndex={0}
-                onClick={() => setZoomedPoster("vote")}
-                onKeyDown={(e) => e.key === "Enter" && setZoomedPoster("vote")}
+                onClick={() => {
+                  playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                  setZoomedPoster("vote");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                    setZoomedPoster("vote");
+                  }
+                }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 style={{
