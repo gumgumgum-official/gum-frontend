@@ -1,47 +1,28 @@
 /**
  * 껌 카드(타로) 모달: Stage3 INT_tent 클릭 등과 React GumCardsModalOverlay 연동
- * — open 시 텐트 효과음 1종 랜덤 재생 (`#` 파일명은 URL 인코딩)
+ * — open 시 `STAGE3_OBJECTS_CONFIG.tent.tentSoundPaths` 중 1종 랜덤 재생
  */
 
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
+import { STAGE3_OBJECTS_CONFIG } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
 
 const EVENT_OPEN = "gum-cards-modal:open";
 const EVENT_CLOSE = "gum-cards-modal:close";
 
-const TENT_SOUND_RELS = [
-  "/static/sounds/tent/Quick_fabric_rustlin_#1-1775835446790.mp3",
-  "/static/sounds/tent/Quick_fabric_rustlin_#2-1775835457914.mp3",
-  "/static/sounds/tent/Quick_fabric_rustlin_#3-1775835465321.mp3",
-  "/static/sounds/tent/Quick_fabric_rustlin_#4-1775835465322.mp3",
-];
-
-function tentSoundAbsoluteUrl(rel) {
-  const i = rel.lastIndexOf("/");
-  const dir = i >= 0 ? rel.slice(0, i + 1) : "/";
-  const file = i >= 0 ? rel.slice(i + 1) : rel;
-  return resolvePublicAssetUrl(dir + encodeURIComponent(file));
+function getTentSoundPaths() {
+  return STAGE3_OBJECTS_CONFIG.tent?.tentSoundPaths ?? [];
 }
 
-/** @type {HTMLAudioElement | null} */
-let tentModalAudio = null;
 /** @type {HTMLAudioElement[]} */
 let tentPreloadElements = [];
 
-function ensureTentModalAudio() {
-  if (!tentModalAudio) {
-    tentModalAudio = new window.Audio();
-    tentModalAudio.preload = "auto";
-    tentModalAudio.volume = 0.75;
-  }
-  return tentModalAudio;
-}
-
 function primeTentSoundCache() {
-  if (tentPreloadElements.length > 0 || TENT_SOUND_RELS.length === 0) return;
-  tentPreloadElements = TENT_SOUND_RELS.map((rel) => {
+  const paths = getTentSoundPaths();
+  if (tentPreloadElements.length > 0 || paths.length === 0) return;
+  tentPreloadElements = paths.map((rel) => {
     const a = new window.Audio();
     a.preload = "auto";
-    a.src = tentSoundAbsoluteUrl(rel);
+    a.src = resolvePublicAssetUrl(rel);
     try {
       a.load();
     } catch {
@@ -60,20 +41,17 @@ if (typeof window !== "undefined") {
   }
 }
 
+/** 착지 아이스크림 효과음과 같이 매번 새 Audio — 싱글톤에 load() 직후 play()는 미로드 상태에서 자주 실패함 */
 function playRandomTentModalSound() {
-  if (TENT_SOUND_RELS.length === 0) return;
-  const rel =
-    TENT_SOUND_RELS[Math.floor(Math.random() * TENT_SOUND_RELS.length)];
-  const src = tentSoundAbsoluteUrl(rel);
-  const audio = ensureTentModalAudio();
-  audio.pause();
-  audio.currentTime = 0;
+  const paths = getTentSoundPaths();
+  if (paths.length === 0) return;
+  const rel = paths[Math.floor(Math.random() * paths.length)];
+  const src = resolvePublicAssetUrl(rel);
+  const audio = new window.Audio();
+  const v = Number(STAGE3_OBJECTS_CONFIG.tent?.tentSoundVolume ?? 0.28);
+  audio.volume = Math.min(1, Math.max(0, v));
+  audio.preload = "auto";
   audio.src = src;
-  try {
-    audio.load();
-  } catch {
-    // ignore
-  }
   const p = audio.play();
   if (p && typeof p.catch === "function") {
     p.catch((err) => {

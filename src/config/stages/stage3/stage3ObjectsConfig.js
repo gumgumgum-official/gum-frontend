@@ -52,6 +52,8 @@ export const STAGE3_OBJECTS_CONFIG = {
     physicsGroundYOffset: 0.48,
     maxSpawns: 20,
     physicsSubsteps: 2,
+    /** 스폰 아이스크림이 지면에 닿을 때 `static/sounds/icecream` 재생 볼륨 (0~1) */
+    landSoundVolume: 0.02,
   },
 
   /** 게시판 모달: 사운드 + `NoticeModalBoard` 포스터 이미지(public 기준 경로) */
@@ -70,6 +72,21 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/assets/poster/vote_2.png",
       "/assets/poster/vote_3.png",
     ],
+  },
+
+  /**
+   * GLB `INT_tent` 클릭 → 껌 카드 모달. 클릭 시 아래 중 랜덤 1종 재생.
+   * (파일명에 `#` 금지 — 정적 서버·Audio가 리소스를 못 찾는 경우가 많음)
+   */
+  tent: {
+    tentSoundPaths: [
+      "/static/sounds/tent/Quick_fabric_rustlin_1-1775835446790.mp3",
+      "/static/sounds/tent/Quick_fabric_rustlin_2-1775835457914.mp3",
+      "/static/sounds/tent/Quick_fabric_rustlin_3-1775835465321.mp3",
+      "/static/sounds/tent/Quick_fabric_rustlin_4-1775835465322.mp3",
+    ],
+    /** 텐트 클릭 시 효과음 볼륨 (0~1), 기존 0.75 대비 작게 */
+    tentSoundVolume: 0.28,
   },
 
   /**

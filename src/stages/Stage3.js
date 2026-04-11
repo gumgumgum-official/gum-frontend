@@ -36,6 +36,10 @@ import {
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
+import {
+  playRandomNoticePaperSound,
+  disposeNoticePaperAudio,
+} from "../utils/common/playNoticePaperSound.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -100,7 +104,6 @@ export function Stage3() {
   /** island2.glb 내 INT_gameMachine 루트 */
   let gameMachineRef = null;
   let unlistenMinigameClose = null;
-  let noticePaperAudio = null;
   /** @type {HTMLAudioElement | null} */
   let gameMachineClickAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
@@ -509,20 +512,7 @@ export function Stage3() {
 
   /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
   function showNoticeModal() {
-    const paperPaths = config.notice?.paperSoundPaths ?? [];
-    if (paperPaths.length > 0) {
-      const path = paperPaths[Math.floor(Math.random() * paperPaths.length)];
-      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-      const src = base + path;
-      if (!noticePaperAudio) {
-        noticePaperAudio = new window.Audio();
-        noticePaperAudio.volume = 0.5;
-      }
-      noticePaperAudio.pause();
-      noticePaperAudio.currentTime = 0;
-      noticePaperAudio.src = src;
-      noticePaperAudio.play().catch(() => {});
-    }
+    playRandomNoticePaperSound(config.notice?.paperSoundPaths);
     window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
   }
 
@@ -939,7 +929,8 @@ export function Stage3() {
         ];
       const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
       const landAudio = new window.Audio();
-      landAudio.volume = 0.5;
+      const v = Number(config.icecreamCart?.landSoundVolume ?? 0.22);
+      landAudio.volume = Math.min(1, Math.max(0, v));
       landAudio.src = base + path;
       landAudio.play().catch(() => {});
     };
@@ -2004,11 +1995,7 @@ export function Stage3() {
         unlistenMinigameClose = null;
       }
       gameMachineRef = null;
-      if (noticePaperAudio) {
-        noticePaperAudio.pause();
-        noticePaperAudio.src = "";
-        noticePaperAudio = null;
-      }
+      disposeNoticePaperAudio();
       if (gameMachineClickAudio) {
         gameMachineClickAudio.pause();
         gameMachineClickAudio.src = "";

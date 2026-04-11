@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 
 type VoteId = 1 | 2 | 3;
 
@@ -142,6 +143,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const onPosterWrapClick = useCallback(
     (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest("button")) return;
+      playRandomNoticePaperSound(NOTICE.paperSoundPaths);
       togglePopup();
     },
     [togglePopup],
@@ -150,6 +152,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const onSubPosterClick = useCallback(
     (e: MouseEvent, id: VoteId) => {
       e.stopPropagation();
+      playRandomNoticePaperSound(NOTICE.paperSoundPaths);
       onVote(id);
     },
     [onVote],
@@ -167,6 +170,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
+              playRandomNoticePaperSound(NOTICE.paperSoundPaths);
               togglePopup();
             }
           }}
