@@ -41,6 +41,7 @@ import {
   disposeNoticePaperAudio,
 } from "../utils/common/playNoticePaperSound.js";
 import { playRandomWellClickSound } from "../utils/common/playWellClickSound.js";
+import { playRandomClockClickSound } from "../utils/common/playClockClickSound.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -609,6 +610,7 @@ export function Stage3() {
       return;
     }
     if (target === "clock") {
+      playRandomClockClickSound();
       window.dispatchEvent(new CustomEvent("gum:clockClick"));
       return;
     }
