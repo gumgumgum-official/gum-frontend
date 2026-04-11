@@ -13,6 +13,7 @@ import {
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
+import { createSkyGradientTexture } from "../utils/stages/stage3/skyGradientTexture.js";
 import {
   collectIslandStaticColliderBoxes,
   filterCollidersExcludingDominantTerrain,
@@ -79,6 +80,8 @@ export function Stage3() {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** @type {import("three").CanvasTexture | null} */
+  let skyBackgroundTexture = null;
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
 
@@ -1816,7 +1819,10 @@ export function Stage3() {
         this.camera.lookAt(0, 0, 0);
       }
 
-      scene.background = new THREE.Color(config.background.color);
+      skyBackgroundTexture = createSkyGradientTexture(
+        config.background.gradient,
+      );
+      scene.background = skyBackgroundTexture;
 
       keyboard.mount();
       window.addEventListener("keydown", handleStageKeyDown, { capture: true });
@@ -2086,6 +2092,10 @@ export function Stage3() {
         backgroundModel = null;
       }
 
+      if (skyBackgroundTexture) {
+        skyBackgroundTexture.dispose();
+        skyBackgroundTexture = null;
+      }
       scene.background = null;
       if (import.meta.env.DEV) {
         console.log("🧹 Stage3 정리 완료");
