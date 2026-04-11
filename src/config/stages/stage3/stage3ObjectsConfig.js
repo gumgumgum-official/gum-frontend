@@ -62,6 +62,8 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/paper/PaperMovement_fNAyV_01-2.mp3",
       "/static/sounds/paper/PaperMovement_fNAyV_01-3.mp3",
     ],
+    /** 게시판·포스터 종이 효과음 볼륨 (0~1) */
+    paperSoundVolume: 0.98,
     posterImages: {
       party: "/assets/poster/festival_poster.png",
       bestGum: "/assets/poster/vote_poster.png",
@@ -86,7 +88,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/tent/Quick_fabric_rustlin_4-1775835465322.mp3",
     ],
     /** 텐트 클릭 시 효과음 볼륨 (0~1), 기존 0.75 대비 작게 */
-    tentSoundVolume: 0.28,
+    tentSoundVolume: 0.07,
   },
 
   /**

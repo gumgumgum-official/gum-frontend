@@ -141,6 +141,7 @@
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
  * @property {string[]} [paperSoundPaths] - 게시판 등 클릭 시 재생할 사운드 경로
+ * @property {number} [paperSoundVolume] - 종이 효과음 볼륨 0~1
  * @property {string[]} [tentSoundPaths] - 텐트(INT_tent) 클릭 시 재생할 사운드 경로
  * @property {number} [tentSoundVolume] - 텐트 클릭 효과음 볼륨 0~1
  */
