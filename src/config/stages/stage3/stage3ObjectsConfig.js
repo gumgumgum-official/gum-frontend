@@ -54,11 +54,21 @@ export const STAGE3_OBJECTS_CONFIG = {
     physicsSubsteps: 2,
   },
 
-  /** 게시판 모달 사운드 (`INT_notice`와 함께 사용) */
+  /** 게시판 모달: 사운드 + `NoticeModalBoard` 포스터 이미지(public 기준 경로) */
   notice: {
     paperSoundPaths: [
       "/static/sounds/paper/PaperMovement_fNAyV_01-2.mp3",
       "/static/sounds/paper/PaperMovement_fNAyV_01-3.mp3",
+    ],
+    posterImages: {
+      party: "/assets/poster/festival_poster.png",
+      bestGum: "/assets/poster/vote_poster.png",
+    },
+    /** `GgumddiVoteSection` 후보 카드 이미지 (순서 = 1·2·3번) */
+    voteCandidateImages: [
+      "/assets/poster/vote_1.png",
+      "/assets/poster/vote_2.png",
+      "/assets/poster/vote_3.png",
     ],
   },
 
