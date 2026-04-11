@@ -99,7 +99,20 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/well/A_single_drip_sound__1.mp3",
       "/static/sounds/well/A_single_drip_sound__2.mp3",
     ],
-    wellSoundVolume: 0.15,
+    wellSoundVolume: 0.07,
+  },
+
+  /**
+   * GLB `INT_Clock` 클릭 시 `static/sounds/clock` 중 랜덤 1종 재생.
+   */
+  clock: {
+    clockSoundPaths: [
+      "/static/sounds/clock/Gentle_digital_beep-_1.mp3",
+      "/static/sounds/clock/Gentle_digital_beep-_2.mp3",
+      "/static/sounds/clock/Gentle_digital_beep-_3.mp3",
+      "/static/sounds/clock/Gentle_digital_beep-_4.mp3",
+    ],
+    clockSoundVolume: 0.4,
   },
 
   /**
