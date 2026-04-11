@@ -6,11 +6,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 
 type VoteId = 1 | 2 | 3;
 
 const STORAGE_KEY = "gum-ggumddi-vote-v2";
-const ASSET = "/assets/poster";
+
+const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
+const [voteImg1, voteImg2, voteImg3] = NOTICE.voteCandidateImages;
 
 const INITIAL_VOTES: Record<VoteId, number> = { 1: 0, 2: 0, 3: 0 };
 
@@ -18,19 +21,19 @@ const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
   {
     id: 1,
     name: "1. 껌뚝지",
-    image: `${ASSET}/gum_poster_1.svg`,
+    image: voteImg1,
     dot: "#FF8B33",
   },
   {
     id: 2,
     name: "2. 껌떡지",
-    image: `${ASSET}/gum_poster_2.svg`,
+    image: voteImg2,
     dot: "#c4a882",
   },
   {
     id: 3,
     name: "3. 껌뚱지",
-    image: `${ASSET}/gum_poster_3.svg`,
+    image: voteImg3,
     dot: "#FF4A89",
   },
 ];
@@ -85,7 +88,7 @@ type VoteBundle = {
   myVote: VoteId | null;
 };
 
-/** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 (`gum_vote_prototype.html`와 동일한 흐름). */
+/** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 */
 export function GgumddiVoteSection({ className }: { className?: string }) {
   const [bundle, setBundle] = useState<VoteBundle>(loadPersisted);
   const { votes, myVote } = bundle;
@@ -169,7 +172,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
           }}
         >
           <img
-            src={`${ASSET}/best_gum_poster.svg`}
+            src={NOTICE.posterImages.bestGum}
             alt="껌딱지 외모짱 선발 대회 포스터"
             draggable={false}
             className={`absolute inset-0 block h-full w-full rounded-md object-contain shadow-[0_12px_48px_rgba(0,0,0,0.18)] transition-[filter,transform] duration-300 ease-in-out select-none ${

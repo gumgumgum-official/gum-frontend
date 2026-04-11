@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
+
+const NOTICE_POSTER = STAGE3_OBJECTS_CONFIG.notice.posterImages;
 
 const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
@@ -8,6 +11,7 @@ const card = "oklch(0.99 0.012 85)";
 const amber50 = "#fffbeb";
 
 /** 한 줄 가로 배치: 모달 너비의 1/3씩 균등 분배, 화면이 클수록 포스터만 함께 커짐 */
+/** @type {import('framer-motion').MotionStyle} */
 const POSTER_BASE = {
   flex: "1 1 0",
   minWidth: 0,
@@ -195,7 +199,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src="/assets/poster/party_poster.png"
+                    src={NOTICE_POSTER.party}
                     alt="껌딱지 마을 잔치"
                     draggable={false}
                     style={{
@@ -208,7 +212,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 </div>
               </motion.div>
 
-              {/* 포스터 2: best_gum_poster.svg */}
+              {/* 포스터 2: notice.posterImages.bestGum */}
               <motion.div
                 role="button"
                 tabIndex={0}
@@ -249,7 +253,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src="/assets/poster/best_gum_poster.svg"
+                    src={NOTICE_POSTER.bestGum}
                     alt="투표 포스터"
                     draggable={false}
                     style={{
@@ -373,7 +377,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       }}
                     >
                       <img
-                        src="/assets/poster/party_poster.png"
+                        src={NOTICE_POSTER.party}
                         alt="껌딱지 마을 잔치"
                         draggable={false}
                         style={{
@@ -395,7 +399,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       }}
                     >
                       <img
-                        src="/assets/poster/best_gum_poster.svg"
+                        src={NOTICE_POSTER.bestGum}
                         alt="투표 포스터"
                         draggable={false}
                         style={{
