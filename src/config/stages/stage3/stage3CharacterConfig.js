@@ -2,12 +2,12 @@
 
 export const STAGE3_CHARACTER_CONFIG = {
   /** 캐릭터 GLB 경로 */
-  characterModelPath: "/models/common/user_walking_color.glb",
+  characterModelPath: "/models/common/user_walking_inplace.glb",
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({
     groundOffset: 0.45, // 배경 위에 설 때 y 여유 (메시·바운딩 오차 보정)
-    scale: 3, // 캐릭터 전체 크기 배율
+    scale: 0.35, // 캐릭터 전체 크기 배율
     moveSpeed: 5.0, // 이동 속도
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
     cameraOffset: { x: 0, y: 9, z: 25 }, // 캐릭터 뒤쪽 카메라 오프셋 (더 줌아웃)
