@@ -54,6 +54,62 @@ function findChildByName(obj, name) {
   return null;
 }
 
+/**
+ * 배경 또는 island 루트에서 XZ 걸음 영역 계산 (Walkable 우선, 없으면 inset 박스)
+ * @returns {{ usedWalkable: boolean, bounds: { minX: number, maxX: number, minZ: number, maxZ: number } }}
+ */
+function computeIslandBoundsFromModel(model) {
+  model.updateMatrixWorld(true);
+  const walkableObj = findChildByName(model, "Walkable");
+  const boundsSource = walkableObj || model;
+  boundsSource.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(boundsSource);
+  if (walkableObj) {
+    return {
+      usedWalkable: true,
+      bounds: {
+        minX: box.min.x,
+        maxX: box.max.x,
+        minZ: box.min.z,
+        maxZ: box.max.z,
+      },
+    };
+  }
+  const w = box.max.x - box.min.x;
+  const d = box.max.z - box.min.z;
+  const inset = ISLAND_BOUNDS_INSET_RATIO;
+  return {
+    usedWalkable: false,
+    bounds: {
+      minX: box.min.x + w * inset,
+      maxX: box.max.x - w * inset,
+      minZ: box.min.z + d * inset,
+      maxZ: box.max.z - d * inset,
+    },
+  };
+}
+
+/**
+ * boundsPadding 적용 후에도 min≤max·최소 폭이 되도록 바깥 박스를 확장한다.
+ * @param {{ minX: number, maxX: number, minZ: number, maxZ: number }} raw
+ * @param {number} padding
+ */
+function ensureWalkBoundsMinSpanForPadding(raw, padding) {
+  const minSpan = 2 * padding + 1.0;
+  let { minX, maxX, minZ, maxZ } = raw;
+  if (maxX - minX < minSpan) {
+    const c = (minX + maxX) * 0.5;
+    minX = c - minSpan * 0.5;
+    maxX = c + minSpan * 0.5;
+  }
+  if (maxZ - minZ < minSpan) {
+    const c = (minZ + maxZ) * 0.5;
+    minZ = c - minSpan * 0.5;
+    maxZ = c + minSpan * 0.5;
+  }
+  return { minX, maxX, minZ, maxZ };
+}
+
 export function Stage2() {
   const config = STAGE2_CONFIG;
   const glbLoader = getGLBLoader();
@@ -185,34 +241,30 @@ export function Stage2() {
         this.camera.far = Math.max(config.camera.far ?? 10000, maxDim * 10);
         this.camera.updateProjectionMatrix();
         if (islandModel) {
-          islandModel.updateMatrixWorld(true);
-          // 디자이너가 "걸을 수 있는 영역" 메쉬를 Walkable 이름으로 넣어두면 그걸로만 사용 (inset 불필요)
-          const walkableObj = findChildByName(islandModel, "Walkable");
-          const boundsSource = walkableObj || islandModel;
-          boundsSource.updateMatrixWorld(true);
-          const box = new THREE.Box3().setFromObject(boundsSource);
-          if (walkableObj) {
-            islandBounds = {
-              minX: box.min.x,
-              maxX: box.max.x,
-              minZ: box.min.z,
-              maxZ: box.max.z,
-            };
+          const { usedWalkable, bounds } =
+            computeIslandBoundsFromModel(islandModel);
+          islandBounds = bounds;
+          if (usedWalkable) {
             console.log(
               `📐 [Stage2] island.glb Walkable 사용 (디자이너 정의): minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
           } else {
-            const w = box.max.x - box.min.x;
-            const d = box.max.z - box.min.z;
-            const inset = ISLAND_BOUNDS_INSET_RATIO;
-            islandBounds = {
-              minX: box.min.x + w * inset,
-              maxX: box.max.x - w * inset,
-              minZ: box.min.z + d * inset,
-              maxZ: box.max.z - d * inset,
-            };
             console.log(
-              `📐 [Stage2] island.glb Walkable 없음 → 전체 박스 + ${(inset * 100).toFixed(0)}% inset: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
+              `📐 [Stage2] island.glb Walkable 없음 → 전체 박스 + ${(ISLAND_BOUNDS_INSET_RATIO * 100).toFixed(0)}% inset: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
+            );
+          }
+        } else if (allModels.length > 0) {
+          const { usedWalkable, bounds } = computeIslandBoundsFromModel(
+            allModels[0],
+          );
+          islandBounds = bounds;
+          if (usedWalkable) {
+            console.log(
+              `📐 [Stage2] 배경 GLB Walkable 사용: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
+            );
+          } else {
+            console.log(
+              `📐 [Stage2] 단일 배경 GLB → XZ inset ${(ISLAND_BOUNDS_INSET_RATIO * 100).toFixed(0)}%: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
           }
         }
@@ -225,7 +277,9 @@ export function Stage2() {
             propRoots,
             () => {
               debugControls.setDraggableObjects(propRoots);
-              if (!islandModel) updateIslandBoundsFromRoots(propRoots);
+              if (!islandModel && islandBounds == null) {
+                updateIslandBoundsFromRoots(propRoots);
+              }
               onReady();
             },
           );
@@ -436,7 +490,7 @@ function loadCharacters(
   bounds,
 ) {
   const characterPath =
-    config.characterModelPath ?? "/models/common/user_walking2.glb";
+    config.characterModelPath ?? "/models/common/walk__gum.glb";
   const characterPositions = config.characters ?? [
     { position: { x: -4, y: 0.7, z: 1 } },
     { position: { x: -2, y: 0.7, z: 2 } },
@@ -445,16 +499,17 @@ function loadCharacters(
     { position: { x: 4, y: 0.7, z: 1 } },
   ];
 
-  // island.glb 기준 이동 범위 — 캐릭터는 이 안에서만 걸음 (초기 위치도 여기 안으로 클램프)
-  const walkBounds =
+  const padding = 0.5;
+  const rawWalkBounds =
+    config.characterWalkBounds ??
     bounds ??
     (() => {
       console.warn(
-        "[Stage2] island bounds 없음 — island.glb 로드 후 자동 계산된 값만 사용 중. 단일 배경이면 bounds가 null일 수 있음.",
+        "[Stage2] island bounds 없음 — 배경·prop에서도 못 찾으면 임시 영역 사용.",
       );
       return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
     })();
-  const padding = 0.5;
+  const walkBounds = ensureWalkBoundsMinSpanForPadding(rawWalkBounds, padding);
 
   loader.load(characterPath, {
     onLoad: (gltf) => {
