@@ -237,7 +237,7 @@ export function Stage2() {
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        if (!config.camera.lookAt) debugControls.setOrbitTarget(center);
+        debugControls.setOrbitTarget(center);
         this.camera.far = Math.max(config.camera.far ?? 10000, maxDim * 10);
         this.camera.updateProjectionMatrix();
         if (islandModel) {
