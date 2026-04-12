@@ -47,6 +47,9 @@
  * @property {boolean} [castShadow]
  * @property {boolean} [receiveShadow]
  * @property {boolean} [useStaticObstacleColliders] - Stage3: `INT_`/`OBJ_` 메시 기반 XZ 정적 충돌(기본 true). false면 바운딩 클램프만 사용(디버그·임시)
+ * @property {string} [island] - Stage2: 섬 GLB (island/sea/sky 분할 로드 시)
+ * @property {string} [sea]
+ * @property {string} [sky]
  */
 
 /**
@@ -67,6 +70,7 @@
  * @property {Stage2ModelConfig} model
  * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {number} [characterScale] - 캐릭터 스케일 (1 = 원본)
+ * @property {{ minX: number, maxX: number, minZ: number, maxZ: number }} [characterWalkBounds] - 캐릭터 이동 XZ(미설정 시 배경·island·prop 순으로 추정)
  * @property {Array<{ position?: { x?: number, y?: number, z?: number } }>} [characters] - 캐릭터 위치 (5명)
  * @property {Stage2PropConfig[]} [props]
  */
