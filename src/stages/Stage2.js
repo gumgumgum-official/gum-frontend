@@ -10,6 +10,8 @@ import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createAutonomousCharacters } from "../utils/stages/stage2/autonomousCharacters.js";
+import { createStage2GumSpeechBubbles } from "../utils/stages/stage2/stage2GumSpeechBubbles.js";
+import { STAGE2_GUM_SPEECH_LINES } from "../config/stages/stage2/gumSpeechLines.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE2_CONFIG } from "../config/stages/stage2.js";
 import { subscribeHandwritingRealtime } from "../utils/handwriting/handwritingRealtime.js";
@@ -245,6 +247,8 @@ export function Stage2() {
   const propRoots = [];
   let debugControls = null;
   let autonomousCharacters = null;
+  /** @type {{ update: (delta: number) => void, cleanup: () => void } | null} */
+  let gumSpeechBubbles = null;
   let realtimeSubscription = null;
   const fallingTexts = [];
   let cameraRef = null;
@@ -355,8 +359,29 @@ export function Stage2() {
           config,
           scene,
           objects,
-          (controller) => {
+          (controller, characterModels) => {
             autonomousCharacters = controller;
+            if (gumSpeechBubbles) {
+              gumSpeechBubbles.cleanup();
+              gumSpeechBubbles = null;
+            }
+            if (
+              characterModels &&
+              characterModels.length > 0 &&
+              STAGE2_GUM_SPEECH_LINES.length > 0
+            ) {
+              gumSpeechBubbles = createStage2GumSpeechBubbles({
+                camera: this.camera,
+                renderer,
+                models: characterModels,
+                lines: STAGE2_GUM_SPEECH_LINES,
+                options: {
+                  minIntervalSec: 5,
+                  maxIntervalSec: 6,
+                  visibleSec: 2.2,
+                },
+              });
+            }
           },
           characterMoveBounds ?? islandBounds,
           characterWalkGroundY,
@@ -579,6 +604,7 @@ export function Stage2() {
     update(delta) {
       if (debugControls) debugControls.update(delta);
       if (autonomousCharacters) autonomousCharacters.update(delta);
+      if (gumSpeechBubbles) gumSpeechBubbles.update(delta);
 
       // 떨어지는 텍스트 애니메이션 업데이트
       updateFallingTexts(delta, cameraRef, fallingTexts);
@@ -607,6 +633,10 @@ export function Stage2() {
       });
       fallingTexts.length = 0;
 
+      if (gumSpeechBubbles) {
+        gumSpeechBubbles.cleanup();
+        gumSpeechBubbles = null;
+      }
       if (autonomousCharacters) {
         autonomousCharacters.cleanup();
         autonomousCharacters = null;
@@ -645,7 +675,7 @@ export function Stage2() {
  * @param {object} config - STAGE2_CONFIG
  * @param {import("three").Scene} scene
  * @param {import("three").Object3D[]} objects
- * @param {(controller: { update: function, cleanup: function } | null) => void} onControllerReady
+ * @param {(controller: { update: function, cleanup: function } | null, characterModels: import("three").Object3D[]) => void} onControllerReady
  * @param {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} [bounds] - 섬∩울타리 XZ (또는 characterWalkBounds)
  * @param {number} [walkGroundY] - 껌 캐릭터 발 Y (배경 상단 기준)
  */
@@ -766,14 +796,14 @@ function loadCharacters(
           options: { moveSpeed: 0.8, boundsPadding: padding },
         });
       }
-      onControllerReady(controller);
+      onControllerReady(controller, characterModels);
       console.log(
         `✅ Stage2 캐릭터 ${count}명 로드 완료 (${scatter ? "초기 분산·" : ""}걸음 영역 안에서만 이동)`,
       );
     },
     onError: (err) => {
       console.error("❌ Stage2 캐릭터 로드 에러:", err);
-      onControllerReady(null);
+      onControllerReady(null, []);
     },
   });
 }
