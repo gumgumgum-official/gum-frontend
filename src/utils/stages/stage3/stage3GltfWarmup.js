@@ -12,7 +12,8 @@ export function warmStage3GltfTemplateUrls() {
   const urls = [];
   urls.push(resolvePublicAssetUrl(STAGE3_CONFIG.model.path));
   const charPath =
-    STAGE3_CONFIG.characterModelPath ?? "/models/common/user_walking_color.glb";
+    STAGE3_CONFIG.characterModelPath ??
+    "/models/common/user_walking_inplace.glb";
   urls.push(resolvePublicAssetUrl(charPath));
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??

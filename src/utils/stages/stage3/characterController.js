@@ -97,7 +97,7 @@ export function createCharacterController({
       staticColliderBoxes = colliderBoxes;
 
       const relChar =
-        config.characterModelPath ?? "/models/common/user_walking_color.glb";
+        config.characterModelPath ?? "/models/common/user_walking_inplace.glb";
       const characterUrl = resolvePublicAssetUrl(relChar);
       loadGltfTemplateCached(characterUrl).then(
         (gltf) => {
