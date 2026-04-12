@@ -6,8 +6,8 @@ export const STAGE2_CONFIG = {
     fov: 25.0,
     near: 1,
     far: 20000,
-    position: { x: -92.9, y: 82.1, z: -81.7 },
-    lookAt: { x: 4.8, y: 17.2, z: -24.3 },
+    position: { x: 94.8, y: 64.6, z: -24.4 },
+    lookAt: { x: 1.0, y: 14.1, z: -19.0 },
   },
   fog: {
     color: 0xb0e0e6,
@@ -18,7 +18,7 @@ export const STAGE2_CONFIG = {
     color: 0xb0e0e6,
   },
   model: {
-    path: "/models/stage2/island4_1.glb",
+    path: "/models/stage2/island2.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -27,14 +27,18 @@ export const STAGE2_CONFIG = {
   /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
   characterModelPath: "/models/common/walk__gum.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
-  characterScale: 0.5,
-  /** 5명 캐릭터 위치 (x, y, z) - 섬 위에 배치 */
+  characterScale: 1.7,
+  /** 초기 위치를 섬 걸음 영역 안에서 랜덤 분산 */
+  scatterCharacters: true,
+  /** 분산 시 서로 최소 이 거리(m) 이상 */
+  characterScatterMinDistance: 4,
+  /** 5명 (scatterCharacters면 XZ는 무시·y만 선택 적용) */
   characters: [
-    { position: { x: -4, y: 0.7, z: 1 } },
-    { position: { x: -2, y: 0.7, z: 2 } },
-    { position: { x: 0, y: 0.7, z: 2 } },
-    { position: { x: 2, y: 0.7, z: 2 } },
-    { position: { x: 4, y: 0.7, z: 1 } },
+    { position: {} },
+    { position: {} },
+    { position: {} },
+    { position: {} },
+    { position: {} },
   ],
   props: [
     {
