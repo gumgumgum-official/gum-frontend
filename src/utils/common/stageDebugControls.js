@@ -305,7 +305,8 @@ export function createStageDebugControls(params) {
 
     update(_delta) {
       if (orbitControls) orbitControls.update();
-      if (useFixedCamera) camera.lookAt(fixedLookAt);
+      // lookAt이 config에 있으면 고정 카메라로 쓰되, forceOrbit이면 Orbit이 카메라를 제어하므로 lookAt으로 덮지 않음
+      if (useFixedCamera && !forceOrbit) camera.lookAt(fixedLookAt);
     },
 
     dispose() {
