@@ -90,6 +90,68 @@ export function createCharacterController({
   const _cameraOffset = new THREE.Vector3();
   const _targetPosition = new THREE.Vector3();
   const _lookAtPosition = new THREE.Vector3();
+  const ANIMATION_CROSS_FADE_SEC = 0.16;
+
+  function setAnimationMode(mode) {
+    if (mode === "walk") {
+      if (characterWalkAction && characterIdleAction) {
+        characterWalkAction.enabled = true;
+        characterWalkAction.paused = false;
+        characterWalkAction.setEffectiveWeight(1);
+        characterWalkAction.crossFadeFrom(
+          characterIdleAction,
+          ANIMATION_CROSS_FADE_SEC,
+          false,
+        );
+        characterIdleAction.paused = false;
+        return;
+      }
+
+      if (characterWalkAction) {
+        characterWalkAction.enabled = true;
+        characterWalkAction.paused = false;
+        characterWalkAction.setEffectiveWeight(1);
+      }
+      if (characterIdleAction) {
+        characterIdleAction.paused = true;
+        characterIdleAction.enabled = false;
+        characterIdleAction.setEffectiveWeight(0);
+      }
+      return;
+    }
+
+    if (mode === "idle") {
+      if (characterWalkAction && characterIdleAction) {
+        characterIdleAction.enabled = true;
+        characterIdleAction.paused = false;
+        characterIdleAction.setEffectiveWeight(1);
+        characterIdleAction.crossFadeFrom(
+          characterWalkAction,
+          ANIMATION_CROSS_FADE_SEC,
+          false,
+        );
+        characterWalkAction.paused = false;
+        return;
+      }
+
+      if (characterWalkAction) {
+        characterWalkAction.paused = true;
+        characterWalkAction.enabled = false;
+        characterWalkAction.setEffectiveWeight(0);
+      }
+      if (characterIdleAction) {
+        characterIdleAction.enabled = true;
+        characterIdleAction.paused = false;
+        characterIdleAction.setEffectiveWeight(1);
+      } else if (characterWalkAction) {
+        // idle 클립이 없으면 walk의 시작 포즈를 idle 대용으로 사용
+        characterWalkAction.enabled = true;
+        characterWalkAction.time = 0;
+        characterWalkAction.paused = true;
+        characterWalkAction.setEffectiveWeight(1);
+      }
+    }
+  }
 
   return {
     setup(backgroundMaxY, bounds, colliderBoxes = []) {
@@ -98,9 +160,15 @@ export function createCharacterController({
 
       const relChar =
         config.characterModelPath ?? "/models/common/user_walk_v2.glb";
+      const relIdle =
+        config.characterIdleModelPath ?? "/models/common/user_idle.glb";
       const characterUrl = resolvePublicAssetUrl(relChar);
-      loadGltfTemplateCached(characterUrl).then(
-        (gltf) => {
+      const idleUrl = resolvePublicAssetUrl(relIdle);
+      Promise.all([
+        loadGltfTemplateCached(characterUrl),
+        loadGltfTemplateCached(idleUrl).catch(() => null),
+      ]).then(
+        ([gltf, idleGltf]) => {
           characterModel = SkeletonUtils.clone(gltf.scene);
 
           const scale = config.character?.scale ?? 1;
@@ -138,12 +206,24 @@ export function createCharacterController({
           if (gltf.animations && gltf.animations.length > 0) {
             characterMixer = new THREE.AnimationMixer(characterModel);
             const clips = gltf.animations;
+            const idleClips = idleGltf?.animations ?? [];
             const findClipByName = (regex) =>
               clips.find((clip) => regex.test(String(clip?.name ?? ""))) ??
               null;
+            const findIdleClipByName = (regex) =>
+              idleClips.find((clip) => regex.test(String(clip?.name ?? ""))) ??
+              null;
             const walkClip =
               findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
-            const idleClip = findClipByName(/idle|stand|wait|pose/i) ?? null;
+            const idleClipFromIdleModel =
+              findIdleClipByName(/idle|stand|wait|pose|breath|rest/i) ??
+              idleClips[0] ??
+              null;
+            const idleClipFromWalkModel =
+              findClipByName(/idle|stand|wait|pose|breath|rest/i) ??
+              clips.find((clip) => clip !== walkClip) ??
+              null;
+            const idleClip = idleClipFromIdleModel ?? idleClipFromWalkModel;
 
             characterWalkAction = walkClip
               ? characterMixer.clipAction(walkClip)
@@ -156,15 +236,26 @@ export function createCharacterController({
               characterWalkAction.loop = THREE.LoopRepeat;
               characterWalkAction.play();
               characterWalkAction.paused = true;
+              characterWalkAction.enabled = true;
+              characterWalkAction.setEffectiveWeight(1);
             }
             if (characterIdleAction) {
               characterIdleAction.loop = THREE.LoopRepeat;
               characterIdleAction.play();
               characterIdleAction.paused = false;
+              characterIdleAction.enabled = true;
+              characterIdleAction.setEffectiveWeight(1);
             }
+            setAnimationMode("idle");
 
             console.log(
-              `🎬 애니메이션 클립 수: ${clips.length}, walk="${walkClip?.name ?? "-"}", idle="${idleClip?.name ?? "-"}"`,
+              `🎬 애니메이션 클립 수: walk=${clips.length}, idleSrc=${idleClips.length}, names=[${clips
+                .map((c) => c?.name || "(unnamed)")
+                .join(", ")}], idleNames=[${idleClips
+                .map((c) => c?.name || "(unnamed)")
+                .join(
+                  ", ",
+                )}], walk="${walkClip?.name ?? "-"}", idle="${idleClip?.name ?? "-"}"`,
             );
           } else {
             console.warn("⚠️ 캐릭터 모델에 애니메이션 클립이 없습니다.");
@@ -268,14 +359,12 @@ export function createCharacterController({
         // 요청사항: 키보드 입력이 없을 때는 idle 애니메이션 재생
         if (movingInput) {
           if (!isWalking) {
-            characterWalkAction.paused = false;
-            if (characterIdleAction) characterIdleAction.paused = true;
+            setAnimationMode("walk");
             isWalking = true;
           }
         } else {
           if (isWalking) {
-            characterWalkAction.paused = true;
-            if (characterIdleAction) characterIdleAction.paused = false;
+            setAnimationMode("idle");
             isWalking = false;
           }
         }

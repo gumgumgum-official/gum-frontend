@@ -3,6 +3,8 @@
 export const STAGE3_CHARACTER_CONFIG = {
   /** 캐릭터 GLB 경로 */
   characterModelPath: "/models/common/user_walk_v2.glb",
+  /** idle(서있기) 애니메이션 전용 GLB 경로 */
+  characterIdleModelPath: "/models/common/user_idle.glb",
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({
