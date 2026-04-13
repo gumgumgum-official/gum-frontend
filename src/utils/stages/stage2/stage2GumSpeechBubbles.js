@@ -37,6 +37,7 @@ export function createStage2GumSpeechBubbles({
   const _projected = new THREE.Vector3();
 
   const bubbleEl = makeBubbleElement("stage2-gum-bubble-0");
+  let isStage2BubbleFontReady = !("fonts" in document);
 
   /** @type {{ model: import("three").Object3D, el: HTMLDivElement } | null} */
   let active = null;
@@ -99,9 +100,21 @@ export function createStage2GumSpeechBubbles({
     hideRemaining = visibleSec;
   }
 
+  // 웹폰트는 비동기로 로드되므로, 로딩 완료 전에는 말풍선을 띄우지 않아
+  // fallback 폰트로 먼저 보였다가 바뀌는 깜빡임(FOUT)을 줄인다.
+  if (!isStage2BubbleFontReady) {
+    Promise.allSettled([
+      document.fonts.ready,
+      document.fonts.load('1em "GangwonEdu Hyeonok"'),
+    ]).finally(() => {
+      isStage2BubbleFontReady = true;
+    });
+  }
+
   return {
     update(delta) {
       if (!models.length || !lines.length) return;
+      if (!isStage2BubbleFontReady) return;
 
       untilNextSpawn -= delta;
       if (untilNextSpawn <= 0) {

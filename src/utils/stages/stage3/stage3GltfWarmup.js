@@ -12,12 +12,11 @@ export function warmStage3GltfTemplateUrls() {
   const urls = [];
   urls.push(resolvePublicAssetUrl(STAGE3_CONFIG.model.path));
   const charPath =
-    STAGE3_CONFIG.characterModelPath ??
-    "/models/common/user_walking_inplace.glb";
+    STAGE3_CONFIG.characterModelPath ?? "/models/common/user_walk_v2.glb";
   urls.push(resolvePublicAssetUrl(charPath));
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
-    "/models/common/walk__gum.glb";
+    "/models/common/gum_walk_dogle.glb";
   urls.push(resolvePublicAssetUrl(gumPath));
   for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
     urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));

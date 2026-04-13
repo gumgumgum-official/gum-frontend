@@ -42,13 +42,13 @@ export function createCharacterController({
   let characterYPosition = 0;
   let characterMixer = null;
   let characterWalkAction = null;
+  let characterIdleAction = null;
   let isWalking = false;
   let isMoving = false;
   let backgroundBounds = null;
   /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
   let staticColliderBoxes = [];
   let collisionRadius = 0.55;
-  let stopOnNextLoop = false;
   /** @type {HTMLAudioElement | null} */
   let walkAudio = null;
 
@@ -97,7 +97,7 @@ export function createCharacterController({
       staticColliderBoxes = colliderBoxes;
 
       const relChar =
-        config.characterModelPath ?? "/models/common/user_walking_inplace.glb";
+        config.characterModelPath ?? "/models/common/user_walk_v2.glb";
       const characterUrl = resolvePublicAssetUrl(relChar);
       loadGltfTemplateCached(characterUrl).then(
         (gltf) => {
@@ -137,20 +137,34 @@ export function createCharacterController({
 
           if (gltf.animations && gltf.animations.length > 0) {
             characterMixer = new THREE.AnimationMixer(characterModel);
-            characterWalkAction = characterMixer.clipAction(gltf.animations[0]);
-            characterWalkAction.loop = THREE.LoopRepeat;
-            characterWalkAction.play();
-            characterWalkAction.paused = true;
+            const clips = gltf.animations;
+            const findClipByName = (regex) =>
+              clips.find((clip) => regex.test(String(clip?.name ?? ""))) ??
+              null;
+            const walkClip =
+              findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
+            const idleClip = findClipByName(/idle|stand|wait|pose/i) ?? null;
 
-            characterMixer.addEventListener("loop", () => {
-              if (stopOnNextLoop) {
-                characterWalkAction.paused = true;
-                stopOnNextLoop = false;
-              }
-            });
+            characterWalkAction = walkClip
+              ? characterMixer.clipAction(walkClip)
+              : null;
+            characterIdleAction = idleClip
+              ? characterMixer.clipAction(idleClip)
+              : null;
+
+            if (characterWalkAction) {
+              characterWalkAction.loop = THREE.LoopRepeat;
+              characterWalkAction.play();
+              characterWalkAction.paused = true;
+            }
+            if (characterIdleAction) {
+              characterIdleAction.loop = THREE.LoopRepeat;
+              characterIdleAction.play();
+              characterIdleAction.paused = false;
+            }
 
             console.log(
-              `🎬 애니메이션 클립 수: ${gltf.animations.length}, 첫 번째 클립: "${gltf.animations[0].name}"`,
+              `🎬 애니메이션 클립 수: ${clips.length}, walk="${walkClip?.name ?? "-"}", idle="${idleClip?.name ?? "-"}"`,
             );
           } else {
             console.warn("⚠️ 캐릭터 모델에 애니메이션 클립이 없습니다.");
@@ -248,18 +262,20 @@ export function createCharacterController({
         characterModel.rotation.y = angle;
       }
 
-      // 실제 이동(moved) 기준으로 애니메이션/이동 상태 갱신
+      // 실제 이동 여부는 외부 상태(getIsMoving)와 사운드에 유지
       isMoving = moved;
       if (characterWalkAction) {
-        if (moved) {
+        // 요청사항: 키보드 입력이 없을 때는 idle 애니메이션 재생
+        if (movingInput) {
           if (!isWalking) {
-            stopOnNextLoop = false;
             characterWalkAction.paused = false;
+            if (characterIdleAction) characterIdleAction.paused = true;
             isWalking = true;
           }
         } else {
           if (isWalking) {
-            stopOnNextLoop = true;
+            characterWalkAction.paused = true;
+            if (characterIdleAction) characterIdleAction.paused = false;
             isWalking = false;
           }
         }
@@ -310,8 +326,8 @@ export function createCharacterController({
         characterMixer = null;
       }
       characterWalkAction = null;
+      characterIdleAction = null;
       isWalking = false;
-      stopOnNextLoop = false;
       backgroundBounds = null;
       staticColliderBoxes = [];
     },

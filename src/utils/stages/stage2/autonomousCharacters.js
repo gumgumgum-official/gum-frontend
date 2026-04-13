@@ -9,6 +9,7 @@ import * as THREE from "three";
  * @param {{
  *   models: import("three").Object3D[],
  *   walkClip: import("three").AnimationClip,
+ *   idleClip?: import("three").AnimationClip|null,
  *   bounds: { minX: number, maxX: number, minZ: number, maxZ: number },
  *   groundY?: number,
  *   options?: { moveSpeed?: number, boundsPadding?: number }
@@ -18,6 +19,7 @@ import * as THREE from "three";
 export function createAutonomousCharacters({
   models,
   walkClip,
+  idleClip = null,
   bounds,
   groundY = 0.7,
   options = {},
@@ -27,9 +29,15 @@ export function createAutonomousCharacters({
   const agents = models.map((model) => {
     const mixer = new THREE.AnimationMixer(model);
     const walkAction = mixer.clipAction(walkClip);
+    const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
     walkAction.loop = THREE.LoopRepeat;
     walkAction.play();
     walkAction.paused = true;
+    if (idleAction) {
+      idleAction.loop = THREE.LoopRepeat;
+      idleAction.play();
+      idleAction.paused = false;
+    }
 
     const minX = bounds.minX + boundsPadding;
     const maxX = bounds.maxX - boundsPadding;
@@ -46,6 +54,7 @@ export function createAutonomousCharacters({
       model,
       mixer,
       walkAction,
+      idleAction,
       speed,
       direction,
       changeDirTimer,
@@ -74,6 +83,7 @@ export function createAutonomousCharacters({
 
         if (agent.isWalking) {
           agent.walkAction.paused = false;
+          if (agent.idleAction) agent.idleAction.paused = true;
           _move.set(
             Math.sin(agent.direction) * agent.speed * delta,
             0,
@@ -94,6 +104,7 @@ export function createAutonomousCharacters({
           agent.model.rotation.y = agent.direction;
         } else {
           agent.walkAction.paused = true;
+          if (agent.idleAction) agent.idleAction.paused = false;
         }
 
         agent.mixer.update(delta);
