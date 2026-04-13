@@ -81,6 +81,10 @@ const GAME_MACHINE_CLICK_SOUND_PATH =
 /** island `INT_StreetLight*` 클릭 시 — 메시·사운드는 `playStreetLightSound.js` */
 const STREET_LIGHT_NAME_PREFIX = "INT_StreetLight";
 
+/** 다른 스테이지 대비 Stage3만 살짝 밝게 (진입 시 가산, cleanup 시 복원) */
+const STAGE3_TONE_MAPPING_EXPOSURE_DELTA = 0.06;
+const STAGE3_ENVIRONMENT_INTENSITY_DELTA = 0.12;
+
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
@@ -97,6 +101,8 @@ export function Stage3() {
   let skyBackgroundTexture = null;
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
+  /** @type {{ toneMappingExposure: number, environmentIntensity: number, renderer: import("three").WebGLRenderer } | null} */
+  let stage3LightingRestore = null;
 
   // 낙하 글자 1개 (최신 것만)
   let letterState = null;
@@ -1839,6 +1845,14 @@ export function Stage3() {
     setup(scene, renderer) {
       isStage3Active = true;
       gumCancelled = false;
+      stage3LightingRestore = {
+        toneMappingExposure: renderer.toneMappingExposure,
+        environmentIntensity: scene.environmentIntensity,
+        renderer,
+      };
+      renderer.toneMappingExposure += STAGE3_TONE_MAPPING_EXPOSURE_DELTA;
+      scene.environmentIntensity += STAGE3_ENVIRONMENT_INTENSITY_DELTA;
+
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
@@ -2147,6 +2161,18 @@ export function Stage3() {
         skyBackgroundTexture = null;
       }
       scene.background = null;
+
+      if (stage3LightingRestore) {
+        const {
+          renderer: r,
+          toneMappingExposure,
+          environmentIntensity,
+        } = stage3LightingRestore;
+        r.toneMappingExposure = toneMappingExposure;
+        scene.environmentIntensity = environmentIntensity;
+        stage3LightingRestore = null;
+      }
+
       if (import.meta.env.DEV) {
         console.log("🧹 Stage3 정리 완료");
       }
