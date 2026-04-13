@@ -117,7 +117,6 @@ body {
   max-width: min(94vw, 720px);
   white-space: nowrap;
   background: #ffdec7;
-  border: 1.3px solid #b28261;
   border-radius: 12px;
   box-shadow: 0 4px 14px rgba(120, 60, 40, 0.14);
   font-family:

@@ -689,7 +689,7 @@ function loadCharacters(
   walkGroundY = GROUND_Y,
 ) {
   const characterPath =
-    config.characterModelPath ?? "/models/common/walk__gum.glb";
+    config.characterModelPath ?? "/models/common/gum_walk_dogle.glb";
   const characterPositions = config.characters ?? [
     { position: {} },
     { position: {} },
@@ -788,13 +788,20 @@ function loadCharacters(
       const rootYForWalk = characterModels[0]?.position.y ?? surfaceY;
       let controller = null;
       if (gltf.animations?.length > 0) {
-        controller = createAutonomousCharacters({
+        const clips = gltf.animations;
+        const findClipByName = (regex) =>
+          clips.find((clip) => regex.test(String(clip?.name ?? ""))) ?? null;
+        const walkClip = findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
+        const idleClip = findClipByName(/idle|stand|wait|pose/i) ?? null;
+        const controllerParams = /** @type {any} */ ({
           models: characterModels,
-          walkClip: gltf.animations[0],
+          walkClip,
+          idleClip,
           bounds: walkBounds,
           groundY: rootYForWalk,
           options: { moveSpeed: 0.8, boundsPadding: padding },
         });
+        controller = createAutonomousCharacters(controllerParams);
       }
       onControllerReady(controller, characterModels);
       console.log(

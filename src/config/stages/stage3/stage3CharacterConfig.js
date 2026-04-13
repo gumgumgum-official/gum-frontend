@@ -2,7 +2,7 @@
 
 export const STAGE3_CHARACTER_CONFIG = {
   /** 캐릭터 GLB 경로 */
-  characterModelPath: "/models/common/user_walking_inplace.glb",
+  characterModelPath: "/models/common/user_walk_v2.glb",
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({
@@ -25,7 +25,7 @@ export const STAGE3_CHARACTER_CONFIG = {
      */
     gumFollowers: {
       models: {
-        modelPath: "/models/common/walk__gum.glb",
+        modelPath: "/models/common/gum_walk_dogle.glb",
         scale: 1.4, // 껌딱지 모델 전체 크기 (기존 대비 4배)
       },
       behavior: {
