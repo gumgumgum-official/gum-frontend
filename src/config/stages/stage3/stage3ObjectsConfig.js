@@ -72,7 +72,7 @@ export const STAGE3_OBJECTS_CONFIG = {
     voteCandidateImages: [
       "/assets/poster/vote_1.png",
       "/assets/poster/vote_2.png",
-      "/assets/poster/vote_3.png",
+      "/assets/poster/icecream_poster.png",
     ],
   },
 
