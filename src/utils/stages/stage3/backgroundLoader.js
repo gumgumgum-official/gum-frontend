@@ -50,6 +50,7 @@ export function loadStage3Background({
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
 
+      /** @type {import("three").Object3D | null} */
       let islandObject = null;
       model.traverse((obj) => {
         if (islandObject) return;
