@@ -14,6 +14,9 @@ export function warmStage3GltfTemplateUrls() {
   const charPath =
     STAGE3_CONFIG.characterModelPath ?? "/models/common/user_walk_v2.glb";
   urls.push(resolvePublicAssetUrl(charPath));
+  const charIdlePath =
+    STAGE3_CONFIG.characterIdleModelPath ?? "/models/common/user_idle.glb";
+  urls.push(resolvePublicAssetUrl(charIdlePath));
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
     "/models/common/gum_walk_dogle.glb";
