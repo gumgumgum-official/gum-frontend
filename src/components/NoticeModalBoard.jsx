@@ -6,11 +6,14 @@ import { GgumddiVoteSection } from "./GgumddiVoteSection";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const NOTICE_POSTER = NOTICE.posterImages;
+const THIRD_POSTER_SRC =
+  NOTICE.voteCandidateImages?.[2] ?? "/assets/poster/icecream_poster.png";
 
 const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
 const card = "oklch(0.99 0.012 85)";
 const amber50 = "#fffbeb";
+const posterBorderColor = "oklch(0.85 0.02 60)";
 
 /** 한 줄 가로 배치: 모달 너비의 1/3씩 균등 분배, 화면이 클수록 포스터만 함께 커짐 */
 /** @type {import('framer-motion').MotionStyle} */
@@ -178,7 +181,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 whileTap={{ scale: 0.98 }}
                 style={{
                   ...POSTER_BASE,
-                  border: "2px solid oklch(0.85 0.02 60)",
+                  border: `2px solid ${posterBorderColor}`,
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
                   cursor: "pointer",
@@ -241,7 +244,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 style={{
                   ...POSTER_BASE,
                   cursor: "pointer",
-                  border: "2px solid #fde047",
+                  border: `2px solid ${posterBorderColor}`,
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
                 }}
@@ -284,13 +287,28 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 </div>
               </motion.div>
 
-              {/* 포스터 3: 빈 박스 (투표는 2번째 포스터에서만) */}
+              {/* 포스터 3: 아이스크림 포스터 */}
               <motion.div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                  setZoomedPoster("icecream");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                    setZoomedPoster("icecream");
+                  }
+                }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 style={{
                   ...POSTER_BASE,
-                  border: "2px solid rgba(249,168,212,0.35)",
+                  border: `2px solid ${posterBorderColor}`,
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)",
+                  cursor: "pointer",
                 }}
               >
                 <div
@@ -317,7 +335,19 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     height: "100%",
                     background: "rgba(255,255,255,0.08)",
                   }}
-                />
+                >
+                  <img
+                    src={THIRD_POSTER_SRC}
+                    alt="아이스크림 포스터"
+                    draggable={false}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                </div>
               </motion.div>
             </div>
           </motion.div>
@@ -431,6 +461,28 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   )}
 
                   {zoomedPoster === "vote" && <GgumddiVoteSection />}
+
+                  {zoomedPoster === "icecream" && (
+                    <div
+                      style={{
+                        borderRadius: 16,
+                        overflow: "hidden",
+                        boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
+                      }}
+                    >
+                      <img
+                        src={THIRD_POSTER_SRC}
+                        alt="아이스크림 포스터"
+                        draggable={false}
+                        style={{
+                          width: "100%",
+                          maxHeight: "80vh",
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                      />
+                    </div>
+                  )}
                 </motion.div>
               </motion.div>
             )}
