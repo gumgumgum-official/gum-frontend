@@ -6,8 +6,8 @@ export const STAGE2_CONFIG = {
     fov: 25.0,
     near: 1,
     far: 20000,
-    position: { x: 94.8, y: 64.6, z: -24.4 },
-    lookAt: { x: 1.0, y: 14.1, z: -19.0 },
+    position: { x: 100.2, y: 67.3, z: -54.4 },
+    lookAt: { x: -7.6, y: 10.1, z: -12.0 },
   },
   fog: {
     color: 0xb0e0e6,
@@ -18,7 +18,7 @@ export const STAGE2_CONFIG = {
     color: 0xb0e0e6,
   },
   model: {
-    path: "/models/stage2/island2.glb",
+    path: "/models/stage2/beam1.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,

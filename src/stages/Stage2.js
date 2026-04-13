@@ -223,6 +223,25 @@ function computeIslandBoundsFromModel(model) {
  * @param {{ minX: number, maxX: number, minZ: number, maxZ: number }} raw
  * @param {number} padding
  */
+function sanitizeWalkBoundsXZ(raw) {
+  const ok = (n) => typeof n === "number" && Number.isFinite(n);
+  if (
+    !raw ||
+    !ok(raw.minX) ||
+    !ok(raw.maxX) ||
+    !ok(raw.minZ) ||
+    !ok(raw.maxZ)
+  ) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        "[Stage2] 걸음 XZ 경계가 유효하지 않음 — 기본 사각 영역(-10~10) 사용",
+      );
+    }
+    return { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
+  }
+  return raw;
+}
+
 function ensureWalkBoundsMinSpanForPadding(raw, padding) {
   const minSpan = 2 * padding + 1.0;
   let { minX, maxX, minZ, maxZ } = raw;
@@ -332,6 +351,8 @@ export function Stage2() {
           stageName: "stage2",
           getInitialCameraConfig: () => config.camera,
           onConfigChange: (roots) => updateIslandBoundsFromRoots(roots),
+          /** 고정 카메라: config.camera.position + lookAt만 사용, Orbit 비활성 */
+          enableOrbit: false,
         },
       });
 
@@ -699,15 +720,16 @@ function loadCharacters(
   ];
 
   const padding = 0.5;
-  const rawWalkBounds =
+  const rawWalkBounds = sanitizeWalkBoundsXZ(
     config.characterWalkBounds ??
-    bounds ??
-    (() => {
-      console.warn(
-        "[Stage2] island bounds 없음 — 배경·prop에서도 못 찾으면 임시 영역 사용.",
-      );
-      return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
-    })();
+      bounds ??
+      (() => {
+        console.warn(
+          "[Stage2] island bounds 없음 — 배경·prop에서도 못 찾으면 임시 영역 사용.",
+        );
+        return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
+      })(),
+  );
   const walkBounds = ensureWalkBoundsMinSpanForPadding(rawWalkBounds, padding);
 
   loader.load(characterPath, {
@@ -786,23 +808,30 @@ function loadCharacters(
         scene.add(model);
       }
       const rootYForWalk = characterModels[0]?.position.y ?? surfaceY;
-      let controller = null;
-      if (gltf.animations?.length > 0) {
-        const clips = gltf.animations;
-        const findClipByName = (regex) =>
-          clips.find((clip) => regex.test(String(clip?.name ?? ""))) ?? null;
-        const walkClip = findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
-        const idleClip = findClipByName(/idle|stand|wait|pose/i) ?? null;
-        const controllerParams = /** @type {any} */ ({
-          models: characterModels,
-          walkClip,
-          idleClip,
-          bounds: walkBounds,
-          groundY: rootYForWalk,
-          options: { moveSpeed: 0.8, boundsPadding: padding },
-        });
-        controller = createAutonomousCharacters(controllerParams);
+      const clips = gltf.animations ?? [];
+      const findClipByName = (regex) =>
+        clips.find((clip) => regex.test(String(clip?.name ?? ""))) ?? null;
+      const walkClip =
+        clips.length > 0
+          ? (findClipByName(/walk|run|move/i) ?? clips[0] ?? null)
+          : null;
+      const idleClip =
+        clips.length > 0
+          ? (findClipByName(/idle|stand|wait|pose/i) ?? null)
+          : null;
+      if (clips.length === 0 && import.meta.env.DEV) {
+        console.warn(
+          "[Stage2] 캐릭터 GLB에 애니메이션 클립이 없습니다. 이동만 적용합니다.",
+        );
       }
+      const controller = createAutonomousCharacters({
+        models: characterModels,
+        walkClip,
+        idleClip,
+        bounds: walkBounds,
+        groundY: rootYForWalk,
+        options: { moveSpeed: 0.8, boundsPadding: padding },
+      });
       onControllerReady(controller, characterModels);
       console.log(
         `✅ Stage2 캐릭터 ${count}명 로드 완료 (${scatter ? "초기 분산·" : ""}걸음 영역 안에서만 이동)`,
