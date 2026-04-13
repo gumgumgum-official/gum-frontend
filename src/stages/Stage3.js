@@ -42,6 +42,10 @@ import {
 } from "../utils/common/playNoticePaperSound.js";
 import { playRandomWellClickSound } from "../utils/common/playWellClickSound.js";
 import { playRandomClockClickSound } from "../utils/common/playClockClickSound.js";
+import {
+  playRandomStreetLightClickSound,
+  disposeStreetLightSound,
+} from "../utils/common/playStreetLightSound.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -73,6 +77,9 @@ const ICECREAM_LAND_SOUND_PATHS = [
 /** 게임기(INT_gameMachine) 클릭 시 — 파일명에 `#` 있으면 Vite 정적 서버가 MP3로 매핑하지 못함 */
 const GAME_MACHINE_CLICK_SOUND_PATH =
   "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3";
+
+/** island `INT_StreetLight*` 클릭 시 — 메시·사운드는 `playStreetLightSound.js` */
+const STREET_LIGHT_NAME_PREFIX = "INT_StreetLight";
 
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
@@ -152,6 +159,10 @@ export function Stage3() {
   }
   /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
   const intRaycastMeshes = [];
+  /** INT_StreetLight* 전용 (클릭 시 가로등 사운드 — INT_ 매핑 없음) */
+  const streetLightRaycastMeshes = [];
+  const streetLightRaycaster = new THREE.Raycaster();
+  const streetLightPointer = new THREE.Vector2();
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -394,6 +405,17 @@ export function Stage3() {
     }
     intRaycastMeshes.push(...meshSet);
 
+    streetLightRaycastMeshes.length = 0;
+    const streetMeshSet = new Set();
+    islandModel.traverse((obj) => {
+      if (typeof obj.name !== "string") return;
+      if (!obj.name.startsWith(STREET_LIGHT_NAME_PREFIX)) return;
+      obj.traverse((child) => {
+        if (child.isMesh) streetMeshSet.add(child);
+      });
+    });
+    streetLightRaycastMeshes.push(...streetMeshSet);
+
     if (gameMachineRef) {
       unlistenMinigameClose = onMinigameClose(() => {
         closeMinigame({
@@ -448,6 +470,23 @@ export function Stage3() {
     return null;
   }
 
+  function getStreetLightHit(clientX, clientY) {
+    if (!cameraRef || !canvasRef || !streetLightRaycastMeshes.length) {
+      return false;
+    }
+    const rect = canvasRef.getBoundingClientRect();
+    const rw = rect.width || 1;
+    const rh = rect.height || 1;
+    streetLightPointer.x = ((clientX - rect.left) / rw) * 2 - 1;
+    streetLightPointer.y = -((clientY - rect.top) / rh) * 2 + 1;
+    streetLightRaycaster.setFromCamera(streetLightPointer, cameraRef);
+    const hits = streetLightRaycaster.intersectObjects(
+      streetLightRaycastMeshes,
+      false,
+    );
+    return hits.length > 0;
+  }
+
   let _pointerMoveRafId = 0;
   let _lastPointerEvent = null;
   function handlePointerMove(event) {
@@ -459,7 +498,8 @@ export function Stage3() {
       const e = _lastPointerEvent;
       if (!e || !canvasRef) return;
       const target = getPointerHitTarget(e.clientX, e.clientY);
-      canvasRef.style.cursor = target ? "pointer" : "default";
+      const onStreetLight = getStreetLightHit(e.clientX, e.clientY);
+      canvasRef.style.cursor = target || onStreetLight ? "pointer" : "default";
     });
   }
 
@@ -548,6 +588,12 @@ export function Stage3() {
   /** island INT_* 클릭 핸들러 */
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
+    if (getStreetLightHit(event.clientX, event.clientY)) {
+      event.preventDefault();
+      event.stopPropagation();
+      playRandomStreetLightClickSound();
+      return;
+    }
     const target = getPointerHitTarget(event.clientX, event.clientY);
     if (!target) {
       if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
@@ -2005,12 +2051,14 @@ export function Stage3() {
       dispatchMinigameClose();
       dispatchGumCardsModalClose();
       intRaycastMeshes.length = 0;
+      streetLightRaycastMeshes.length = 0;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
         unlistenMinigameClose = null;
       }
       gameMachineRef = null;
       disposeNoticePaperAudio();
+      disposeStreetLightSound();
       if (gameMachineClickAudio) {
         gameMachineClickAudio.pause();
         gameMachineClickAudio.src = "";
