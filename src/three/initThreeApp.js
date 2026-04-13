@@ -78,11 +78,12 @@ export function initThreeApp(canvasElement, options = {}) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(pixelRatio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.4;
+  renderer.toneMappingExposure = 0.33;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   // Scene
   const scene = new THREE.Scene();
+  scene.environmentIntensity = 0.85;
 
   // HDRI 환경광 (Blender Material Preview 스타일)
   const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");

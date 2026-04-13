@@ -26,15 +26,15 @@ export const APP_CONFIG = {
     hemisphere: {
       skyColor: 0xffffff,
       groundColor: 0x888888,
-      intensity: 1.0,
+      intensity: 0.9,
     },
     ambient: {
       color: 0xffffff,
-      intensity: 0.4,
+      intensity: 0.35,
     },
     sun: {
       color: 0xffffff,
-      intensity: 1.2,
+      intensity: 1.05,
       position: { x: 500, y: 1500, z: 500 },
     },
   },
