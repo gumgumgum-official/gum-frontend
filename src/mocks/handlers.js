@@ -6,6 +6,7 @@ import { http, HttpResponse } from "msw";
 
 const SAMPLE_WORRY = {
   worryId: "99",
+  displaySeq: 99,
   svgUrl: "https://example.com/mock-worry.svg",
   sessionId: "msw-mock-session",
 };
@@ -48,7 +49,11 @@ export function createHandlers(scenario) {
             return HttpResponse.json(
               statusPayload({
                 "monitor-1": {
-                  reservedWorry: { ...SAMPLE_WORRY, worryId: "12" },
+                  reservedWorry: {
+                    ...SAMPLE_WORRY,
+                    worryId: "12",
+                    displaySeq: 12,
+                  },
                 },
                 "monitor-2": {},
               }),
@@ -59,7 +64,11 @@ export function createHandlers(scenario) {
               statusPayload({
                 "monitor-1": {
                   status: "busy",
-                  currentWorry: { ...SAMPLE_WORRY, worryId: "12" },
+                  currentWorry: {
+                    ...SAMPLE_WORRY,
+                    worryId: "12",
+                    displaySeq: 12,
+                  },
                   reservedWorry: null,
                 },
                 "monitor-2": {},
@@ -79,7 +88,7 @@ export function createHandlers(scenario) {
           if (flow.phase === "busy") {
             return HttpResponse.json({
               status: "busy",
-              worry: { ...SAMPLE_WORRY, worryId: "12" },
+              worry: { ...SAMPLE_WORRY, worryId: "12", displaySeq: 12 },
             });
           }
           return HttpResponse.json({ status: "idle" });
@@ -95,7 +104,7 @@ export function createHandlers(scenario) {
             return HttpResponse.json({
               ok: true,
               status: "busy",
-              worry: { ...SAMPLE_WORRY, worryId: "12" },
+              worry: { ...SAMPLE_WORRY, worryId: "12", displaySeq: 12 },
             });
           }
           if (flow.phase === "busy") {
@@ -162,6 +171,7 @@ export function createHandlers(scenario) {
   if (scenario === "reserved") {
     const reserved = {
       worryId: "42",
+      displaySeq: 42,
       svgUrl: "https://example.com/reserved-mock.svg",
       sessionId: "msw-reserved",
     };
