@@ -7,9 +7,14 @@ import { MemoryTestPage } from "./pages/MemoryTestPage.jsx";
 import { StartPage } from "./pages/StartPage.jsx";
 import { NoticeModalBoard } from "./components/NoticeModalBoard.jsx";
 import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
+import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
 
 export function App() {
   const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [showStage6PosterModal, setShowStage6PosterModal] = useState(false);
+  const [stage6PosterImageSrc, setStage6PosterImageSrc] = useState(
+    "/assets/poster/stamp_poster.png",
+  );
   const [airportSubtitleText, setAirportSubtitleText] = useState("");
   const [showAirportSubtitle, setShowAirportSubtitle] = useState(false);
   const [fadeOutAirportSubtitle, setFadeOutAirportSubtitle] = useState(false);
@@ -29,6 +34,30 @@ export function App() {
     return () => {
       window.removeEventListener("gum:showNoticeModal", showHandler);
       window.removeEventListener("gum:closeNoticeModal", closeHandler);
+    };
+  }, []);
+
+  useEffect(() => {
+    const showStage6Poster = (event) => {
+      const imageSrc =
+        typeof event?.detail?.imageSrc === "string" && event.detail.imageSrc
+          ? event.detail.imageSrc
+          : "/assets/poster/stamp_poster.png";
+      setStage6PosterImageSrc(imageSrc);
+      setShowStage6PosterModal(true);
+    };
+    const hideStage6Poster = () => setShowStage6PosterModal(false);
+    window.addEventListener("gum:stage6PosterModal:show", showStage6Poster);
+    window.addEventListener("gum:stage6PosterModal:hide", hideStage6Poster);
+    return () => {
+      window.removeEventListener(
+        "gum:stage6PosterModal:show",
+        showStage6Poster,
+      );
+      window.removeEventListener(
+        "gum:stage6PosterModal:hide",
+        hideStage6Poster,
+      );
     };
   }, []);
 
@@ -126,6 +155,11 @@ export function App() {
       <NoticeModalBoard
         isOpen={showNoticeModal}
         onClose={() => setShowNoticeModal(false)}
+      />
+      <Stage6PosterModal
+        isOpen={showStage6PosterModal}
+        imageSrc={stage6PosterImageSrc}
+        onClose={() => setShowStage6PosterModal(false)}
       />
       <GumCardsModalOverlay />
       <div

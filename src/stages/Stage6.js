@@ -18,9 +18,14 @@ const AIRPORT_SUBTITLE_HIDE_EVENT = "gum:airportAnnouncementSubtitle:hide";
 const AIRPORT_CHIME_SHOW_EVENT = "gum:airportAnnouncementChime:show";
 const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";
 const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
+const STAGE6_INT_CLICK_EVENT = "gum:stage6-int-click";
+const STAGE6_POSTER_MODAL_SHOW_EVENT = "gum:stage6PosterModal:show";
+const STAGE6_POSTER_MODAL_HIDE_EVENT = "gum:stage6PosterModal:hide";
+const INT_PREFIX = "INT_";
 
 export function Stage6() {
   const objects = [];
+  /** @type {import("../types.js").StageBasicConfig & { model: import("../types.js").Stage2ModelConfig, boardPosterImage?: string, bench?: import("../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean } }} */
   const config = STAGE6_CONFIG;
   const airportSubtitleLeadSec =
     Number(STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC ?? 0.75) || 0;
@@ -31,6 +36,13 @@ export function Stage6() {
     : [];
   const glbLoader = getGLBLoader();
   const fbxLoader = new FBXLoader();
+  const intRaycastMeshes = [];
+  const pointer = new THREE.Vector2();
+  const raycaster = new THREE.Raycaster();
+  let canvasRef = null;
+  let cameraRef = null;
+  let onPointerDown = null;
+  let onPointerMove = null;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -188,10 +200,60 @@ export function Stage6() {
     }
   };
 
+  function normalizeIntNameToken(value) {
+    return String(value ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  function registerIntInteractions(rootModel) {
+    intRaycastMeshes.length = 0;
+    /** @type {Set<THREE.Mesh>} */
+    const meshSet = new Set();
+    rootModel.traverse((obj) => {
+      if (typeof obj.name !== "string" || !obj.name.startsWith(INT_PREFIX))
+        return;
+      obj.traverse((child) => {
+        if (child?.isMesh) meshSet.add(child);
+      });
+    });
+    intRaycastMeshes.push(...meshSet);
+    if (import.meta.env.DEV) {
+      console.log(
+        `[Stage6] INT_ clickable mesh count: ${intRaycastMeshes.length}`,
+      );
+    }
+  }
+
+  function getPointerHitTarget(event) {
+    if (!canvasRef || !cameraRef || intRaycastMeshes.length === 0) return null;
+    const rect = canvasRef.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, cameraRef);
+    const hits = raycaster.intersectObjects(intRaycastMeshes, false);
+    for (const hit of hits) {
+      let p = hit.object;
+      while (p) {
+        if (typeof p.name === "string" && p.name.startsWith(INT_PREFIX)) {
+          const suffix = p.name.slice(INT_PREFIX.length);
+          return {
+            intName: p.name,
+            target: normalizeIntNameToken(suffix),
+          };
+        }
+        p = p.parent;
+      }
+    }
+    return null;
+  }
+
   return {
     camera: null,
 
     setup(scene, renderer) {
+      const canvas = renderer.domElement;
+      canvasRef = canvas;
       this.camera = new THREE.PerspectiveCamera(
         config.camera.fov,
         window.innerWidth / window.innerHeight,
@@ -212,9 +274,38 @@ export function Stage6() {
       } else {
         this.camera.lookAt(0, 0, 0);
       }
+      cameraRef = this.camera;
 
       scene.background = new THREE.Color(config.background.color);
       window.addEventListener("keydown", handleKeyDown, { capture: true });
+      onPointerDown = (event) => {
+        if (event.button !== 0) return;
+        const hit = getPointerHitTarget(event);
+        if (!hit) return;
+        console.log(`[Stage6] INT click: ${hit.intName}`);
+        if (hit.target === "boardpic" || hit.target === "poster") {
+          window.dispatchEvent(
+            new CustomEvent(STAGE6_POSTER_MODAL_SHOW_EVENT, {
+              detail: {
+                imageSrc:
+                  config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
+                intName: hit.intName,
+              },
+            }),
+          );
+        }
+        window.dispatchEvent(
+          new CustomEvent(STAGE6_INT_CLICK_EVENT, {
+            detail: hit,
+          }),
+        );
+      };
+      canvas.addEventListener("pointerdown", onPointerDown, { capture: true });
+      onPointerMove = (event) => {
+        const hit = getPointerHitTarget(event);
+        canvas.style.cursor = hit ? "pointer" : "default";
+      };
+      canvas.addEventListener("pointermove", onPointerMove);
 
       // 배경 GLB 로드
       glbLoader.load(config.model.path, {
@@ -241,6 +332,7 @@ export function Stage6() {
 
           objects.push(model);
           scene.add(model);
+          registerIntInteractions(model);
         },
         onError: (err) => console.error("❌ Stage6 배경 로드 에러:", err),
       });
@@ -323,6 +415,21 @@ export function Stage6() {
     cleanup(scene) {
       cancelAirplaneCallSignScheduled();
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
+      if (canvasRef && onPointerDown) {
+        canvasRef.removeEventListener("pointerdown", onPointerDown, {
+          capture: true,
+        });
+      }
+      if (canvasRef && onPointerMove) {
+        canvasRef.removeEventListener("pointermove", onPointerMove);
+        canvasRef.style.cursor = "default";
+      }
+      canvasRef = null;
+      cameraRef = null;
+      onPointerDown = null;
+      onPointerMove = null;
+      intRaycastMeshes.length = 0;
       objects.forEach((obj) => {
         scene.remove(obj);
         obj.traverse((child) => {
