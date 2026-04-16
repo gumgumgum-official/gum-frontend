@@ -5,6 +5,13 @@
 
 import * as THREE from "three";
 
+function isModelInspectorLoggingEnabled() {
+  return (
+    import.meta.env.DEV &&
+    import.meta.env.VITE_ENABLE_MODEL_INSPECTOR_LOGS === "true"
+  );
+}
+
 /**
  * 모델 구조를 콘솔에 출력합니다.
  * @param {THREE.Object3D|THREE.Group} model - 확인할 모델 (gltf.scene 또는 THREE.Object3D)
@@ -12,6 +19,7 @@ import * as THREE from "three";
  * @param {string} [label="모델"] - 콘솔 출력 시 사용할 레이블
  */
 export function inspectModel(model, gltf = null, label = "모델") {
+  if (!isModelInspectorLoggingEnabled()) return;
   if (!model) {
     console.warn(`⚠️ ${label}: 모델이 없습니다.`);
     return;
@@ -74,6 +82,7 @@ export function inspectModel(model, gltf = null, label = "모델") {
  * @param {string} [label="모델"] - 콘솔 출력 시 사용할 레이블
  */
 export function inspectGLTF(gltf, label = "모델") {
+  if (!isModelInspectorLoggingEnabled()) return;
   if (!gltf || !gltf.scene) {
     console.warn(`⚠️ ${label}: GLTF 객체가 유효하지 않습니다.`);
     return;
