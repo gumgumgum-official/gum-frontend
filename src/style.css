@@ -240,7 +240,8 @@ body {
 
 .stage6-poster-modal-content {
   position: relative;
-  width: min(92vw, 560px);
+  width: fit-content;
+  max-width: min(92vw, 560px);
   max-height: 92vh;
   border-radius: 12px;
   overflow: hidden;
@@ -250,7 +251,8 @@ body {
 
 .stage6-poster-modal-image {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: min(92vw, 560px);
   height: auto;
   max-height: 92vh;
   object-fit: contain;
