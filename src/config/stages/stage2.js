@@ -6,8 +6,8 @@ export const STAGE2_CONFIG = {
     fov: 25.0,
     near: 1,
     far: 20000,
-    position: { x: 100.2, y: 67.3, z: -54.4 },
-    lookAt: { x: -7.6, y: 10.1, z: -12.0 },
+    position: { x: 107.7, y: 70.2, z: -44.4 },
+    lookAt: { x: -14.9, y: 5.6, z: -11.1 },
   },
   fog: {
     color: 0xb0e0e6,

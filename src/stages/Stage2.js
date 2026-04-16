@@ -351,7 +351,7 @@ export function Stage2() {
           stageName: "stage2",
           getInitialCameraConfig: () => config.camera,
           onConfigChange: (roots) => updateIslandBoundsFromRoots(roots),
-          /** 고정 카메라: config.camera.position + lookAt만 사용, Orbit 비활성 */
+          /** 고정 카메라: config.camera + lookAt, Orbit 비활성 */
           enableOrbit: false,
         },
       });
