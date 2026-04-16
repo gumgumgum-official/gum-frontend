@@ -121,10 +121,9 @@ void main() {
   const float timeScale = 1.5;
   float t = uTime * timeScale;
 
-  const float rotationSpeed = 0.13;
-  const float wobbleSpeed = 0.032;
-  const float wobbleAmp = 0.028;
-  // 레퍼런스1: 감김이 과하면 촘촘해 보임 → 완만하게
+  const float wobbleSpeed = 0.04;
+  const float wobbleAmp = 0.038;
+  // 레퍼런스1: 감김이 과하면 촘촘해 보임 → 완만하게(난류로 살짝 흔듦)
   const float swirlTightness = 5.6;
   // 팔은 거의 보이지 않는 "마스크" 역할만 → 개수도 줄여 간격 확보
   const float armCount = 4.0;
@@ -154,7 +153,15 @@ void main() {
     dist = length(uv);
   }
   float angle = atan(uv.y, uv.x);
-  float swirlAngle = angle + dist * swirlTightness - t * rotationSpeed;
+  // 회전: 단일 각속도 대신 시간 왜곡 + 반지름 리플 + 위상 노이즈로 “어지럽게”
+  float tJ = t + snoise(vec3(uv * 0.55 + vec2(1.7, 9.0), t * 0.048)) * 2.2;
+  float rot = tJ * 0.19
+    + sin(dist * 9.0 + t * 1.05) * 0.11
+    + sin(dist * 3.1 - t * 0.63) * 0.07
+    + snoise(vec3(vec2(cos(angle), sin(angle)) * 1.8 + dist, t * 0.11)) * 0.22;
+  float wSwirl = swirlTightness + 1.5 * snoise(vec3(uv * 1.05 + vec2(4.0, 2.0), t * 0.052));
+  float angJ = snoise(vec3(uv * 1.55, t * 0.065)) * 0.62;
+  float swirlAngle = angle + dist * wSwirl - rot + angJ;
 
   // 소용돌이 래핑을 약하게(띠가 촘촘해 보이지 않게)
   vec2 polarWide = vec2(dist * 1.4, swirlAngle * 1.1);
@@ -177,16 +184,17 @@ void main() {
   float vignette = 1.0 - smoothstep(0.05, 0.95, dist);
   nebulaCloud = smoothstep(0.15, 0.98, nebulaCloud) * vignette;
 
-  // 은하수형: 나선 골격은 강하게, FBM은 질감만 살짝 (흐물거림·롤리팝 완화)
+  // 나선 팔: cos 한 줄기(날카로운 청색 능선) 방지 → 위상 왜곡 + 이중 주파 블렌드 + 완만한 pow
   float spinePhase = armCount * swirlAngle + dist * 2.6;
-  float armPhase = spinePhase + fbm * 0.42;
-  float armWave = cos(armPhase);
+  float phaseWarp = snoise(vec3(uv * 3.2 + vec2(dist * 2.0, 0.0), t * 0.062)) * 1.15;
+  float armPhase = spinePhase + fbm * 0.58 + phaseWarp;
+  float aA = cos(armPhase);
+  float aB = cos(armPhase * 1.027 + 0.51);
+  float armWave = mix(aA, aB, 0.38);
   float armSoft = armWave * 0.5 + 0.5;
-  // 팔은 "보이는 선"이 되지 않게: 좁은 마스크로만 사용
-  // 나선팔을 “실제 밝은 팔”로 보이게: 마스크를 더 넓고 강하게
-  float armPeak = pow(clamp(armSoft, 0.0, 1.0), 1.9);
-  float armMask = smoothstep(0.12, 0.86, armPeak);
-  float armBlend = mix(armSoft, armPeak, 0.68);
+  float armPeak = pow(clamp(armSoft, 0.0, 1.0), 1.18);
+  float armMask = smoothstep(0.22, 0.88, armPeak);
+  float armBlend = mix(armSoft, armPeak, 0.52);
   float lane = smoothstep(0.18, 0.78, dustBand) * (0.35 + 0.65 * armBlend);
 
   // 배경: 딥 네이비 그라데이션 (단색 금지)
@@ -207,12 +215,14 @@ void main() {
   // 딥 → 더스트 → 시안 하이라이트 (팔 자체는 직접 더하지 않음)
   baseCol = mix(baseCol, colDeep, density * 0.55);
   baseCol = mix(baseCol, colDust, density * 0.85);
-  baseCol = mix(baseCol, colCyan, density * (0.35 + 0.35 * cluster));
+  baseCol = mix(baseCol, colCyan, density * (0.22 + 0.28 * cluster));
 
-  // 팔 자체를 밝게 “그려 넣기” (지금처럼 선만 살짝 보이는 문제 해결)
+  // 팔 하이라이트: 연속 가스 느낌(선 재등장 방지) — 노이즈로 밀도 변조
   float armGlow = armMask * smoothstep(0.06, 0.72, nebulaCloud);
-  baseCol = mix(baseCol, colCyan, armGlow * 0.55);
-  baseCol = mix(baseCol, colHighlight, armGlow * 0.32);
+  float armBreakup = 0.45 + 0.55 * snoise(vec3(uv * 5.5, t * 0.09));
+  float armGlowM = armGlow * armBreakup;
+  baseCol = mix(baseCol, colCyan, armGlowM * 0.32);
+  baseCol = mix(baseCol, colHighlight, armGlowM * 0.18);
 
   // 보라/마젠타 톤: 띠 내부 클러스터에만 국소적으로
   float purpleMask = cluster * density * smoothstep(0.15, 0.55, nebulaCloud);
@@ -328,10 +338,11 @@ void main() {
 
   vec3 rgb = (baseCol + starCol) * glowStrength;
 
-  // 바디(포탈 디스크)를 밝은 청색으로 유지해 중앙 면이 죽지 않게 조정
+  // 바디: 균일 청색 밴딩(날카로운 원형 띠) 줄이고 은은하게만
   const vec3 bodyBlue = vec3(0.26, 0.62, 0.96);
-  float bodyMask = 1.0 - smoothstep(0.06, 0.56, dist);
-  rgb = mix(rgb, bodyBlue, bodyMask * 0.18);
+  float bodyN = snoise(vec3(uv * 2.1, t * 0.02)) * 0.5 + 0.5;
+  float bodyMask = (1.0 - smoothstep(0.1, 0.58, dist)) * (0.72 + 0.28 * bodyN);
+  rgb = mix(rgb, bodyBlue, bodyMask * 0.07);
   float coreWhiteHalo = exp(-dist * 6.8);
   rgb = mix(rgb, colHighlight, coreWhiteHalo * 0.34);
   rgb = mix(rgb, colCyan, nebulaCloud * bodyMask * 0.18);
