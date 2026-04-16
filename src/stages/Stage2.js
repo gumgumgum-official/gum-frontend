@@ -85,6 +85,10 @@ export function Stage2() {
   let autonomousCharacters = null;
   let realtimeSubscription = null;
   const fallingTexts = [];
+  /** 초기 로드 + Realtime 공통 중복 방지 키 저장소 */
+  const processedHandwritingKeys = new Set();
+  /** cleanup 이후 stale 비동기 작업(loadInitial, ingest)이 scene에 추가되지 않도록 차단 */
+  let isStage2Active = false;
   let cameraRef = null;
   /** 섬 XZ 범위 — island.glb 로드 시 자동 계산됨 (검증: 예전 수치 fallback 없이 이 값만 사용) */
   let islandBounds = null;
@@ -117,7 +121,45 @@ export function Stage2() {
     camera: null,
 
     setup(scene, renderer) {
+      isStage2Active = true;
       const canvas = renderer.domElement;
+      const toDedupKey = (metadata) => {
+        const rawUrl = metadata?.url != null ? String(metadata.url).trim() : "";
+        if (rawUrl) {
+          return `url:${rawUrl.split("?")[0]}`;
+        }
+        const rawId = metadata?.id != null ? String(metadata.id).trim() : "";
+        if (rawId) return `id:${rawId}`;
+        return null;
+      };
+
+      const ingestHandwriting = async (metadata, source) => {
+        if (!isStage2Active) return;
+        const key = toDedupKey(metadata);
+        if (!key) {
+          console.warn(
+            `[Stage2] ${source} 스킵: dedupe key 생성 실패`,
+            metadata,
+          );
+          return;
+        }
+        if (processedHandwritingKeys.has(key)) {
+          console.log(`[Stage2] 중복 스킵 (${source}):`, key);
+          return;
+        }
+        processedHandwritingKeys.add(key);
+        if (!isStage2Active) return;
+        await createFallingText(
+          metadata,
+          scene,
+          this.camera,
+          fallingTexts,
+          {
+            initial: false,
+          },
+          () => islandBounds,
+        );
+      };
 
       scene.fog = new THREE.Fog(
         config.fog.color,
@@ -196,6 +238,7 @@ export function Stage2() {
           this.camera,
           fallingTexts,
           () => islandBounds,
+          (metadata) => ingestHandwriting(metadata, "initial"),
         );
       };
 
@@ -314,16 +357,7 @@ export function Stage2() {
             metadata.id,
             metadata.url,
           );
-          createFallingText(
-            metadata,
-            scene,
-            this.camera,
-            fallingTexts,
-            {
-              initial: false,
-            },
-            () => islandBounds,
-          );
+          void ingestHandwriting(metadata, "realtime");
         },
         onError: (error) => {
           console.error("[Stage2] Handwriting realtime error:", error);
@@ -390,6 +424,8 @@ export function Stage2() {
     },
 
     cleanup(scene) {
+      isStage2Active = false;
+
       // Realtime 구독 해제
       if (realtimeSubscription) {
         realtimeSubscription.unsubscribe();
@@ -411,6 +447,7 @@ export function Stage2() {
         });
       });
       fallingTexts.length = 0;
+      processedHandwritingKeys.clear();
 
       if (autonomousCharacters) {
         autonomousCharacters.cleanup();
@@ -667,6 +704,7 @@ async function loadInitialHandwritings(
   camera,
   fallingTextsArr,
   getIslandBounds,
+  onMetadata,
 ) {
   if (!supabase) {
     console.warn("[Stage2] Supabase 없음, 누적 로드 스킵");
@@ -709,14 +747,18 @@ async function loadInitialHandwritings(
         clientId: clientId ?? "",
       };
 
-      await createFallingText(
-        metadata,
-        scene,
-        camera,
-        fallingTextsArr,
-        { initial: false },
-        getIslandBounds,
-      );
+      if (typeof onMetadata === "function") {
+        await onMetadata(metadata);
+      } else {
+        await createFallingText(
+          metadata,
+          scene,
+          camera,
+          fallingTextsArr,
+          { initial: false },
+          getIslandBounds,
+        );
+      }
     }
   } catch (err) {
     console.error("[Stage2] 누적 로드 중 오류:", err);
@@ -1017,7 +1059,9 @@ function setReadableRotationTowardCamera(group, camera, _groundY) {
   if (dir.lengthSq() < 1e-6) return;
   dir.normalize();
   const yaw = Math.atan2(dir.x, dir.z);
-  group.rotation.set(0, yaw, 0);
+  // ExtrudeGeometry의 읽을 수 있는 면(z=0)은 -Z 방향을 바라보므로,
+  // -Z가 카메라를 향하도록 PI를 더해야 글자가 정방향으로 보임
+  group.rotation.set(0, yaw + Math.PI, 0);
 }
 
 /**

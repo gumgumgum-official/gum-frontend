@@ -85,7 +85,16 @@ export function StartPage() {
       onClick={handleStart}
     >
       <div className={styles.startOverlay}>
-        <div className={styles.pressStart}>PRESS START !</div>
+        <div className={styles.startButtonHit}>
+          <img
+            className={styles.startButtonImg}
+            src="/static/images/start_button.png"
+            alt="START"
+            width={1024}
+            height={388}
+            decoding="async"
+          />
+        </div>
       </div>
       {toastMessage ? (
         <div className={styles.startToast} role="status" aria-live="polite">
