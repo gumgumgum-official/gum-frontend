@@ -129,13 +129,13 @@ void main() {
   const float armCount = 4.0;
   const float glowStrength = 1.55;
 
-  // 레퍼런스1: 거의 블랙에 가까운 딥 네이비 + 띠만 중간 톤 네이비~시안
-  const vec3 colBg0 = vec3(0.06, 0.22, 0.52);
-  const vec3 colBg1 = vec3(0.09, 0.30, 0.62);
-  const vec3 colDeep = vec3(0.06, 0.18, 0.40);
-  const vec3 colDust = vec3(0.2, 0.45, 0.78);
-  const vec3 colCyan = vec3(0.42, 0.76, 0.98);
-  const vec3 colHighlight = vec3(0.98, 0.99, 1.0);
+  // 배경: 연한 하늘색, 나선팔·코어: 완전 흰색 (레퍼런스 기반)
+  const vec3 colBg0 = vec3(0.28, 0.52, 0.82);
+  const vec3 colBg1 = vec3(0.38, 0.62, 0.90);
+  const vec3 colDeep = vec3(0.18, 0.42, 0.72);
+  const vec3 colDust = vec3(0.68, 0.82, 0.96);
+  const vec3 colCyan = vec3(0.82, 0.92, 1.0);
+  const vec3 colHighlight = vec3(1.0, 1.0, 1.0);
   const vec3 colPurple = vec3(0.46, 0.26, 0.62);
 
   // UV 없음/전부 동일(0,0)이면 vUv가 면 전체에서 상수 → dist·알파 붕괴 → 완전 투명
@@ -155,13 +155,16 @@ void main() {
   float angle = atan(uv.y, uv.x);
   // 회전: 단일 각속도 대신 시간 왜곡 + 반지름 리플 + 위상 노이즈로 “어지럽게”
   float tJ = t + snoise(vec3(uv * 0.55 + vec2(1.7, 9.0), t * 0.048)) * 2.2;
-  float rot = tJ * 0.19
+  vec2 dirA = vec2(cos(angle), sin(angle)) * 1.8;
+  // vec2+scalar는 드라이버별로 셰이더 컴파일 이슈가 있어 vec3는 명시적으로 구성
+  vec3 rotNoisePos = vec3(dirA.x + dist, dirA.y + dist, t * 0.11);
+  float swirlRot = tJ * 0.19
     + sin(dist * 9.0 + t * 1.05) * 0.11
     + sin(dist * 3.1 - t * 0.63) * 0.07
-    + snoise(vec3(vec2(cos(angle), sin(angle)) * 1.8 + dist, t * 0.11)) * 0.22;
+    + snoise(rotNoisePos) * 0.22;
   float wSwirl = swirlTightness + 1.5 * snoise(vec3(uv * 1.05 + vec2(4.0, 2.0), t * 0.052));
   float angJ = snoise(vec3(uv * 1.55, t * 0.065)) * 0.62;
-  float swirlAngle = angle + dist * wSwirl - rot + angJ;
+  float swirlAngle = angle + dist * wSwirl - swirlRot + angJ;
 
   // 소용돌이 래핑을 약하게(띠가 촘촘해 보이지 않게)
   vec2 polarWide = vec2(dist * 1.4, swirlAngle * 1.1);
@@ -183,6 +186,8 @@ void main() {
   // 가장자리 비네팅(모서리/상단이 더 어둡게) + 약한 구름 덩어리
   float vignette = 1.0 - smoothstep(0.05, 0.95, dist);
   nebulaCloud = smoothstep(0.15, 0.98, nebulaCloud) * vignette;
+  // 비네팅·노이즈 조합으로 면 전체 알파/밀도가 붕괴되지 않게 바닥 유지
+  nebulaCloud = max(nebulaCloud, 0.07);
 
   // 나선 팔: cos 한 줄기(날카로운 청색 능선) 방지 → 위상 왜곡 + 이중 주파 블렌드 + 완만한 pow
   float spinePhase = armCount * swirlAngle + dist * 2.6;
@@ -193,7 +198,7 @@ void main() {
   float armWave = mix(aA, aB, 0.38);
   float armSoft = armWave * 0.5 + 0.5;
   float armPeak = pow(clamp(armSoft, 0.0, 1.0), 1.18);
-  float armMask = smoothstep(0.22, 0.88, armPeak);
+  float armMask = smoothstep(0.08, 0.92, armPeak);
   float armBlend = mix(armSoft, armPeak, 0.52);
   float lane = smoothstep(0.18, 0.78, dustBand) * (0.35 + 0.65 * armBlend);
 
@@ -212,30 +217,23 @@ void main() {
   float armWeight = 0.18 + 0.82 * armMask;
   float density = clamp(band * (0.55 + 0.45 * cluster) * armWeight, 0.0, 1.0);
 
-  // 딥 → 더스트 → 시안 하이라이트 (팔 자체는 직접 더하지 않음)
-  baseCol = mix(baseCol, colDeep, density * 0.55);
-  baseCol = mix(baseCol, colDust, density * 0.85);
-  baseCol = mix(baseCol, colCyan, density * (0.22 + 0.28 * cluster));
+  // 밀도 영역: 밝은 블루 → 흰색 그라데이션
+  baseCol = mix(baseCol, colDust, density * 0.65);
+  baseCol = mix(baseCol, colHighlight, density * (0.45 + 0.35 * cluster));
 
-  // 팔 하이라이트: 연속 가스 느낌(선 재등장 방지) — 노이즈로 밀도 변조
+  // 나선팔 하이라이트: 완전 흰색으로 강하게
   float armGlow = armMask * smoothstep(0.06, 0.72, nebulaCloud);
-  float armBreakup = 0.45 + 0.55 * snoise(vec3(uv * 5.5, t * 0.09));
+  float armBreakup = 0.5 + 0.5 * snoise(vec3(uv * 5.5, t * 0.09));
   float armGlowM = armGlow * armBreakup;
-  baseCol = mix(baseCol, colCyan, armGlowM * 0.32);
-  baseCol = mix(baseCol, colHighlight, armGlowM * 0.18);
+  baseCol = mix(baseCol, colHighlight, armGlowM * 0.82);
 
-  // 보라/마젠타 톤: 띠 내부 클러스터에만 국소적으로
-  float purpleMask = cluster * density * smoothstep(0.15, 0.55, nebulaCloud);
-  baseCol = mix(baseCol, colPurple, purpleMask * 0.08);
-
-  // 먼지 헤일로(팔=암시): 팔 주변에만 약하게 퍼지는 구름
+  // 먼지 헤일로: 흰색 위주
   float dustiness = smoothstep(0.35, 0.95, snoise(vec3(uv * 5.0, t * 0.012)) * 0.5 + 0.5);
   float halo = (0.3 + 0.7 * cluster) * density * dustiness;
-  baseCol = mix(baseCol, colCyan, halo * 0.12);
-  baseCol = mix(baseCol, colHighlight, halo * 0.06);
+  baseCol = mix(baseCol, colHighlight, halo * 0.18);
 
-  float rim = smoothstep(0.28, 0.52, dist);
-  baseCol = mix(baseCol, colDeep, rim * 0.08);
+  float rim = smoothstep(0.32, 0.58, dist);
+  baseCol = mix(baseCol, colDeep, rim * 0.06);
 
   // 별/반짝이: 다층(미세점 다량 + 중간점 + 큰 스파이크 극소량) + 색/크기 변주
   float starArmBoost = 0.28 + 0.72 * density;
@@ -338,21 +336,19 @@ void main() {
 
   vec3 rgb = (baseCol + starCol) * glowStrength;
 
-  // 바디: 균일 청색 밴딩(날카로운 원형 띠) 줄이고 은은하게만
-  const vec3 bodyBlue = vec3(0.26, 0.62, 0.96);
-  float bodyN = snoise(vec3(uv * 2.1, t * 0.02)) * 0.5 + 0.5;
-  float bodyMask = (1.0 - smoothstep(0.1, 0.58, dist)) * (0.72 + 0.28 * bodyN);
-  rgb = mix(rgb, bodyBlue, bodyMask * 0.07);
-  float coreWhiteHalo = exp(-dist * 6.8);
-  rgb = mix(rgb, colHighlight, coreWhiteHalo * 0.34);
-  rgb = mix(rgb, colCyan, nebulaCloud * bodyMask * 0.18);
+  // 코어: 중심부를 밝은 흰색으로 (레퍼런스처럼 중앙이 환하게)
+  float coreWhiteHalo = exp(-dist * 5.5);
+  rgb = mix(rgb, colHighlight, coreWhiteHalo * 0.55);
+  // 가장자리만 살짝 하늘색
+  float edgeTint = smoothstep(0.2, 0.55, dist) * (1.0 - smoothstep(0.55, 0.75, dist));
+  rgb = mix(rgb, colBg1, edgeTint * 0.12);
 
   float baseAlpha = (1.0 - smoothstep(0.38, 0.72, dist)) * 0.55;
   float emissiveMask = clamp(density * 1.4, 0.0, 1.0);
-  float emissiveAlpha = 0.18 + emissiveMask * 0.62;
+  float emissiveAlpha = 0.22 + emissiveMask * 0.58;
   float alpha = max(baseAlpha, emissiveAlpha);
   alpha = min(alpha, 0.9);
-  alpha = max(alpha, 0.08);
+  alpha = max(alpha, 0.2);
 
   gl_FragColor = vec4(rgb, alpha);
 }
