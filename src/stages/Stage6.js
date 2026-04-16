@@ -27,6 +27,8 @@ const STAGE6_POSTER_MODAL_HIDE_EVENT = "gum:stage6PosterModal:hide";
 const STAGE6_SUBTITLE_SEQUENCE_EVENT = "gum:stage6-subtitle:sequence";
 const STAGE6_NAME_MODAL_SHOW_EVENT = "gum:stage6-name-modal:show";
 const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
+const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
+const STAGE6_INTERACTION_UNLOCK_EVENT = "gum:stage6-interaction-unlock";
 const INT_PREFIX = "INT_";
 const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
 const ATM_OBJECT_NAME = "OBJ_ATM";
@@ -64,6 +66,8 @@ export function Stage6() {
   let cameraRef = null;
   let onPointerDown = null;
   let onPointerMove = null;
+  let onInteractionLock = null;
+  let onInteractionUnlock = null;
   let interactedCount = 0;
   const interactedTargets = new Set();
   let isAtmActivated = false;
@@ -73,6 +77,7 @@ export function Stage6() {
   const atmEmissiveMaterials = [];
   let atmEmissiveProgress = 0;
   let atmEmissiveTarget = 0;
+  let isSceneInteractionLocked = false;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -181,6 +186,44 @@ export function Stage6() {
       window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
     };
     airportAnnounceIntroAudio.play().catch(() => {});
+  }
+
+  function playAirplaneCallSignOnce(onStarted) {
+    if (!airplaneCallSignAudio) {
+      airplaneCallSignAudio = new window.Audio();
+      airplaneCallSignAudio.preload = "auto";
+      airplaneCallSignAudio.src = resolvePublicAssetUrl(
+        "/static/sounds/airport/airplane_call_sign.mp3",
+      );
+    }
+    if (airplaneCallSignTimeoutId) {
+      window.clearTimeout(airplaneCallSignTimeoutId);
+      airplaneCallSignTimeoutId = 0;
+    }
+    isAirportChimeVisible = false;
+    airplaneCallSignAudio.onplay = () => {
+      window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_SHOW_EVENT));
+      isAirportChimeVisible = true;
+      window.setTimeout(() => {
+        onStarted?.();
+      }, 1000);
+    };
+    airplaneCallSignAudio.ontimeupdate = null;
+    airplaneCallSignAudio.onended = () => {
+      if (isAirportChimeVisible) {
+        window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
+        isAirportChimeVisible = false;
+      }
+    };
+    airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
+    airplaneCallSignAudio.currentTime = 0;
+    airplaneCallSignAudio.play().catch(() => {
+      if (isAirportChimeVisible) {
+        window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
+        isAirportChimeVisible = false;
+      }
+      onStarted?.();
+    });
   }
 
   function scheduleAirplaneCallSign() {
@@ -307,16 +350,18 @@ export function Stage6() {
     if (isAtmActivated) return;
     isAtmActivated = true;
     atmEmissiveTarget = 1;
-    dispatchStage6SubtitleSequence([
-      {
-        text: "탑승 수속이 시작되었습니다.",
-        holdMs: 2000,
-      },
-      {
-        text: "키오스크에서 체크인을 완료해주세요.",
-        holdMs: 2000,
-      },
-    ]);
+    playAirplaneCallSignOnce(() => {
+      dispatchStage6SubtitleSequence([
+        {
+          text: "탑승 수속이 시작되었습니다.",
+          holdMs: 2000,
+        },
+        {
+          text: "키오스크에서 체크인을 완료해주세요.",
+          holdMs: 2000,
+        },
+      ]);
+    });
   }
 
   function registerNonAtmInteraction(hit) {
@@ -476,10 +521,23 @@ export function Stage6() {
       atmEmissiveProgress = 0;
       atmRootRef = null;
       atmEmissiveMaterials.length = 0;
+      isSceneInteractionLocked = false;
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
+      onInteractionLock = () => {
+        isSceneInteractionLocked = true;
+      };
+      onInteractionUnlock = () => {
+        isSceneInteractionLocked = false;
+      };
+      window.addEventListener(STAGE6_INTERACTION_LOCK_EVENT, onInteractionLock);
+      window.addEventListener(
+        STAGE6_INTERACTION_UNLOCK_EVENT,
+        onInteractionUnlock,
+      );
       window.addEventListener("keydown", handleKeyDown, { capture: true });
       onPointerDown = (event) => {
         if (event.button !== 0) return;
+        if (isSceneInteractionLocked) return;
         const hit = getPointerHitTarget(event);
         if (!hit) return;
         console.log(`[Stage6] INT click: ${hit.intName}`);
@@ -517,6 +575,10 @@ export function Stage6() {
       };
       canvas.addEventListener("pointerdown", onPointerDown, { capture: true });
       onPointerMove = (event) => {
+        if (isSceneInteractionLocked) {
+          canvas.style.cursor = "default";
+          return;
+        }
         const hit = getPointerHitTarget(event);
         canvas.style.cursor = hit ? "pointer" : "default";
       };
@@ -657,10 +719,24 @@ export function Stage6() {
         canvasRef.removeEventListener("pointermove", onPointerMove);
         canvasRef.style.cursor = "default";
       }
+      if (onInteractionLock) {
+        window.removeEventListener(
+          STAGE6_INTERACTION_LOCK_EVENT,
+          onInteractionLock,
+        );
+      }
+      if (onInteractionUnlock) {
+        window.removeEventListener(
+          STAGE6_INTERACTION_UNLOCK_EVENT,
+          onInteractionUnlock,
+        );
+      }
       canvasRef = null;
       cameraRef = null;
       onPointerDown = null;
       onPointerMove = null;
+      onInteractionLock = null;
+      onInteractionUnlock = null;
       interactedCount = 0;
       interactedTargets.clear();
       isAtmActivated = false;
@@ -668,6 +744,7 @@ export function Stage6() {
       atmEmissiveMaterials.length = 0;
       atmEmissiveProgress = 0;
       atmEmissiveTarget = 0;
+      isSceneInteractionLocked = false;
       intRaycastMeshes.length = 0;
       objects.forEach((obj) => {
         scene.remove(obj);

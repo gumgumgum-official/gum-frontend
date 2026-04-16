@@ -10,6 +10,8 @@ const STAGE6_NAME_MODAL_SHOW_EVENT = "gum:stage6-name-modal:show";
 const STAGE6_NAME_MODAL_HIDE_EVENT = "gum:stage6-name-modal:hide";
 const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
 const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
+const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
+const STAGE6_INTERACTION_UNLOCK_EVENT = "gum:stage6-interaction-unlock";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
 
@@ -25,10 +27,20 @@ export function Stage6BoardingOverlay() {
   const timersRef = useRef([]);
   const sequenceTokenRef = useRef(0);
   const latestPassengerNameRef = useRef("");
+  const showSubtitleRef = useRef(false);
+  const subtitleTextRef = useRef("");
 
   useEffect(() => {
     latestPassengerNameRef.current = passengerName;
   }, [passengerName]);
+
+  useEffect(() => {
+    showSubtitleRef.current = showSubtitle;
+  }, [showSubtitle]);
+
+  useEffect(() => {
+    subtitleTextRef.current = subtitleText;
+  }, [subtitleText]);
 
   useEffect(() => {
     if (!isNameModalOpen) return;
@@ -71,7 +83,9 @@ export function Stage6BoardingOverlay() {
     };
 
     const hideSubtitleNow = () => {
-      if (!showSubtitle && !subtitleText) return Promise.resolve(true);
+      if (!showSubtitleRef.current && !subtitleTextRef.current) {
+        return Promise.resolve(true);
+      }
       const token = sequenceTokenRef.current;
       setFadeOutSubtitle(true);
       return new Promise((resolve) => {
@@ -164,6 +178,7 @@ export function Stage6BoardingOverlay() {
       setIsNameModalOpen(false);
       setIsOverlayOpen(false);
       setNameInputValue("");
+      window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
 
     window.addEventListener(AIRPORT_SUBTITLE_SHOW_EVENT, onAirportSubtitleShow);
@@ -224,7 +239,7 @@ export function Stage6BoardingOverlay() {
       );
       window.removeEventListener(STAGE6_BOARDING_RESET_EVENT, onBoardingReset);
     };
-  }, [showSubtitle, subtitleText]);
+  }, []);
 
   useEffect(() => {
     if (!isNameModalOpen && !isOverlayOpen) return;
@@ -248,11 +263,12 @@ export function Stage6BoardingOverlay() {
     setPassengerName(nextPassengerName);
     setNameInputValue(nextPassengerName);
     setIsNameModalOpen(false);
+    window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
 
     window.dispatchEvent(
       new CustomEvent(STAGE6_SUBTITLE_SHOW_EVENT, {
         detail: {
-          text: `${nextPassengerName}님, 탑승권이 발급되었습니다. 껌딱지 나라로 출발합니다 ✈`,
+          text: `${nextPassengerName}님, 탑승권이 발급되었습니다.\n일상으로 출발합니다 ✈`,
         },
       }),
     );
@@ -265,6 +281,7 @@ export function Stage6BoardingOverlay() {
 
   const boardFlight = () => {
     setIsOverlayOpen(false);
+    window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
   };
 
