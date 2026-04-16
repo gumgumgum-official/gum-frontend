@@ -7,8 +7,11 @@ import { STAGE3_AUDIO_CONFIG } from "./stage3/stage3AudioConfig.js";
 
 /** @type {import("../../types.js").Stage3Config} */
 export const STAGE3_CONFIG = {
-  /** 낙하 글자가 처음 뜨는 월드 XZ (씬 단위; 섬/월드 원점 기준) — 조정 시 여기만 바꿔도 됨 */
-  letterSpawnXZ: { x: 0, z: 0 },
+  /**
+   * 낙하 글자 시작 XZ (월드; island8 GLB 원점 기준).
+   * island8_portal_fixed: `INT_Tent`·`OBJ_Fountain`(분수) 바운딩 중점 근처.
+   */
+  letterSpawnXZ: { x: 8.56, z: -33.72 },
   camera: {
     fov: 42.0,
     near: 0.1,
