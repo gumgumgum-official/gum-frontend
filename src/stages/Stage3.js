@@ -228,6 +228,8 @@ export function Stage3() {
     active: false,
     transitioning: false,
     completed: false,
+    /** 인트로에서 위에서 내려다보는 카메라 포즈를 한 번이라도 적용했으면 true */
+    introTopViewCommitted: false,
     elapsed: 0,
     transitionElapsed: 0,
     /** 인트로 회전 구간 길이 — 클수록 같은 sweep 각에서 더 천천히 회전 */
@@ -272,6 +274,7 @@ export function Stage3() {
     cameraIntro.active = true;
     cameraIntro.transitioning = false;
     cameraIntro.completed = false;
+    cameraIntro.introTopViewCommitted = false;
     cameraIntro.elapsed = 0;
     cameraIntro.transitionElapsed = 0;
     cameraIntro.center.copy(center);
@@ -319,6 +322,12 @@ export function Stage3() {
         cameraIntro.lookAtY,
         cameraIntro.center.z,
       );
+      if (!cameraIntro.introTopViewCommitted) {
+        cameraIntro.introTopViewCommitted = true;
+        if (isStage3Active) {
+          playStage3IntroAudioTwice();
+        }
+      }
 
       if (
         t >= 1 &&
@@ -573,6 +582,9 @@ export function Stage3() {
         stage3GroundY,
         assignedSvgUrl,
         assignedWorryId,
+        {
+          holdFallUntilIntroTopView: !cameraIntro.completed,
+        },
       );
     }
   }
@@ -1278,8 +1290,19 @@ export function Stage3() {
     letterState = null;
   }
 
-  async function loadLetterFromSvgUrl(scene, camera, groundY, svgUrl, debugId) {
+  /**
+   * @param {{ holdFallUntilIntroTopView?: boolean }} [letterOptions]
+   */
+  async function loadLetterFromSvgUrl(
+    scene,
+    camera,
+    groundY,
+    svgUrl,
+    debugId,
+    letterOptions = {},
+  ) {
     if (!svgUrl) return;
+    const { holdFallUntilIntroTopView = false } = letterOptions;
 
     // 로딩 중 중복 요청이 들어오면 마지막 요청만 저장했다가 이어서 처리
     if (letterLoadInProgress) {
@@ -1389,7 +1412,9 @@ export function Stage3() {
           const landingY = groundY + letterBottomOffset;
 
           const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
-          group.position.set(0, startY, 0);
+          const spawnX = config.letterSpawnXZ?.x ?? 0;
+          const spawnZ = config.letterSpawnXZ?.z ?? 0;
+          group.position.set(spawnX, startY, spawnZ);
           group.rotation.set(0, 0, 0);
           scene.add(group);
 
@@ -1400,8 +1425,10 @@ export function Stage3() {
 
           letterState = {
             group,
+            holdFallUntilIntroTopView,
+            initialVyDeferred: initialVy,
             velocity: {
-              y: initialVy,
+              y: holdFallUntilIntroTopView ? 0 : initialVy,
               rotationX: 0,
               rotationY: 0,
               rotationZ: 0,
@@ -1437,7 +1464,10 @@ export function Stage3() {
     }
   }
 
-  async function loadLatestLetter(scene, camera, groundY) {
+  /**
+   * @param {{ holdFallUntilIntroTopView?: boolean }} [letterOptions]
+   */
+  async function loadLatestLetter(scene, camera, groundY, letterOptions = {}) {
     const metadata = await getLatestHandwritingMetadata();
     if (!metadata?.url) {
       return;
@@ -1448,6 +1478,7 @@ export function Stage3() {
       groundY,
       metadata.url,
       metadata.id,
+      letterOptions,
     );
   }
 
@@ -1457,8 +1488,8 @@ export function Stage3() {
       const s = letterState;
       const speedFactor = 0.25 + Math.random() * 0.75;
       const startY = s.landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
-      const startX = 0;
-      const startZ = 0;
+      const startX = config.letterSpawnXZ?.x ?? 0;
+      const startZ = config.letterSpawnXZ?.z ?? 0;
       const gravity = STAGE3_GRAVITY * speedFactor;
       const initialVy = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
 
@@ -1483,6 +1514,7 @@ export function Stage3() {
           stage3GroundY,
           assignedSvgUrl,
           assignedWorryId,
+          { holdFallUntilIntroTopView: false },
         );
       } else {
         loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
@@ -1493,6 +1525,14 @@ export function Stage3() {
   function updateLetter(delta, camera) {
     if (!letterState || letterState.landed) return;
     const s = letterState;
+    if (s.holdFallUntilIntroTopView) {
+      if (cameraIntro.introTopViewCommitted || cameraIntro.completed) {
+        s.holdFallUntilIntroTopView = false;
+        s.velocity.y = s.initialVyDeferred;
+      } else {
+        return;
+      }
+    }
     const nextY = s.group.position.y + s.velocity.y * delta;
     if (nextY <= s.landingY) {
       // 첫 충돌 시 한 번만 가볍게 바운스해서 무게감을 표현
@@ -2161,9 +2201,6 @@ export function Stage3() {
         getIsActive: () => isStage3Active,
         onReady: ({ model, center, backgroundMaxY, backgroundBounds }) => {
           backgroundModel = model;
-          if (isStage3Active) {
-            playStage3IntroAudioTwice();
-          }
           debugControls.setOrbitTarget(center);
           cameraRef = this.camera;
           stage3GroundY = backgroundMaxY;
@@ -2174,6 +2211,7 @@ export function Stage3() {
               backgroundMaxY,
               assignedSvgUrl,
               assignedWorryId,
+              { holdFallUntilIntroTopView: true },
             );
           } else {
             // 우선순위: REST busy(1순위)를 기다리고,
@@ -2181,7 +2219,9 @@ export function Stage3() {
             const stageCamera = this.camera;
             monitorFallbackTimeoutId = window.setTimeout(() => {
               if (monitorRestAssignmentReceived || assignedSvgUrl) return;
-              loadLatestLetter(scene, stageCamera, backgroundMaxY);
+              loadLatestLetter(scene, stageCamera, backgroundMaxY, {
+                holdFallUntilIntroTopView: false,
+              });
             }, STAGE3_MONITOR_FALLBACK_TIMEOUT_MS);
           }
 
@@ -2255,6 +2295,7 @@ export function Stage3() {
       if (portalVortexMaterial) {
         portalVortexMaterial.uniforms.uTime.value += delta;
       }
+      updateCameraIntro(delta);
       updateLetter(delta, this.camera);
       updateFragments(delta);
       updateSpawnedIceCreams(delta);
@@ -2265,7 +2306,6 @@ export function Stage3() {
       }
       updateStreetLightProximitySound();
       updateClockProximitySound();
-      updateCameraIntro(delta);
       if (gumFollowers) {
         gumFollowers.update(delta);
       }
@@ -2277,6 +2317,7 @@ export function Stage3() {
       cameraIntro.active = false;
       cameraIntro.transitioning = false;
       cameraIntro.completed = false;
+      cameraIntro.introTopViewCommitted = false;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,

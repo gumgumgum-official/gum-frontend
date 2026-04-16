@@ -171,7 +171,7 @@ export function stopStage3IntroAudio() {
 }
 
 /**
- * 섬 GLB가 씬에 추가된 뒤(onReady) 호출. 최초 1회만 재생(기존 StageManager 동작 유지).
+ * 인트로 첫 프레임에서 호출. 최초 1회만 재생.
  */
 export function playStage3IntroAudioTwice() {
   if (hasPlayedStage3Intro) return;
