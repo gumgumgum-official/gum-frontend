@@ -610,6 +610,16 @@ export function Stage2() {
       realtimeSubscription = subscribeHandwritingRealtime({
         onNewHandwriting: (metadata) => {
           void ingestHandwriting(metadata, "realtime");
+          createFallingText(
+            metadata,
+            scene,
+            this.camera,
+            fallingTexts,
+            {
+              initial: false,
+            },
+            () => islandBounds,
+          );
         },
         onError: (error) => {
           console.error("[Stage2] Handwriting realtime error:", error);
