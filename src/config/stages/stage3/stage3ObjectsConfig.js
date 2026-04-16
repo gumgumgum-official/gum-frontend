@@ -122,7 +122,6 @@ export const STAGE3_OBJECTS_CONFIG = {
   streetLight: {
     streetLightSoundPaths: [
       "/static/sounds/light/the_sound_of_a_light_1.mp3",
-      "/static/sounds/light/the_sound_of_a_light_2.mp3",
       "/static/sounds/light/the_sound_of_a_light_3.mp3",
     ],
     streetLightSoundVolume: 0.5,
