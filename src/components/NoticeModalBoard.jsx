@@ -32,7 +32,7 @@ const POSTER_BASE = {
  * @param {function} props.onClose
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
-  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "lost" | "vote" | null
+  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "icecream" | null
 
   useEffect(() => {
     if (!isOpen) return;
@@ -427,28 +427,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       <img
                         src={NOTICE_POSTER.party}
                         alt="껌딱지 마을 잔치"
-                        draggable={false}
-                        style={{
-                          width: "100%",
-                          maxHeight: "80vh",
-                          objectFit: "contain",
-                          display: "block",
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {zoomedPoster === "lost" && (
-                    <div
-                      style={{
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
-                      }}
-                    >
-                      <img
-                        src={NOTICE_POSTER.bestGum}
-                        alt="투표 포스터"
                         draggable={false}
                         style={{
                           width: "100%",
