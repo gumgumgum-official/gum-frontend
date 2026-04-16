@@ -1292,7 +1292,7 @@ export function Stage3() {
     removeAllLetterGroupsFromScene(scene);
 
     let nextSvgUrl = svgUrl;
-    let nextDebugId = debugId;
+    let _nextDebugId = debugId;
 
     try {
       // pending을 포함해 "하나라도 더 있으면" 순차 처리
@@ -1300,7 +1300,7 @@ export function Stage3() {
       while (nextSvgUrl) {
         const currentSvgUrl = nextSvgUrl;
         nextSvgUrl = null;
-        nextDebugId = null;
+        _nextDebugId = null;
 
         try {
           let shapes = await loadSVGShapes(currentSvgUrl);
@@ -1420,7 +1420,7 @@ export function Stage3() {
         // while 내부에서 계속 로딩이 필요할 경우 pending을 소비
         if (pendingSvgUrlToLoad) {
           nextSvgUrl = pendingSvgUrlToLoad;
-          nextDebugId = pendingSvgUrlDebugId;
+          _nextDebugId = pendingSvgUrlDebugId;
           pendingSvgUrlToLoad = null;
           pendingSvgUrlDebugId = null;
           removeAllLetterGroupsFromScene(scene);
