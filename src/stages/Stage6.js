@@ -119,7 +119,6 @@ export function Stage6() {
     if (!airportAnnounceIntroAudio) {
       airportAnnounceIntroAudio = new window.Audio();
       airportAnnounceIntroAudio.preload = "auto";
-      airportAnnounceIntroAudio.volume = AIRPORT_ANNOUNCE_INTRO_VOLUME;
       airportAnnounceIntroAudio.src = resolvePublicAssetUrl(
         "/static/sounds/airport/airport_announce_intro.mp3",
       );
@@ -151,7 +150,6 @@ export function Stage6() {
       if (!airplaneCallSignAudio) {
         airplaneCallSignAudio = new window.Audio();
         airplaneCallSignAudio.preload = "auto";
-        airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
         airplaneCallSignAudio.src = resolvePublicAssetUrl(
           "/static/sounds/airport/airplane_call_sign.mp3",
         );
@@ -252,15 +250,6 @@ export function Stage6() {
 
           objects.push(model);
           scene.add(model);
-
-          console.log("✅ Stage6 배경 로드 완료");
-        },
-        onProgress: (xhr) => {
-          if (xhr.total > 0) {
-            console.log(
-              `Stage6 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-            );
-          }
         },
         onError: (err) => console.error("❌ Stage6 배경 로드 에러:", err),
       });
@@ -290,7 +279,6 @@ export function Stage6() {
             });
             objects.push(model);
             scene.add(model);
-            console.log("✅ Stage6 bench 로드 완료");
           },
           onError: (err) =>
             console.warn("❌ Stage6 bench 로드 실패:", benchConfig.path, err),
@@ -328,15 +316,8 @@ export function Stage6() {
 
             objects.push(object);
             scene.add(object);
-            console.log("✅ Stage6 커튼 FBX 로드 완료");
           },
-          (xhr) => {
-            if (xhr.total > 0) {
-              console.log(
-                `Stage6 커튼: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-              );
-            }
-          },
+          undefined,
           (err) => {
             console.error("❌ Stage6 커튼 로드 에러:", err);
           },
@@ -344,8 +325,6 @@ export function Stage6() {
       }
 
       scheduleAirplaneCallSign();
-
-      console.log("✅ Stage6 생성 완료");
     },
 
     update(delta) {
@@ -376,7 +355,6 @@ export function Stage6() {
       });
       objects.length = 0;
       scene.background = null;
-      console.log("🧹 Stage6 정리 완료");
     },
   };
 }

@@ -550,7 +550,6 @@ export function Stage2() {
               gltfs.map((g) => g.scene),
               islandModel,
             );
-            console.log("✅ Stage2 배경 로드 완료 (island/sea/sky)");
           })
           .catch((err) => console.error("❌ Stage2 배경 로드 에러:", err));
       } else {
@@ -559,13 +558,6 @@ export function Stage2() {
             const model = gltf.scene;
             applyModel(model);
             finishBackground([model], null);
-            console.log("✅ Stage2 배경 로드 완료 (단일)");
-          },
-          onProgress: (xhr) => {
-            if (xhr.total > 0)
-              console.log(
-                `Stage2 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-              );
           },
           onError: (err) => console.error("❌ Stage2 배경 로드 에러:", err),
         });
@@ -574,11 +566,6 @@ export function Stage2() {
       // Handwriting: 실시간 수신 (누적 로드는 GLB 로드 후 섬 땅 높이 적용 뒤 호출)
       realtimeSubscription = subscribeHandwritingRealtime({
         onNewHandwriting: (metadata) => {
-          console.log(
-            "[Stage2] Realtime 수신 → falling text 생성:",
-            metadata.id,
-            metadata.url,
-          );
           createFallingText(
             metadata,
             scene,
@@ -604,7 +591,6 @@ export function Stage2() {
             );
             return;
           }
-          console.log(`[Stage2] 0키: 재낙하 (${fallingTexts.length}개 글자)`);
           const spawn = getSpawnBounds(islandBounds);
           const { minX, maxX, minZ, maxZ } = spawn;
           fallingTexts.forEach((ft) => {
@@ -642,8 +628,6 @@ export function Stage2() {
       objects.push({
         dispose: () => window.removeEventListener("keydown", handleKeyDown),
       });
-
-      console.log("✅ Stage2 setup 완료");
     },
 
     update(delta) {
@@ -709,7 +693,6 @@ export function Stage2() {
       cameraRef = null;
       islandBounds = null;
       characterMoveBounds = null;
-      console.log("🧹 Stage2 정리 완료");
     },
   };
 }

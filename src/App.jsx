@@ -15,6 +15,11 @@ export function App() {
   const [fadeOutAirportSubtitle, setFadeOutAirportSubtitle] = useState(false);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const hideTimerRef = useRef(0);
+  const showAirportSubtitleRef = useRef(false);
+
+  useEffect(() => {
+    showAirportSubtitleRef.current = showAirportSubtitle;
+  }, [showAirportSubtitle]);
 
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
@@ -51,7 +56,7 @@ export function App() {
     };
 
     const hideSubtitle = () => {
-      if (!showAirportSubtitle) return;
+      if (!showAirportSubtitleRef.current) return;
       setFadeOutAirportSubtitle(true);
       if (hideTimerRef.current) {
         window.clearTimeout(hideTimerRef.current);
@@ -95,7 +100,7 @@ export function App() {
         hideSubtitle,
       );
     };
-  }, [showAirportSubtitle]);
+  }, []);
 
   useEffect(() => {
     const showChime = () => setShowAirportChime(true);

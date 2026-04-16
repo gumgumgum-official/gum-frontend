@@ -247,24 +247,11 @@ export function createCharacterController({
               characterIdleAction.setEffectiveWeight(1);
             }
             setAnimationMode("idle");
-
-            console.log(
-              `🎬 애니메이션 클립 수: walk=${clips.length}, idleSrc=${idleClips.length}, names=[${clips
-                .map((c) => c?.name || "(unnamed)")
-                .join(", ")}], idleNames=[${idleClips
-                .map((c) => c?.name || "(unnamed)")
-                .join(
-                  ", ",
-                )}], walk="${walkClip?.name ?? "-"}", idle="${idleClip?.name ?? "-"}"`,
-            );
           } else {
             console.warn("⚠️ 캐릭터 모델에 애니메이션 클립이 없습니다.");
           }
 
           scene.add(characterModel);
-          console.log(
-            `✅ Stage3 캐릭터 모델 로드 완료 (xz: ${spawnX.toFixed(2)}, ${spawnZ.toFixed(2)}, y: ${characterYPosition.toFixed(2)})`,
-          );
           inspectGLTF(gltf, "캐릭터 모델");
         },
         (err) =>

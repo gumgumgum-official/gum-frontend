@@ -21,7 +21,6 @@ import {
 } from "../utils/stages/stage3/islandStaticColliders.js";
 import { applyPortalVortexToModel } from "../utils/stages/stage3/portalVortexMaterial.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
-import { inspectModel as _inspectModel } from "../utils/common/modelInspector.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
@@ -41,7 +40,6 @@ import { getSessionId } from "../lib/session.js";
 import {
   MONITOR_POLL_MS,
   fetchMonitorCurrent,
-  getMonitorDeviceId,
   postMonitorStart,
 } from "../lib/monitorCurrentApi.js";
 import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
@@ -96,8 +94,12 @@ const ICECREAM_LAND_SOUND_PATHS = [
 const GAME_MACHINE_CLICK_SOUND_PATH =
   "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3";
 
-/** island `INT_StreetLight*` 클릭 시 — 메시·사운드는 `playStreetLightSound.js` */
+/** island `INT_StreetLight*` 근접 시 사운드 재생 */
 const STREET_LIGHT_NAME_PREFIX = "INT_StreetLight";
+const STREET_LIGHT_TRIGGER_RADIUS = 10;
+const STREET_LIGHT_TRIGGER_COOLDOWN_MS = 1500;
+const CLOCK_TRIGGER_RADIUS = 8;
+const CLOCK_TRIGGER_COOLDOWN_MS = 2000;
 
 /** 다른 스테이지 대비 Stage3만 살짝 밝게 (진입 시 가산, cleanup 시 복원) */
 const STAGE3_TONE_MAPPING_EXPOSURE_DELTA = 0.06;
@@ -150,7 +152,6 @@ export function Stage3() {
   // island2.glb 내 INT_icecream 루트 (클릭 → 스폰, cannon-es)
   let iceCreamCartRef = null;
   /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
-  let noticeRef = null;
   /** island2.glb 내 INT_gameMachine 루트 */
   let gameMachineRef = null;
   let unlistenMinigameClose = null;
@@ -200,10 +201,13 @@ export function Stage3() {
   }
   /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
   const intRaycastMeshes = [];
-  /** INT_StreetLight* 전용 (클릭 시 가로등 사운드 — INT_ 매핑 없음) */
-  const streetLightRaycastMeshes = [];
-  const streetLightRaycaster = new THREE.Raycaster();
-  const streetLightPointer = new THREE.Vector2();
+  /** INT_StreetLight* 월드 좌표 (근접 사운드 트리거용) */
+  const streetLightWorldPositions = [];
+  let wasNearStreetLight = false;
+  let lastStreetLightSoundAtMs = 0;
+  const clockWorldPositions = [];
+  let wasNearClock = false;
+  let lastClockSoundAtMs = 0;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -397,7 +401,6 @@ export function Stage3() {
   function registerIslandInteractions(islandModel) {
     intRaycastMeshes.length = 0;
     iceCreamCartRef = null;
-    noticeRef = null;
     gameMachineRef = null;
     if (unlistenMinigameClose) {
       unlistenMinigameClose();
@@ -423,8 +426,13 @@ export function Stage3() {
       const suffix = obj.name.slice(INT_PREFIX.length);
       const intTarget = intSuffixToTarget(suffix);
       if (intTarget === "gameMachine") gameMachineRef = obj;
-      if (intTarget === "notice") noticeRef = obj;
       if (intTarget === "icecream") iceCreamCartRef = obj;
+      if (intTarget === "clock") {
+        obj.updateMatrixWorld(true);
+        const worldPos = new THREE.Vector3();
+        obj.getWorldPosition(worldPos);
+        clockWorldPositions.push(worldPos);
+      }
       obj.traverse((child) => {
         if (child.isMesh) meshSet.add(child);
       });
@@ -446,16 +454,16 @@ export function Stage3() {
     }
     intRaycastMeshes.push(...meshSet);
 
-    streetLightRaycastMeshes.length = 0;
-    const streetMeshSet = new Set();
+    streetLightWorldPositions.length = 0;
+    clockWorldPositions.length = 0;
     islandModel.traverse((obj) => {
       if (typeof obj.name !== "string") return;
       if (!obj.name.startsWith(STREET_LIGHT_NAME_PREFIX)) return;
-      obj.traverse((child) => {
-        if (child.isMesh) streetMeshSet.add(child);
-      });
+      obj.updateMatrixWorld(true);
+      const worldPos = new THREE.Vector3();
+      obj.getWorldPosition(worldPos);
+      streetLightWorldPositions.push(worldPos);
     });
-    streetLightRaycastMeshes.push(...streetMeshSet);
 
     if (gameMachineRef) {
       unlistenMinigameClose = onMinigameClose(() => {
@@ -468,16 +476,11 @@ export function Stage3() {
 
     if (rootNames.length > 0 && import.meta.env.DEV) {
       const uniq = [...new Set(rootNames)];
-      console.log("[Stage3] island INT_ 노드:", uniq.join(", "));
       for (const full of uniq) {
         const suf = full.startsWith(INT_PREFIX)
           ? full.slice(INT_PREFIX.length)
           : full;
-        if (intSuffixToTarget(suf) == null) {
-          console.log(
-            `[Stage3] INT_ '${full}' → 아직 클릭 핸들러 없음 (매핑 추가 또는 GLB 이름 변경)`,
-          );
-        }
+        if (intSuffixToTarget(suf) == null) continue;
       }
     }
     if (!iceCreamCartRef && import.meta.env.DEV) {
@@ -511,23 +514,6 @@ export function Stage3() {
     return null;
   }
 
-  function getStreetLightHit(clientX, clientY) {
-    if (!cameraRef || !canvasRef || !streetLightRaycastMeshes.length) {
-      return false;
-    }
-    const rect = canvasRef.getBoundingClientRect();
-    const rw = rect.width || 1;
-    const rh = rect.height || 1;
-    streetLightPointer.x = ((clientX - rect.left) / rw) * 2 - 1;
-    streetLightPointer.y = -((clientY - rect.top) / rh) * 2 + 1;
-    streetLightRaycaster.setFromCamera(streetLightPointer, cameraRef);
-    const hits = streetLightRaycaster.intersectObjects(
-      streetLightRaycastMeshes,
-      false,
-    );
-    return hits.length > 0;
-  }
-
   let _pointerMoveRafId = 0;
   let _lastPointerEvent = null;
   function handlePointerMove(event) {
@@ -539,8 +525,7 @@ export function Stage3() {
       const e = _lastPointerEvent;
       if (!e || !canvasRef) return;
       const target = getPointerHitTarget(e.clientX, e.clientY);
-      const onStreetLight = getStreetLightHit(e.clientX, e.clientY);
-      canvasRef.style.cursor = target || onStreetLight ? "pointer" : "default";
+      canvasRef.style.cursor = target ? "pointer" : "default";
     });
   }
 
@@ -589,10 +574,6 @@ export function Stage3() {
         assignedSvgUrl,
         assignedWorryId,
       );
-    } else {
-      console.log(
-        "[Stage3] monitor busy 수신 (배경 아직 준비 전) → background ready 시 로드",
-      );
     }
   }
 
@@ -630,9 +611,6 @@ export function Stage3() {
     monitorPollIntervalId = window.setInterval(() => {
       void pollMonitorCurrent();
     }, MONITOR_POLL_MS);
-    console.log(
-      `[Stage3] gum_server REST 폴링 시작 (${MONITOR_POLL_MS}ms), monitor="${getMonitorDeviceId()}"`,
-    );
   }
 
   function stopMonitorPolling() {
@@ -683,11 +661,6 @@ export function Stage3() {
     for (const g of results) {
       if (g?.scene) iceCreamTemplates.push({ scene: g.scene });
     }
-    if (import.meta.env.DEV) {
-      console.log(
-        `[Stage3] 아이스크림 템플릿 preload 완료: ${iceCreamTemplates.length}개`,
-      );
-    }
   }
 
   /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
@@ -724,12 +697,6 @@ export function Stage3() {
   /** island INT_* 클릭 핸들러 */
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
-    if (getStreetLightHit(event.clientX, event.clientY)) {
-      event.preventDefault();
-      event.stopPropagation();
-      playRandomStreetLightClickSound();
-      return;
-    }
     const target = getPointerHitTarget(event.clientX, event.clientY);
     if (!target) {
       if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
@@ -791,11 +758,61 @@ export function Stage3() {
       window.dispatchEvent(new CustomEvent("gum:wellClick"));
       return;
     }
-    if (target === "clock") {
-      playRandomClockClickSound();
-      window.dispatchEvent(new CustomEvent("gum:clockClick"));
+    if (target === "clock") return;
+  }
+
+  function updateStreetLightProximitySound() {
+    const userPos = character?.getPosition?.();
+    if (!userPos || streetLightWorldPositions.length === 0) {
+      wasNearStreetLight = false;
       return;
     }
+    const radiusSq = STREET_LIGHT_TRIGGER_RADIUS * STREET_LIGHT_TRIGGER_RADIUS;
+    const isNear = streetLightWorldPositions.some((p) => {
+      const dx = p.x - userPos.x;
+      const dz = p.z - userPos.z;
+      return dx * dx + dz * dz <= radiusSq;
+    });
+    if (!isNear) {
+      wasNearStreetLight = false;
+      return;
+    }
+    const now = Date.now();
+    if (
+      !wasNearStreetLight &&
+      now - lastStreetLightSoundAtMs >= STREET_LIGHT_TRIGGER_COOLDOWN_MS
+    ) {
+      playRandomStreetLightClickSound();
+      lastStreetLightSoundAtMs = now;
+    }
+    wasNearStreetLight = true;
+  }
+
+  function updateClockProximitySound() {
+    const userPos = character?.getPosition?.();
+    if (!userPos || clockWorldPositions.length === 0) {
+      wasNearClock = false;
+      return;
+    }
+    const radiusSq = CLOCK_TRIGGER_RADIUS * CLOCK_TRIGGER_RADIUS;
+    const isNear = clockWorldPositions.some((p) => {
+      const dx = p.x - userPos.x;
+      const dz = p.z - userPos.z;
+      return dx * dx + dz * dz <= radiusSq;
+    });
+    if (!isNear) {
+      wasNearClock = false;
+      return;
+    }
+    const now = Date.now();
+    if (
+      !wasNearClock &&
+      now - lastClockSoundAtMs >= CLOCK_TRIGGER_COOLDOWN_MS
+    ) {
+      playRandomClockClickSound();
+      lastClockSoundAtMs = now;
+    }
+    wasNearClock = true;
   }
 
   let _iceCreamGroundMat = null;
@@ -907,11 +924,6 @@ export function Stage3() {
       debugMesh.renderOrder = 999;
       sceneRef.add(debugMesh);
       spawnedIceCreams.push({ group: debugMesh, body: null });
-      if (import.meta.env.DEV) {
-        console.log(
-          `[Stage3][DEBUG] 네모 스폰: (${debugMesh.position.x.toFixed(2)}, ${debugMesh.position.y.toFixed(2)}, ${debugMesh.position.z.toFixed(2)})`,
-        );
-      }
       return;
     }
     initIceCreamPhysics();
@@ -1287,7 +1299,6 @@ export function Stage3() {
       // (연속 REST 할당에도 마지막 SVG가 반영되도록)
       while (nextSvgUrl) {
         const currentSvgUrl = nextSvgUrl;
-        const currentDebugId = nextDebugId;
         nextSvgUrl = null;
         nextDebugId = null;
 
@@ -1402,10 +1413,6 @@ export function Stage3() {
             landed: false,
             hitCount: 0,
           };
-
-          console.log(
-            `[Stage3] 글자 낙하 시작 (debugId=${currentDebugId ?? "unknown"})`,
-          );
         } catch (e) {
           console.warn("[Stage3] svg 로드 실패:", e);
         }
@@ -1423,9 +1430,6 @@ export function Stage3() {
       }
       const metadata = await getLatestHandwritingMetadata();
       if (!metadata?.url) {
-        if (import.meta.env.DEV) {
-          console.log("[Stage3] 표시할 handwriting 없음");
-        }
         return;
       }
       let shapes = await loadSVGShapes(metadata.url);
@@ -1535,9 +1539,6 @@ export function Stage3() {
         landed: false,
         hitCount: 0,
       };
-      if (import.meta.env.DEV) {
-        console.log("[Stage3] 최신 글자 1개 낙하 시작 (2배 크기)");
-      }
     } catch (e) {
       if (import.meta.env.DEV) {
         console.warn("[Stage3] 글자 로드 실패:", e);
@@ -1550,7 +1551,6 @@ export function Stage3() {
   async function loadLatestLetter(scene, camera, groundY) {
     const metadata = await getLatestHandwritingMetadata();
     if (!metadata?.url) {
-      console.log("[Stage3] 표시할 handwriting 없음");
       return;
     }
     await loadLetterFromSvgUrl(
@@ -1584,9 +1584,6 @@ export function Stage3() {
       s.bounces = 0;
       s.landed = false;
       s.hitCount = 0;
-      if (import.meta.env.DEV) {
-        console.log("[Stage3] 0키: 글자 재낙하");
-      }
       return;
     }
     if (sceneRef && cameraRef && stage3GroundY > 0) {
@@ -1598,12 +1595,8 @@ export function Stage3() {
           assignedSvgUrl,
           assignedWorryId,
         );
-        console.log("[Stage3] 0키: 할당 글자 로드 후 낙하");
       } else {
         loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
-        if (import.meta.env.DEV) {
-          console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
-        }
       }
     }
   }
@@ -2283,10 +2276,6 @@ export function Stage3() {
             playStage3IntroAudioTwice();
           }
           debugControls.setOrbitTarget(center);
-          if (import.meta.env.DEV) {
-            console.log("✅ Stage3 배경 모델 로드 완료");
-          }
-
           cameraRef = this.camera;
           stage3GroundY = backgroundMaxY;
           if (assignedSvgUrl) {
@@ -2318,19 +2307,7 @@ export function Stage3() {
               )
             : [];
           if (import.meta.env.DEV) {
-            if (!useStatic) {
-              console.log(
-                "[Stage3] 정적 장애물 충돌 비활성화(model.useStaticObstacleColliders). 바운딩만 사용.",
-              );
-            } else {
-              const dropped =
-                rawColliders.length - islandStaticColliders.length;
-              console.log(
-                `[Stage3] INT_/OBJ_ 충돌 AABB: ${islandStaticColliders.length}개 적용` +
-                  (dropped > 0 ? ` (${dropped}개 넓은 슬라브 후보 제외)` : "") +
-                  " (INT_Portal 제외)",
-              );
-            }
+            // dev-only collider diagnostics intentionally muted to reduce console noise.
           }
           character.setup(
             backgroundMaxY,
@@ -2380,7 +2357,7 @@ export function Stage3() {
       });
 
       if (import.meta.env.DEV) {
-        console.log("✅ Stage3 생성 완료");
+        // dev-only setup diagnostics intentionally muted to reduce console noise.
       }
     },
 
@@ -2397,6 +2374,8 @@ export function Stage3() {
           skipCameraFollow: cameraIntro.active || !cameraIntro.completed,
         });
       }
+      updateStreetLightProximitySound();
+      updateClockProximitySound();
       updateCameraIntro(delta);
       if (gumFollowers) {
         gumFollowers.update(delta);
@@ -2436,7 +2415,6 @@ export function Stage3() {
         canvasRef = null;
       }
       window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
-      noticeRef = null;
       closeMinigame({
         camera: cameraRef ?? this.camera,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
@@ -2445,7 +2423,12 @@ export function Stage3() {
       dispatchMinigameClose();
       dispatchGumCardsModalClose();
       intRaycastMeshes.length = 0;
-      streetLightRaycastMeshes.length = 0;
+      streetLightWorldPositions.length = 0;
+      wasNearStreetLight = false;
+      lastStreetLightSoundAtMs = 0;
+      clockWorldPositions.length = 0;
+      wasNearClock = false;
+      lastClockSoundAtMs = 0;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
         unlistenMinigameClose = null;
@@ -2562,7 +2545,7 @@ export function Stage3() {
       }
 
       if (import.meta.env.DEV) {
-        console.log("🧹 Stage3 정리 완료");
+        // dev-only cleanup diagnostics intentionally muted to reduce console noise.
       }
     },
   };
