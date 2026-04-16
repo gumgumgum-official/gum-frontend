@@ -102,6 +102,15 @@ export function createStageDebugControls(params) {
         logConfigToConsole();
       }, 200);
     });
+    // 일부 환경에서는 change 디바운스 타이밍 때문에 로그가 누락돼 보일 수 있어
+    // 드래그 종료(end) 시점에도 한 번 더 확정 출력한다.
+    orbitControls.addEventListener("end", () => {
+      if (orbitLogTimeout) {
+        clearTimeout(orbitLogTimeout);
+        orbitLogTimeout = null;
+      }
+      logConfigToConsole();
+    });
   }
 
   // ---- TransformControls (축 조정)
@@ -187,6 +196,42 @@ export function createStageDebugControls(params) {
     const roots = getPropRoots();
     if (typeof onConfigChange === "function") onConfigChange(roots);
     const target = getLookAtTarget();
+    const payload = {
+      stage: stageName,
+      camera: {
+        fov: Number(camera.fov.toFixed(1)),
+        near: camera.near,
+        far: Number(camera.far.toFixed(0)),
+        position: {
+          x: Number(camera.position.x.toFixed(1)),
+          y: Number(camera.position.y.toFixed(1)),
+          z: Number(camera.position.z.toFixed(1)),
+        },
+        lookAt: {
+          x: Number(target.x.toFixed(1)),
+          y: Number(target.y.toFixed(1)),
+          z: Number(target.z.toFixed(1)),
+        },
+      },
+      props: roots.map((root, i) => ({
+        path: getPropPath(i),
+        position: {
+          x: Number(root.position.x.toFixed(2)),
+          y: Number(root.position.y.toFixed(2)),
+          z: Number(root.position.z.toFixed(2)),
+        },
+        rotation: {
+          x: Number(THREE.MathUtils.radToDeg(root.rotation.x).toFixed(2)),
+          y: Number(THREE.MathUtils.radToDeg(root.rotation.y).toFixed(2)),
+          z: Number(THREE.MathUtils.radToDeg(root.rotation.z).toFixed(2)),
+        },
+        scale: {
+          x: Number(root.scale.x.toFixed(2)),
+          y: Number(root.scale.y.toFixed(2)),
+          z: Number(root.scale.z.toFixed(2)),
+        },
+      })),
+    };
     const cameraBlock = `  camera: {
     fov: ${camera.fov.toFixed(1)},
     near: ${camera.near},
@@ -198,6 +243,7 @@ export function createStageDebugControls(params) {
       .map((root, i) => formatPropConfig(root, i))
       .join(",\n");
     console.log(`📋 [${stageName}] config (stageConfig에 복사):`);
+    console.log("🧩 debug payload:", payload);
     console.log(
       `  ${stageName}: {\n${cameraBlock}\n    props: [\n${propsBlock}\n    ],\n  },`,
     );

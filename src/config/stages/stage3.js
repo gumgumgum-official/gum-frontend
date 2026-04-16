@@ -16,14 +16,18 @@ export const STAGE3_CONFIG = {
     lookAt: { x: 0.0, y: 1.0, z: 0.0 },
   },
   background: {
-    // 위는 연한 라벤더·핑크 하늘, 중간만 살짝 피치(노을), 아래로 로즈/라벤더
+    // 수평선(t: 0.45~0.7) 주변을 촘촘한 유사 톤으로 연결해
+    // 하늘/바다 경계가 딱 끊기지 않고 자연스럽게 섞이도록 조정
     gradient: {
       stops: [
-        { t: 0, color: 0xe8d4f0 },
-        { t: 0.12, color: 0xf0c8b8 },
-        { t: 0.48, color: 0xf0c8b8 },
-        { t: 0.74, color: 0xe8b0c8 },
-        { t: 1, color: 0xdcc8e8 },
+        { t: 0, color: 0xe7d4f0 },
+        { t: 0.14, color: 0xedcdbf },
+        { t: 0.4, color: 0xeec9bd },
+        { t: 0.52, color: 0xebc4be },
+        { t: 0.62, color: 0xe7c0c1 },
+        { t: 0.72, color: 0xe2bcc6 },
+        { t: 0.84, color: 0xdebfd3 },
+        { t: 1, color: 0xdac6e3 },
       ],
     },
   },

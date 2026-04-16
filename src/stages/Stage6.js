@@ -3,7 +3,6 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
@@ -32,7 +31,6 @@ export function Stage6() {
     : [];
   const glbLoader = getGLBLoader();
   const fbxLoader = new FBXLoader();
-  let orbitControls = null;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -215,13 +213,6 @@ export function Stage6() {
         this.camera.lookAt(0, 0, 0);
       }
 
-      orbitControls = new OrbitControls(this.camera, renderer.domElement);
-      orbitControls.target.set(
-        config.camera.lookAt?.x ?? 0,
-        config.camera.lookAt?.y ?? 0,
-        config.camera.lookAt?.z ?? 0,
-      );
-
       scene.background = new THREE.Color(config.background.color);
       window.addEventListener("keydown", handleKeyDown, { capture: true });
 
@@ -327,17 +318,11 @@ export function Stage6() {
       scheduleAirplaneCallSign();
     },
 
-    update(delta) {
-      if (orbitControls) orbitControls.update(delta);
-    },
+    update(_delta) {},
 
     cleanup(scene) {
       cancelAirplaneCallSignScheduled();
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
-      if (orbitControls) {
-        orbitControls.dispose();
-        orbitControls = null;
-      }
       objects.forEach((obj) => {
         scene.remove(obj);
         obj.traverse((child) => {
