@@ -114,15 +114,15 @@ void main() {
   const float swirlTightness = 5.6;
   // 팔은 거의 보이지 않는 "마스크" 역할만 → 개수도 줄여 간격 확보
   const float armCount = 3.0;
-  const float glowStrength = 0.98;
+  const float glowStrength = 1.3;
 
   // 레퍼런스1: 거의 블랙에 가까운 딥 네이비 + 띠만 중간 톤 네이비~시안
-  const vec3 colBg0 = vec3(0.005, 0.01, 0.03);
-  const vec3 colBg1 = vec3(0.01, 0.02, 0.06);
-  const vec3 colDeep = vec3(0.02, 0.05, 0.14);
-  const vec3 colDust = vec3(0.06, 0.16, 0.34);
-  const vec3 colCyan = vec3(0.12, 0.32, 0.62);
-  const vec3 colHighlight = vec3(0.86, 0.92, 1.0);
+  const vec3 colBg0 = vec3(0.03, 0.09, 0.2);
+  const vec3 colBg1 = vec3(0.05, 0.14, 0.3);
+  const vec3 colDeep = vec3(0.07, 0.2, 0.44);
+  const vec3 colDust = vec3(0.16, 0.36, 0.64);
+  const vec3 colCyan = vec3(0.3, 0.67, 0.95);
+  const vec3 colHighlight = vec3(0.97, 0.995, 1.0);
   const vec3 colPurple = vec3(0.46, 0.26, 0.62);
 
   // UV 없음/전부 동일(0,0)이면 vUv가 면 전체에서 상수 → dist·알파 붕괴 → 완전 투명
@@ -302,19 +302,19 @@ void main() {
   vec3 starCol = starTint * microAmp * 0.85;
   starCol += mix(starTint, vec3(1.0), 0.25) * midAmp * 1.1;
   // 큰 별은 거의 흰색에 가까운 스파클
-  starCol += mix(vec3(0.92, 0.96, 1.0), vec3(1.0), 0.55) * bigAmp * 2.1;
-  starCol += vec3(1.0) * giantAmp * 2.6;
+  starCol += mix(vec3(0.96, 0.98, 1.0), vec3(1.0), 0.68) * bigAmp * 2.25;
+  starCol += vec3(1.0) * giantAmp * 2.85;
   starCol += mix(vec3(0.9, 0.95, 1.0), starTint, 0.35) * sparkle * (0.9 + 1.1 * starArmBoost);
 
   vec3 rgb = (baseCol + starCol) * glowStrength;
 
-  // 바디(포탈 디스크)도 레퍼런스1처럼 어둡게 — 면이 너무 밝은 판이 되지 않게
-  const vec3 bodyBlue = vec3(0.02, 0.08, 0.2);
+  // 바디(포탈 디스크)를 밝은 청색으로 유지해 중앙 면이 죽지 않게 조정
+  const vec3 bodyBlue = vec3(0.26, 0.62, 0.96);
   float bodyMask = 1.0 - smoothstep(0.06, 0.56, dist);
-  rgb = mix(rgb, bodyBlue, bodyMask * 0.26);
+  rgb = mix(rgb, bodyBlue, bodyMask * 0.18);
   float coreWhiteHalo = exp(-dist * 6.8);
-  rgb = mix(rgb, colHighlight, coreWhiteHalo * 0.1);
-  rgb = mix(rgb, colCyan, nebulaCloud * bodyMask * 0.1);
+  rgb = mix(rgb, colHighlight, coreWhiteHalo * 0.34);
+  rgb = mix(rgb, colCyan, nebulaCloud * bodyMask * 0.18);
 
   float alpha = 1.0 - smoothstep(0.38, 0.72, dist);
   alpha = max(alpha, 0.04);
