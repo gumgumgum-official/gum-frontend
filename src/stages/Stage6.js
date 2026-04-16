@@ -24,7 +24,16 @@ const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
 const STAGE6_INT_CLICK_EVENT = "gum:stage6-int-click";
 const STAGE6_POSTER_MODAL_SHOW_EVENT = "gum:stage6PosterModal:show";
 const STAGE6_POSTER_MODAL_HIDE_EVENT = "gum:stage6PosterModal:hide";
+const STAGE6_SUBTITLE_SEQUENCE_EVENT = "gum:stage6-subtitle:sequence";
+const STAGE6_NAME_MODAL_SHOW_EVENT = "gum:stage6-name-modal:show";
+const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
 const INT_PREFIX = "INT_";
+const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
+const ATM_OBJECT_NAME = "OBJ_ATM";
+const ATM_INTERACTION_REQUIRED_COUNT = 2;
+const ATM_EMISSIVE_DARK_STRENGTH = 0.06;
+const ATM_EMISSIVE_BRIGHT_STRENGTH = 1.25;
+const ATM_EMISSIVE_TWEEN_SPEED = 3.5;
 
 export function Stage6() {
   const objects = [];
@@ -55,6 +64,15 @@ export function Stage6() {
   let cameraRef = null;
   let onPointerDown = null;
   let onPointerMove = null;
+  let interactedCount = 0;
+  const interactedTargets = new Set();
+  let isAtmActivated = false;
+  /** @type {THREE.Object3D | null} */
+  let atmRootRef = null;
+  /** @type {Array<THREE.Material & { emissive?: THREE.Color, emissiveIntensity?: number, userData?: Record<string, any> }>} */
+  const atmEmissiveMaterials = [];
+  let atmEmissiveProgress = 0;
+  let atmEmissiveTarget = 0;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -218,6 +236,100 @@ export function Stage6() {
       .replace(/[^a-z0-9]/g, "");
   }
 
+  function isAtmHitTarget(hit) {
+    return (
+      hit?.intName === ATM_OBJECT_NAME ||
+      normalizeIntNameToken(hit?.target) ===
+        normalizeIntNameToken(ATM_OBJECT_NAME)
+    );
+  }
+
+  function dispatchStage6SubtitleSequence(messages) {
+    window.dispatchEvent(
+      new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
+        detail: { messages },
+      }),
+    );
+  }
+
+  function collectAtmInteractiveRoot(rootModel) {
+    atmRootRef = null;
+    rootModel.traverse((obj) => {
+      if (atmRootRef || obj?.name !== ATM_OBJECT_NAME) return;
+      atmRootRef = obj;
+    });
+  }
+
+  function registerAtmEmissiveMaterials() {
+    atmEmissiveMaterials.length = 0;
+    if (!atmRootRef) return;
+    atmRootRef.traverse((child) => {
+      const mesh = /** @type {THREE.Mesh} */ (child);
+      if (!mesh?.isMesh || !mesh.material) return;
+      const materials = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material];
+      materials.forEach((rawMaterial) => {
+        const material = /** @type {typeof atmEmissiveMaterials[number]} */ (
+          rawMaterial
+        );
+        if (!material?.emissive) return;
+        const hasVisibleEmissive = material.emissive.getHex() !== 0x000000;
+        material.userData = material.userData ?? {};
+        if (!material.userData.stage6AtmBaseEmissive) {
+          material.userData.stage6AtmBaseEmissive = hasVisibleEmissive
+            ? material.emissive.clone()
+            : new THREE.Color(0x7fd6ff);
+        }
+        atmEmissiveMaterials.push(material);
+      });
+    });
+  }
+
+  function applyAtmEmissive(progress) {
+    const strength = THREE.MathUtils.lerp(
+      ATM_EMISSIVE_DARK_STRENGTH,
+      ATM_EMISSIVE_BRIGHT_STRENGTH,
+      progress,
+    );
+    atmEmissiveMaterials.forEach((material) => {
+      const baseColor = material.userData?.stage6AtmBaseEmissive;
+      if (!baseColor || !material.emissive) return;
+      material.emissive.copy(baseColor).multiplyScalar(strength);
+      if (typeof material.emissiveIntensity === "number") {
+        material.emissiveIntensity = 1;
+      }
+      material.needsUpdate = true;
+    });
+  }
+
+  function activateAtmKiosk() {
+    if (isAtmActivated) return;
+    isAtmActivated = true;
+    atmEmissiveTarget = 1;
+    dispatchStage6SubtitleSequence([
+      {
+        text: "탑승 수속이 시작되었습니다.",
+        holdMs: 2000,
+      },
+      {
+        text: "키오스크에서 체크인을 완료해주세요.",
+        holdMs: 2000,
+      },
+    ]);
+  }
+
+  function registerNonAtmInteraction(hit) {
+    if (!hit || isAtmHitTarget(hit) || isAtmActivated) return;
+    const interactionKey = hit.intName || hit.target;
+    if (!interactionKey || interactedTargets.has(interactionKey)) return;
+    interactedTargets.add(interactionKey);
+    interactedCount = interactedTargets.size;
+    if (interactedCount >= ATM_INTERACTION_REQUIRED_COUNT) {
+      activateAtmKiosk();
+    }
+  }
+
   /**
    * 템플릿 씬과 분리된 인스턴스 (cleanup 시 dispose 안전)
    * @param {import("three").Object3D} source
@@ -273,16 +385,24 @@ export function Stage6() {
 
   function registerIntInteractions(rootModel) {
     intRaycastMeshes.length = 0;
+    collectAtmInteractiveRoot(rootModel);
     /** @type {Set<THREE.Mesh>} */
     const meshSet = new Set();
     rootModel.traverse((obj) => {
-      if (typeof obj.name !== "string" || !obj.name.startsWith(INT_PREFIX))
+      if (typeof obj.name !== "string") return;
+      if (
+        !obj.name.startsWith(INT_PREFIX) &&
+        !EXTRA_CLICKABLE_OBJECT_NAMES.has(obj.name)
+      ) {
         return;
+      }
       obj.traverse((child) => {
         if (child?.isMesh) meshSet.add(child);
       });
     });
     intRaycastMeshes.push(...meshSet);
+    registerAtmEmissiveMaterials();
+    applyAtmEmissive(atmEmissiveProgress);
     if (import.meta.env.DEV) {
       console.log(
         `[Stage6] INT_ clickable mesh count: ${intRaycastMeshes.length}`,
@@ -300,8 +420,14 @@ export function Stage6() {
     for (const hit of hits) {
       let p = hit.object;
       while (p) {
-        if (typeof p.name === "string" && p.name.startsWith(INT_PREFIX)) {
-          const suffix = p.name.slice(INT_PREFIX.length);
+        if (
+          typeof p.name === "string" &&
+          (p.name.startsWith(INT_PREFIX) ||
+            EXTRA_CLICKABLE_OBJECT_NAMES.has(p.name))
+        ) {
+          const suffix = p.name.startsWith(INT_PREFIX)
+            ? p.name.slice(INT_PREFIX.length)
+            : p.name;
           return {
             intName: p.name,
             target: normalizeIntNameToken(suffix),
@@ -343,12 +469,35 @@ export function Stage6() {
       cameraRef = this.camera;
 
       scene.background = new THREE.Color(config.background.color);
+      interactedCount = 0;
+      interactedTargets.clear();
+      isAtmActivated = false;
+      atmEmissiveTarget = 0;
+      atmEmissiveProgress = 0;
+      atmRootRef = null;
+      atmEmissiveMaterials.length = 0;
+      window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
       window.addEventListener("keydown", handleKeyDown, { capture: true });
       onPointerDown = (event) => {
         if (event.button !== 0) return;
         const hit = getPointerHitTarget(event);
         if (!hit) return;
         console.log(`[Stage6] INT click: ${hit.intName}`);
+        const isAtmHit = isAtmHitTarget(hit);
+        if (isAtmHit) {
+          if (!isAtmActivated) {
+            dispatchStage6SubtitleSequence([
+              {
+                text: "아직 탑승 수속이 시작되지 않았어요. 잠시 둘러보세요 🙂",
+                holdMs: 2200,
+              },
+            ]);
+          } else {
+            window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
+          }
+        } else {
+          registerNonAtmInteraction(hit);
+        }
         if (hit.target === "boardpic" || hit.target === "poster") {
           window.dispatchEvent(
             new CustomEvent(STAGE6_POSTER_MODAL_SHOW_EVENT, {
@@ -481,13 +630,24 @@ export function Stage6() {
       scheduleAirplaneCallSign();
     },
 
-    update(_delta) {},
+    update(delta) {
+      atmEmissiveProgress = THREE.MathUtils.damp(
+        atmEmissiveProgress,
+        atmEmissiveTarget,
+        ATM_EMISSIVE_TWEEN_SPEED,
+        delta,
+      );
+      if (atmEmissiveMaterials.length > 0) {
+        applyAtmEmissive(atmEmissiveProgress);
+      }
+    },
 
     cleanup(scene) {
       isStage6Active = false;
       cancelAirplaneCallSignScheduled();
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
+      window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
       if (canvasRef && onPointerDown) {
         canvasRef.removeEventListener("pointerdown", onPointerDown, {
           capture: true,
@@ -501,6 +661,13 @@ export function Stage6() {
       cameraRef = null;
       onPointerDown = null;
       onPointerMove = null;
+      interactedCount = 0;
+      interactedTargets.clear();
+      isAtmActivated = false;
+      atmRootRef = null;
+      atmEmissiveMaterials.length = 0;
+      atmEmissiveProgress = 0;
+      atmEmissiveTarget = 0;
       intRaycastMeshes.length = 0;
       objects.forEach((obj) => {
         scene.remove(obj);
