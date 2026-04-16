@@ -49,6 +49,7 @@ export function getMonitorArrivalMessage(worry) {
  */
 export async function fetchMonitorCurrent() {
   const base = getGumServerBaseUrl();
+  if (!base) return null;
   const monitorId = getMonitorDeviceId();
   const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/current`;
   const res = await fetch(url, {
@@ -69,6 +70,7 @@ export async function fetchMonitorCurrent() {
  */
 export async function fetchGumServerStatus() {
   const base = getGumServerBaseUrl();
+  if (!base) return null;
   const url = `${base}/status`;
   const res = await fetch(url, {
     method: "GET",
@@ -88,6 +90,7 @@ export async function fetchGumServerStatus() {
  */
 export async function postMonitorStart() {
   const base = getGumServerBaseUrl();
+  if (!base) return false;
   const monitorId = getMonitorDeviceId();
   const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/start`;
   const res = await fetch(url, {
@@ -109,6 +112,7 @@ export async function postMonitorStart() {
  */
 export async function postMonitorComplete() {
   const base = getGumServerBaseUrl();
+  if (!base) return false;
   const monitorId = getMonitorDeviceId();
   const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/complete`;
   const res = await fetch(url, {

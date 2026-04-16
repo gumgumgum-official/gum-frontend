@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { CARDS } from "../config/gumCardsConfig.js";
+import { playRandomGumCardPickSound } from "../utils/common/playGumCardPickSound.js";
 import "./GumCardsModal.css";
 
 /** @typedef {{ num: string, name: string, img: string, keywords: string[], accent: string, accentBg: string, accentBorder: string, theme: string, title: string, desc: string, comfort: string }} GumCardData */
@@ -118,6 +119,8 @@ export function GumCardsModal({ open, onClose }) {
   const [toast, setToast] = useState({ show: false, msg: "" });
   const toastTimerRef = useRef(null);
   const gridRef = useRef(null);
+  /** setState 업데이트 안에서 효과음 호출 시 Strict Mode 이중 호출 방지용 */
+  const flippedCardRef = useRef(null);
 
   const showToast = useCallback((msg) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -142,8 +145,18 @@ export function GumCardsModal({ open, onClose }) {
     }
   }, [open]);
 
+  useEffect(() => {
+    flippedCardRef.current = flippedCard;
+  }, [flippedCard]);
+
   const handleCardClick = useCallback((card) => {
-    setFlippedCard((prev) => (prev?.num === card.num ? null : card));
+    const prev = flippedCardRef.current;
+    const next = prev?.num === card.num ? null : card;
+    flippedCardRef.current = next;
+    setFlippedCard(next);
+    if (next) {
+      playRandomGumCardPickSound();
+    }
   }, []);
 
   const handleStick = () => {

@@ -42,13 +42,47 @@ export function createCharacterController({
   let characterYPosition = 0;
   let characterMixer = null;
   let characterWalkAction = null;
+  let characterIdleAction = null;
   let isWalking = false;
   let isMoving = false;
   let backgroundBounds = null;
   /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
   let staticColliderBoxes = [];
   let collisionRadius = 0.55;
-  let stopOnNextLoop = false;
+  /** @type {HTMLAudioElement | null} */
+  let walkAudio = null;
+
+  const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
+
+  function getWalkSoundVolume() {
+    const v = config.character?.walkSoundVolume;
+    return THREE.MathUtils.clamp(typeof v === "number" ? v : 0.04, 0, 1);
+  }
+
+  function ensureWalkAudio() {
+    if (walkAudio) return walkAudio;
+    walkAudio = new window.Audio();
+    walkAudio.preload = "auto";
+    walkAudio.loop = true;
+    walkAudio.volume = getWalkSoundVolume();
+    walkAudio.src = resolvePublicAssetUrl(WALK_SOUND_REL);
+    return walkAudio;
+  }
+
+  function syncWalkSound(moving) {
+    if (!moving) {
+      if (walkAudio && !walkAudio.paused) {
+        walkAudio.pause();
+        walkAudio.currentTime = 0;
+      }
+      return;
+    }
+    const a = ensureWalkAudio();
+    a.volume = getWalkSoundVolume();
+    if (a.paused) {
+      a.play().catch(() => {});
+    }
+  }
 
   // 매 프레임 재사용할 Vector3 인스턴스 (GC 압박 방지)
   const _moveVector = new THREE.Vector3();
@@ -56,6 +90,68 @@ export function createCharacterController({
   const _cameraOffset = new THREE.Vector3();
   const _targetPosition = new THREE.Vector3();
   const _lookAtPosition = new THREE.Vector3();
+  const ANIMATION_CROSS_FADE_SEC = 0.16;
+
+  function setAnimationMode(mode) {
+    if (mode === "walk") {
+      if (characterWalkAction && characterIdleAction) {
+        characterWalkAction.enabled = true;
+        characterWalkAction.paused = false;
+        characterWalkAction.setEffectiveWeight(1);
+        characterWalkAction.crossFadeFrom(
+          characterIdleAction,
+          ANIMATION_CROSS_FADE_SEC,
+          false,
+        );
+        characterIdleAction.paused = false;
+        return;
+      }
+
+      if (characterWalkAction) {
+        characterWalkAction.enabled = true;
+        characterWalkAction.paused = false;
+        characterWalkAction.setEffectiveWeight(1);
+      }
+      if (characterIdleAction) {
+        characterIdleAction.paused = true;
+        characterIdleAction.enabled = false;
+        characterIdleAction.setEffectiveWeight(0);
+      }
+      return;
+    }
+
+    if (mode === "idle") {
+      if (characterWalkAction && characterIdleAction) {
+        characterIdleAction.enabled = true;
+        characterIdleAction.paused = false;
+        characterIdleAction.setEffectiveWeight(1);
+        characterIdleAction.crossFadeFrom(
+          characterWalkAction,
+          ANIMATION_CROSS_FADE_SEC,
+          false,
+        );
+        characterWalkAction.paused = false;
+        return;
+      }
+
+      if (characterWalkAction) {
+        characterWalkAction.paused = true;
+        characterWalkAction.enabled = false;
+        characterWalkAction.setEffectiveWeight(0);
+      }
+      if (characterIdleAction) {
+        characterIdleAction.enabled = true;
+        characterIdleAction.paused = false;
+        characterIdleAction.setEffectiveWeight(1);
+      } else if (characterWalkAction) {
+        // idle 클립이 없으면 walk의 시작 포즈를 idle 대용으로 사용
+        characterWalkAction.enabled = true;
+        characterWalkAction.time = 0;
+        characterWalkAction.paused = true;
+        characterWalkAction.setEffectiveWeight(1);
+      }
+    }
+  }
 
   return {
     setup(backgroundMaxY, bounds, colliderBoxes = []) {
@@ -63,10 +159,16 @@ export function createCharacterController({
       staticColliderBoxes = colliderBoxes;
 
       const relChar =
-        config.characterModelPath ?? "/models/common/user_walking_color.glb";
+        config.characterModelPath ?? "/models/common/user_walk_v2.glb";
+      const relIdle =
+        config.characterIdleModelPath ?? "/models/common/user_idle.glb";
       const characterUrl = resolvePublicAssetUrl(relChar);
-      loadGltfTemplateCached(characterUrl).then(
-        (gltf) => {
+      const idleUrl = resolvePublicAssetUrl(relIdle);
+      Promise.all([
+        loadGltfTemplateCached(characterUrl),
+        loadGltfTemplateCached(idleUrl).catch(() => null),
+      ]).then(
+        ([gltf, idleGltf]) => {
           characterModel = SkeletonUtils.clone(gltf.scene);
 
           const scale = config.character?.scale ?? 1;
@@ -103,29 +205,53 @@ export function createCharacterController({
 
           if (gltf.animations && gltf.animations.length > 0) {
             characterMixer = new THREE.AnimationMixer(characterModel);
-            characterWalkAction = characterMixer.clipAction(gltf.animations[0]);
-            characterWalkAction.loop = THREE.LoopRepeat;
-            characterWalkAction.play();
-            characterWalkAction.paused = true;
+            const clips = gltf.animations;
+            const idleClips = idleGltf?.animations ?? [];
+            const findClipByName = (regex) =>
+              clips.find((clip) => regex.test(String(clip?.name ?? ""))) ??
+              null;
+            const findIdleClipByName = (regex) =>
+              idleClips.find((clip) => regex.test(String(clip?.name ?? ""))) ??
+              null;
+            const walkClip =
+              findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
+            const idleClipFromIdleModel =
+              findIdleClipByName(/idle|stand|wait|pose|breath|rest/i) ??
+              idleClips[0] ??
+              null;
+            const idleClipFromWalkModel =
+              findClipByName(/idle|stand|wait|pose|breath|rest/i) ??
+              clips.find((clip) => clip !== walkClip) ??
+              null;
+            const idleClip = idleClipFromIdleModel ?? idleClipFromWalkModel;
 
-            characterMixer.addEventListener("loop", () => {
-              if (stopOnNextLoop) {
-                characterWalkAction.paused = true;
-                stopOnNextLoop = false;
-              }
-            });
+            characterWalkAction = walkClip
+              ? characterMixer.clipAction(walkClip)
+              : null;
+            characterIdleAction = idleClip
+              ? characterMixer.clipAction(idleClip)
+              : null;
 
-            console.log(
-              `🎬 애니메이션 클립 수: ${gltf.animations.length}, 첫 번째 클립: "${gltf.animations[0].name}"`,
-            );
+            if (characterWalkAction) {
+              characterWalkAction.loop = THREE.LoopRepeat;
+              characterWalkAction.play();
+              characterWalkAction.paused = true;
+              characterWalkAction.enabled = true;
+              characterWalkAction.setEffectiveWeight(1);
+            }
+            if (characterIdleAction) {
+              characterIdleAction.loop = THREE.LoopRepeat;
+              characterIdleAction.play();
+              characterIdleAction.paused = false;
+              characterIdleAction.enabled = true;
+              characterIdleAction.setEffectiveWeight(1);
+            }
+            setAnimationMode("idle");
           } else {
             console.warn("⚠️ 캐릭터 모델에 애니메이션 클립이 없습니다.");
           }
 
           scene.add(characterModel);
-          console.log(
-            `✅ Stage3 캐릭터 모델 로드 완료 (xz: ${spawnX.toFixed(2)}, ${spawnZ.toFixed(2)}, y: ${characterYPosition.toFixed(2)})`,
-          );
           inspectGLTF(gltf, "캐릭터 모델");
         },
         (err) =>
@@ -214,18 +340,18 @@ export function createCharacterController({
         characterModel.rotation.y = angle;
       }
 
-      // 실제 이동(moved) 기준으로 애니메이션/이동 상태 갱신
+      // 실제 이동 여부는 외부 상태(getIsMoving)와 사운드에 유지
       isMoving = moved;
       if (characterWalkAction) {
-        if (moved) {
+        // 요청사항: 키보드 입력이 없을 때는 idle 애니메이션 재생
+        if (movingInput) {
           if (!isWalking) {
-            stopOnNextLoop = false;
-            characterWalkAction.paused = false;
+            setAnimationMode("walk");
             isWalking = true;
           }
         } else {
           if (isWalking) {
-            stopOnNextLoop = true;
+            setAnimationMode("idle");
             isWalking = false;
           }
         }
@@ -234,6 +360,8 @@ export function createCharacterController({
       if (characterMixer) {
         characterMixer.update(delta);
       }
+
+      syncWalkSound(moved);
 
       // 카메라 추적 (OrbitControls 사용 시에는 스킵)
       if (!options.skipCameraFollow) {
@@ -248,6 +376,11 @@ export function createCharacterController({
     },
 
     cleanup() {
+      if (walkAudio) {
+        walkAudio.pause();
+        walkAudio.src = "";
+        walkAudio = null;
+      }
       if (characterModel) {
         scene.remove(characterModel);
         characterModel.traverse((child) => {
@@ -269,8 +402,8 @@ export function createCharacterController({
         characterMixer = null;
       }
       characterWalkAction = null;
+      characterIdleAction = null;
       isWalking = false;
-      stopOnNextLoop = false;
       backgroundBounds = null;
       staticColliderBoxes = [];
     },

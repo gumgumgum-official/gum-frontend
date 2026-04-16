@@ -2,16 +2,19 @@
 
 export const STAGE3_CHARACTER_CONFIG = {
   /** 캐릭터 GLB 경로 */
-  characterModelPath: "/models/common/user_walking_color.glb",
+  characterModelPath: "/models/common/user_walk_v2.glb",
+  /** idle(서있기) 애니메이션 전용 GLB 경로 */
+  characterIdleModelPath: "/models/common/user_idle.glb",
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({
     groundOffset: 0.45, // 배경 위에 설 때 y 여유 (메시·바운딩 오차 보정)
-    scale: 3, // 캐릭터 전체 크기 배율
+    scale: 0.35, // 캐릭터 전체 크기 배율
     moveSpeed: 5.0, // 이동 속도
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
     cameraOffset: { x: 0, y: 9, z: 25 }, // 캐릭터 뒤쪽 카메라 오프셋 (더 줌아웃)
     cameraLerpFactor: 0.1, // 카메라 부드러운 추적 강도
+    walkSoundVolume: 0.04, // 이동 시 걷기 루프 볼륨 (0~1)
     lookAtHeightOffset: 0.9, // lookAt 시 캐릭터 기준점을 낮춰 화면에서 캐릭터를 살짝 위로 배치
     /** XZ 평면 원형 충돌 반경(m). 미설정 시 scale×0.22 (최소 0.2) */
     collisionRadius: 0.65,
@@ -24,7 +27,7 @@ export const STAGE3_CHARACTER_CONFIG = {
      */
     gumFollowers: {
       models: {
-        modelPath: "/models/common/walk__gum.glb",
+        modelPath: "/models/common/gum_walk_dogle.glb",
         scale: 1.4, // 껌딱지 모델 전체 크기 (기존 대비 4배)
       },
       behavior: {

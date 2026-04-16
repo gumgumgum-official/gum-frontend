@@ -14,13 +14,13 @@ import {
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { loadStage3Background } from "../utils/stages/stage3/backgroundLoader.js";
+import { createSkyGradientTexture } from "../utils/stages/stage3/skyGradientTexture.js";
 import {
   collectIslandStaticColliderBoxes,
   filterCollidersExcludingDominantTerrain,
 } from "../utils/stages/stage3/islandStaticColliders.js";
 import { applyPortalVortexToModel } from "../utils/stages/stage3/portalVortexMaterial.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
-import { inspectModel as _inspectModel } from "../utils/common/modelInspector.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
 import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
@@ -32,18 +32,27 @@ import {
   onMinigameClose,
 } from "../utils/stages/stage3/minigameLauncher.js";
 import {
-  openMirrorModal,
-  dispatchMirrorModalClose,
-} from "../utils/stages/stage3/mirrorModalLauncher.js";
+  openGumCardsModal,
+  dispatchGumCardsModalClose,
+} from "../utils/stages/stage3/gumCardsModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 import {
   MONITOR_POLL_MS,
   fetchMonitorCurrent,
-  getMonitorDeviceId,
   postMonitorStart,
 } from "../lib/monitorCurrentApi.js";
 import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
+import {
+  playRandomNoticePaperSound,
+  disposeNoticePaperAudio,
+} from "../utils/common/playNoticePaperSound.js";
+import { playRandomWellClickSound } from "../utils/common/playWellClickSound.js";
+import { playRandomClockClickSound } from "../utils/common/playClockClickSound.js";
+import {
+  playRandomStreetLightClickSound,
+  disposeStreetLightSound,
+} from "../utils/common/playStreetLightSound.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -73,6 +82,28 @@ const FRAGMENT_BOUNCE_RESTITUTION = 0.35;
 const FRAGMENT_GROUND_FRICTION = 0.82;
 const FRAGMENT_FADE_START = 3; // 땅에 떨어진 뒤 3초 뒤부터
 const FRAGMENT_FADE_END = 5;
+const STAGE3_ICECREAM_DEBUG_BOX_ONLY = false;
+
+/** 아이스크림이 지면에 처음 닿을 때 재생 (랜덤 1종) */
+const ICECREAM_LAND_SOUND_PATHS = [
+  "/static/sounds/icecream/icecream_sound.mp3",
+  "/static/sounds/icecream/icecream_sound2.mp3",
+];
+
+/** 게임기(INT_gameMachine) 클릭 시 — 파일명에 `#` 있으면 Vite 정적 서버가 MP3로 매핑하지 못함 */
+const GAME_MACHINE_CLICK_SOUND_PATH =
+  "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3";
+
+/** island `INT_StreetLight*` 근접 시 사운드 재생 */
+const STREET_LIGHT_NAME_PREFIX = "INT_StreetLight";
+const STREET_LIGHT_TRIGGER_RADIUS = 10;
+const STREET_LIGHT_TRIGGER_COOLDOWN_MS = 1500;
+const CLOCK_TRIGGER_RADIUS = 8;
+const CLOCK_TRIGGER_COOLDOWN_MS = 2000;
+
+/** 다른 스테이지 대비 Stage3만 살짝 밝게 (진입 시 가산, cleanup 시 복원) */
+const STAGE3_TONE_MAPPING_EXPOSURE_DELTA = 0.06;
+const STAGE3_ENVIRONMENT_INTENSITY_DELTA = 0.12;
 
 /** REST에서 busy를 한 번도 못 받았을 때만 Supabase fallback (ms) */
 const STAGE3_MONITOR_FALLBACK_TIMEOUT_MS = 5000;
@@ -89,10 +120,14 @@ export function Stage3() {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** @type {import("three").CanvasTexture | null} */
+  let skyBackgroundTexture = null;
   /** `Portal_Vortex` ShaderMaterial — cleanup 시 null */
   let portalVortexMaterial = null;
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
+  /** @type {{ toneMappingExposure: number, environmentIntensity: number, renderer: import("three").WebGLRenderer } | null} */
+  let stage3LightingRestore = null;
 
   // 낙하 글자 1개 (할당된 svgUrl 우선)
   let letterState = null;
@@ -117,13 +152,13 @@ export function Stage3() {
   // island2.glb 내 INT_icecream 루트 (클릭 → 스폰, cannon-es)
   let iceCreamCartRef = null;
   /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
-  let noticeRef = null;
   /** island2.glb 내 INT_gameMachine 루트 */
   let gameMachineRef = null;
   let unlistenMinigameClose = null;
-  let noticePaperAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let gameMachineClickAudio = null;
   const iceCreamTemplates = []; // [{ scene }, { scene }]
-  const spawnedIceCreams = []; // { group, body }
+  const spawnedIceCreams = []; // { group, body, landSoundHandler?, landSoundPlayed? }
   let iceCreamPhysicsWorld = null;
   let iceCreamGroundBody = null;
   const _icePointer = new THREE.Vector2();
@@ -132,24 +167,47 @@ export function Stage3() {
   const INT_SUFFIX_TO_TARGET = {
     notice: "notice",
     gamemachine: "gameMachine",
-    mirror: "mirror",
+    tent: "tent",
     icecream: "icecream",
     portal: "portal",
+    well: "well",
+    clock: "clock",
   };
+  function normalizeIntNameToken(value) {
+    return String(value ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  }
   /**
    * GLB마다 INT_ 접미사 표기가 다름 (예: INT_notice vs INT_Notice, INT_IceCart).
    * 레이 히트·ref 등록 시 canonical 타깃으로 정규화한다.
    * @param {string} suffix - `INT_` 제외 접미사
-   * @returns {"notice" | "gameMachine" | "mirror" | "icecream" | "portal" | null}
+   * @returns {"notice" | "gameMachine" | "tent" | "icecream" | "portal" | "well" | "clock" | null}
    */
   function intSuffixToTarget(suffix) {
-    const lower = suffix.toLowerCase();
+    const lower = normalizeIntNameToken(suffix);
     // GLB마다 INT suffix 표기가 다를 수 있어 대표 별칭(예: IceCart)을 정규화한다.
-    if (lower === "icecart") return "icecream";
+    if (
+      lower === "icecart" ||
+      lower === "icecreamcart" ||
+      lower === "icecream" ||
+      (lower.includes("ice") &&
+        lower.includes("cream") &&
+        lower.includes("cart"))
+    ) {
+      return "icecream";
+    }
     return INT_SUFFIX_TO_TARGET[lower] ?? null;
   }
   /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
   const intRaycastMeshes = [];
+  /** INT_StreetLight* 월드 좌표 (근접 사운드 트리거용) */
+  const streetLightWorldPositions = [];
+  let wasNearStreetLight = false;
+  let lastStreetLightSoundAtMs = 0;
+  const clockWorldPositions = [];
+  let wasNearClock = false;
+  let lastClockSoundAtMs = 0;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -191,6 +249,11 @@ export function Stage3() {
   const _introTargetLookAt = new THREE.Vector3();
   const _introLerpLookAt = new THREE.Vector3();
   const _iceCartWorld = new THREE.Vector3();
+  const _iceSpawnDir = new THREE.Vector3();
+  const _iceSpawnRight = new THREE.Vector3();
+  const _iceCartQuat = new THREE.Quaternion();
+  const _iceModelCenter = new THREE.Vector3();
+  const _iceModelSize = new THREE.Vector3();
 
   function getCharacterFollowPose(outPos, outLookAt) {
     if (!character) return false;
@@ -314,14 +377,30 @@ export function Stage3() {
       }
       p = p.parent;
     }
+    // fallback: INT_ 접두사가 빠진 리소스라도 카트 계열 이름이면 아이스크림 타깃으로 취급
+    p = hitObject;
+    while (p) {
+      const n = normalizeIntNameToken(p.name);
+      if (n.includes("icecart") || n.includes("icecreamcart")) {
+        return "icecream";
+      }
+      p = p.parent;
+    }
     return null;
+  }
+  function isDescendantOf(node, ancestor) {
+    let p = node;
+    while (p) {
+      if (p === ancestor) return true;
+      p = p.parent;
+    }
+    return false;
   }
 
   /** island2 로드 후: INT_* 노드에서 레이캐스트 메시·refs 등록 */
   function registerIslandInteractions(islandModel) {
     intRaycastMeshes.length = 0;
     iceCreamCartRef = null;
-    noticeRef = null;
     gameMachineRef = null;
     if (unlistenMinigameClose) {
       unlistenMinigameClose();
@@ -330,21 +409,61 @@ export function Stage3() {
 
     const meshSet = new Set();
     const rootNames = [];
+    const nonIntCartCandidates = [];
     islandModel.traverse((obj) => {
       if (typeof obj.name !== "string" || !obj.name.startsWith(INT_PREFIX)) {
+        const normalized = normalizeIntNameToken(obj.name);
+        if (
+          normalized &&
+          (normalized.includes("icecart") ||
+            normalized.includes("icecreamcart"))
+        ) {
+          nonIntCartCandidates.push(obj);
+        }
         return;
       }
       rootNames.push(obj.name);
       const suffix = obj.name.slice(INT_PREFIX.length);
       const intTarget = intSuffixToTarget(suffix);
       if (intTarget === "gameMachine") gameMachineRef = obj;
-      if (intTarget === "notice") noticeRef = obj;
       if (intTarget === "icecream") iceCreamCartRef = obj;
+      if (intTarget === "clock") {
+        obj.updateMatrixWorld(true);
+        const worldPos = new THREE.Vector3();
+        obj.getWorldPosition(worldPos);
+        clockWorldPositions.push(worldPos);
+      }
       obj.traverse((child) => {
         if (child.isMesh) meshSet.add(child);
       });
     });
+    if (!iceCreamCartRef && nonIntCartCandidates.length > 0) {
+      iceCreamCartRef = nonIntCartCandidates[0];
+      iceCreamCartRef.traverse((child) => {
+        if (child.isMesh) {
+          // backgroundLoader에서 비-INT 메시는 raycast를 꺼두므로, fallback 카트는 raycast를 복구해야 클릭 가능하다.
+          child.raycast = THREE.Mesh.prototype.raycast;
+          meshSet.add(child);
+        }
+      });
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[Stage3] INT_ 카트 미검출 → fallback 카트 사용: '${iceCreamCartRef.name}'`,
+        );
+      }
+    }
     intRaycastMeshes.push(...meshSet);
+
+    streetLightWorldPositions.length = 0;
+    clockWorldPositions.length = 0;
+    islandModel.traverse((obj) => {
+      if (typeof obj.name !== "string") return;
+      if (!obj.name.startsWith(STREET_LIGHT_NAME_PREFIX)) return;
+      obj.updateMatrixWorld(true);
+      const worldPos = new THREE.Vector3();
+      obj.getWorldPosition(worldPos);
+      streetLightWorldPositions.push(worldPos);
+    });
 
     if (gameMachineRef) {
       unlistenMinigameClose = onMinigameClose(() => {
@@ -357,21 +476,23 @@ export function Stage3() {
 
     if (rootNames.length > 0 && import.meta.env.DEV) {
       const uniq = [...new Set(rootNames)];
-      console.log("[Stage3] island INT_ 노드:", uniq.join(", "));
       for (const full of uniq) {
         const suf = full.startsWith(INT_PREFIX)
           ? full.slice(INT_PREFIX.length)
           : full;
-        if (intSuffixToTarget(suf) == null) {
-          console.log(
-            `[Stage3] INT_ '${full}' → 아직 클릭 핸들러 없음 (매핑 추가 또는 GLB 이름 변경)`,
-          );
-        }
+        if (intSuffixToTarget(suf) == null) continue;
       }
+    }
+    if (!iceCreamCartRef && import.meta.env.DEV) {
+      const rootsMsg =
+        rootNames.length > 0 ? [...new Set(rootNames)].join(", ") : "(없음)";
+      console.warn(
+        `[Stage3] 아이스크림 카트 ref를 찾지 못했습니다. INT_ 노드: ${rootsMsg}`,
+      );
     }
   }
 
-  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "mirror" | "portal" | null */
+  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "tent" | "portal" | "well" | "clock" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
     if (intRaycastMeshes.length === 0) return null;
@@ -383,8 +504,12 @@ export function Stage3() {
     if (hits.length === 0) return null;
     // 같은 화면 위치에서 가장 앞이 INT_StreetLight 등(매핑 없음)이면 null이 되어 카트 클릭이 무시됨 → 뒤쪽 히트까지 순회
     for (let i = 0; i < hits.length; i++) {
-      const resolved = resolveIntPointerTarget(hits[i].object);
+      const hitObj = hits[i].object;
+      const resolved = resolveIntPointerTarget(hitObj);
       if (resolved) return resolved;
+      if (iceCreamCartRef && isDescendantOf(hitObj, iceCreamCartRef)) {
+        return "icecream";
+      }
     }
     return null;
   }
@@ -449,10 +574,6 @@ export function Stage3() {
         assignedSvgUrl,
         assignedWorryId,
       );
-    } else {
-      console.log(
-        "[Stage3] monitor busy 수신 (배경 아직 준비 전) → background ready 시 로드",
-      );
     }
   }
 
@@ -490,9 +611,6 @@ export function Stage3() {
     monitorPollIntervalId = window.setInterval(() => {
       void pollMonitorCurrent();
     }, MONITOR_POLL_MS);
-    console.log(
-      `[Stage3] gum_server REST 폴링 시작 (${MONITOR_POLL_MS}ms), monitor="${getMonitorDeviceId()}"`,
-    );
   }
 
   function stopMonitorPolling() {
@@ -543,42 +661,62 @@ export function Stage3() {
     for (const g of results) {
       if (g?.scene) iceCreamTemplates.push({ scene: g.scene });
     }
-    if (import.meta.env.DEV) {
-      console.log(
-        `[Stage3] 아이스크림 템플릿 preload 완료: ${iceCreamTemplates.length}개`,
-      );
-    }
   }
 
   /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
   function showNoticeModal() {
-    const paperPaths = config.notice?.paperSoundPaths ?? [];
-    if (paperPaths.length > 0) {
-      const path = paperPaths[Math.floor(Math.random() * paperPaths.length)];
-      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-      const src = base + path;
-      if (!noticePaperAudio) {
-        noticePaperAudio = new window.Audio();
-        noticePaperAudio.volume = 0.5;
-      }
-      noticePaperAudio.pause();
-      noticePaperAudio.currentTime = 0;
-      noticePaperAudio.src = src;
-      noticePaperAudio.play().catch(() => {});
-    }
+    playRandomNoticePaperSound(config.notice?.paperSoundPaths);
     window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
+  }
+
+  function playGameMachineClickSound() {
+    const src = resolvePublicAssetUrl(GAME_MACHINE_CLICK_SOUND_PATH);
+    if (!gameMachineClickAudio) {
+      gameMachineClickAudio = new window.Audio();
+      gameMachineClickAudio.preload = "auto";
+      gameMachineClickAudio.volume = 0.5;
+    }
+    gameMachineClickAudio.pause();
+    gameMachineClickAudio.currentTime = 0;
+    gameMachineClickAudio.src = src;
+    try {
+      gameMachineClickAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = gameMachineClickAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn("[Stage3] game machine sound play failed:", err, src);
+        }
+      });
+    }
   }
 
   /** island INT_* 클릭 핸들러 */
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
     const target = getPointerHitTarget(event.clientX, event.clientY);
-    if (!target) return;
+    if (!target) {
+      if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
+        spawnIceCreamFromCart();
+      }
+      return;
+    }
 
     event.preventDefault();
     event.stopPropagation();
 
     if (target === "icecream") {
+      if (!iceCreamCartRef) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] icecream 클릭 감지됨. 하지만 카트 ref가 없습니다(INT 네이밍/계층 확인).",
+          );
+        }
+        return;
+      }
       if (iceCreamTemplates.length === 0) {
         if (import.meta.env.DEV) {
           console.warn(
@@ -594,14 +732,16 @@ export function Stage3() {
       showNoticeModal();
     }
     if (target === "gameMachine") {
+      playGameMachineClickSound();
       openMinigame({
         camera: cameraRef,
         gameMachineRef,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
     }
-    if (target === "mirror") {
-      openMirrorModal();
+    // INT_tent → 껌 카드(타로) 모달 (효과음은 openGumCardsModal 내부)
+    if (target === "tent") {
+      openGumCardsModal();
       return;
     }
     if (target === "portal") {
@@ -611,11 +751,86 @@ export function Stage3() {
           detail: { targetStage },
         }),
       );
+      return;
     }
+    if (target === "well") {
+      playRandomWellClickSound();
+      window.dispatchEvent(new CustomEvent("gum:wellClick"));
+      return;
+    }
+    if (target === "clock") return;
+  }
+
+  function updateStreetLightProximitySound() {
+    const userPos = character?.getPosition?.();
+    if (!userPos || streetLightWorldPositions.length === 0) {
+      wasNearStreetLight = false;
+      return;
+    }
+    const radiusSq = STREET_LIGHT_TRIGGER_RADIUS * STREET_LIGHT_TRIGGER_RADIUS;
+    const isNear = streetLightWorldPositions.some((p) => {
+      const dx = p.x - userPos.x;
+      const dz = p.z - userPos.z;
+      return dx * dx + dz * dz <= radiusSq;
+    });
+    if (!isNear) {
+      wasNearStreetLight = false;
+      return;
+    }
+    const now = Date.now();
+    if (
+      !wasNearStreetLight &&
+      now - lastStreetLightSoundAtMs >= STREET_LIGHT_TRIGGER_COOLDOWN_MS
+    ) {
+      playRandomStreetLightClickSound();
+      lastStreetLightSoundAtMs = now;
+    }
+    wasNearStreetLight = true;
+  }
+
+  function updateClockProximitySound() {
+    const userPos = character?.getPosition?.();
+    if (!userPos || clockWorldPositions.length === 0) {
+      wasNearClock = false;
+      return;
+    }
+    const radiusSq = CLOCK_TRIGGER_RADIUS * CLOCK_TRIGGER_RADIUS;
+    const isNear = clockWorldPositions.some((p) => {
+      const dx = p.x - userPos.x;
+      const dz = p.z - userPos.z;
+      return dx * dx + dz * dz <= radiusSq;
+    });
+    if (!isNear) {
+      wasNearClock = false;
+      return;
+    }
+    const now = Date.now();
+    if (
+      !wasNearClock &&
+      now - lastClockSoundAtMs >= CLOCK_TRIGGER_COOLDOWN_MS
+    ) {
+      playRandomClockClickSound();
+      lastClockSoundAtMs = now;
+    }
+    wasNearClock = true;
   }
 
   let _iceCreamGroundMat = null;
   let _iceCreamMat = null;
+
+  /** 캐릭터용 처리지 Y + 보정(섬 실제 메시와 무한 평면 높이 차이) */
+  function getIceCreamPhysicsGroundY() {
+    return (
+      stage3GroundY +
+      Number(config.icecreamCart?.["physicsGroundYOffset"] ?? 0.45)
+    );
+  }
+
+  function syncIceCreamGroundPlane() {
+    if (!iceCreamGroundBody) return;
+    const y = getIceCreamPhysicsGroundY();
+    iceCreamGroundBody.position.set(0, y, 0);
+  }
 
   /** 아이스크림용 물리 월드 초기화 (지면, 중력) */
   function initIceCreamPhysics() {
@@ -631,7 +846,7 @@ export function Stage3() {
       material: _iceCreamGroundMat,
     });
     iceCreamGroundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-    iceCreamGroundBody.position.set(0, stage3GroundY, 0);
+    iceCreamGroundBody.position.set(0, getIceCreamPhysicsGroundY(), 0);
     iceCreamPhysicsWorld.addBody(iceCreamGroundBody);
     iceCreamPhysicsWorld.addContactMaterial(
       new CANNON.ContactMaterial(_iceCreamGroundMat, _iceCreamMat, {
@@ -640,58 +855,252 @@ export function Stage3() {
       }),
     );
   }
+  function removeSpawnedIceCreamAt(index) {
+    const item = spawnedIceCreams[index];
+    if (!item) return;
+    if (item.body && item.landSoundHandler) {
+      item.body.removeEventListener("collide", item.landSoundHandler);
+      item.landSoundHandler = undefined;
+    }
+    if (iceCreamPhysicsWorld && item.body) {
+      iceCreamPhysicsWorld.removeBody(item.body);
+    }
+    if (sceneRef) {
+      sceneRef.remove(item.group);
+    }
+    item.group.traverse((child) => {
+      if (!child.isMesh) return;
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        const m = child.material;
+        if (Array.isArray(m)) m.forEach((x) => x.dispose());
+        else m.dispose();
+      }
+    });
+    spawnedIceCreams.splice(index, 1);
+  }
 
   function spawnIceCreamFromCart() {
-    if (!iceCreamCartRef) {
+    if (!sceneRef) return;
+    if (!iceCreamCartRef && !STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
       if (import.meta.env.DEV) {
         console.warn("[Stage3] 카트가 아직 로드되지 않았습니다.");
       }
       return;
     }
-    if (!sceneRef) return;
     const maxSpawns = config.icecreamCart?.maxSpawns ?? 10;
-    if (spawnedIceCreams.length >= maxSpawns) return;
-    if (iceCreamTemplates.length === 0) {
+    if (spawnedIceCreams.length >= maxSpawns) {
       if (import.meta.env.DEV) {
         console.warn(
-          "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
+          `[Stage3] 아이스크림 스폰 상한(${maxSpawns}) 도달: 가장 오래된 오브젝트를 제거 후 새로 스폰합니다.`,
         );
       }
+      removeSpawnedIceCreamAt(0);
+    }
+    if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
+      const debugHalf = 0.45;
+      const debugMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(debugHalf * 2, debugHalf * 2, debugHalf * 2),
+        new THREE.MeshBasicMaterial({
+          color: 0xff3355,
+          wireframe: false,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.9,
+        }),
+      );
+      const charPos = character?.getPosition?.() ?? null;
+      if (charPos) {
+        debugMesh.position.set(charPos.x, charPos.y + 1.4, charPos.z);
+      } else if (cameraRef) {
+        cameraRef.getWorldDirection(_iceSpawnDir);
+        debugMesh.position
+          .copy(cameraRef.position)
+          .add(_iceSpawnDir.multiplyScalar(3));
+      } else {
+        debugMesh.position.set(0, stage3GroundY + 1.5, 0);
+      }
+      debugMesh.name = "DEBUG_IceCreamBox";
+      debugMesh.renderOrder = 999;
+      sceneRef.add(debugMesh);
+      spawnedIceCreams.push({ group: debugMesh, body: null });
       return;
     }
     initIceCreamPhysics();
+    syncIceCreamGroundPlane();
+    if (iceCreamCartRef) {
+      iceCreamCartRef.updateMatrixWorld(true);
+      const cartBox = new THREE.Box3().setFromObject(iceCreamCartRef);
+      if (!cartBox.isEmpty()) {
+        cartBox.getCenter(_iceCartWorld);
+      } else {
+        iceCreamCartRef.getWorldPosition(_iceCartWorld);
+      }
+    } else if (character?.getPosition?.()) {
+      const p = character.getPosition();
+      _iceCartWorld.set(p.x, Math.max(stage3GroundY + 0.5, p.y), p.z);
+    } else {
+      _iceCartWorld.set(0, stage3GroundY + 0.7, 0);
+    }
 
-    const template =
-      iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
-    const clone = template.scene.clone(true);
-    clone.frustumCulled = false;
-    iceCreamCartRef.updateMatrixWorld(true);
-    iceCreamCartRef.getWorldPosition(_iceCartWorld);
-    const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
-    const sx = _iceCartWorld.x + (Math.random() - 0.5) * 1.5;
-    const sy = _iceCartWorld.y + 0.5 + Math.random() * 0.5;
-    const sz = _iceCartWorld.z + (Math.random() - 0.5) * 1.5;
-
-    clone.position.set(sx, sy, sz);
-    clone.scale.setScalar(spawnScale);
-    clone.updateMatrixWorld(true);
-    clone.traverse((child) => {
-      if (child.isMesh) {
+    // 1) 시각 오브젝트 준비: 디버그 모드면 GLB 대신 박스만 생성
+    let clone;
+    /** 물리/월드 위치를 따라가는 루트(메시 중심 보정은 자식에만 둔다) */
+    let spawnRoot = null;
+    let halfExtents;
+    if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
+      const debugHalf = 0.18;
+      halfExtents = new CANNON.Vec3(debugHalf, debugHalf, debugHalf);
+      clone = new THREE.Group();
+      const debugBox = new THREE.Mesh(
+        new THREE.BoxGeometry(debugHalf * 2, debugHalf * 2, debugHalf * 2),
+        new THREE.MeshBasicMaterial({
+          color: 0xff3355,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.95,
+          depthTest: true,
+        }),
+      );
+      debugBox.name = "DEBUG_IceCreamBox";
+      clone.add(debugBox);
+    } else {
+      if (iceCreamTemplates.length === 0) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] 스폰 모델 로드 실패. 콘솔에서 '아이스크림 스폰 모델 로드 실패' 확인.",
+          );
+        }
+        return;
+      }
+      const template =
+        iceCreamTemplates[Math.floor(Math.random() * iceCreamTemplates.length)];
+      clone = template.scene.clone(true);
+      clone.frustumCulled = false;
+      const spawnScale = config.icecreamCart?.spawnScale ?? 0.5;
+      const maxVisualSize = config.icecreamCart?.maxVisualSize ?? 0.9;
+      const minVisualSize = Number(
+        config.icecreamCart?.["minVisualSize"] ?? 0.35,
+      );
+      clone.position.set(0, 0, 0);
+      clone.scale.setScalar(spawnScale);
+      clone.updateMatrixWorld(true);
+      clone.traverse((child) => {
+        if (!child.isMesh) return;
+        child.visible = true;
         child.castShadow = true;
         child.receiveShadow = true;
+        child.frustumCulled = false;
+      });
+      const box = new THREE.Box3().setFromObject(clone);
+      box.getSize(_iceModelSize);
+      const maxDim = Math.max(
+        _iceModelSize.x,
+        _iceModelSize.y,
+        _iceModelSize.z,
+      );
+      if (maxDim > 1e-6 && (maxDim > maxVisualSize || maxDim < minVisualSize)) {
+        const target =
+          maxDim > maxVisualSize
+            ? maxVisualSize
+            : Math.max(minVisualSize, maxDim);
+        const fit = target / maxDim;
+        clone.scale.multiplyScalar(fit);
+        clone.updateMatrixWorld(true);
+        box.setFromObject(clone);
+        box.getSize(_iceModelSize);
       }
-    });
+      box.getCenter(_iceModelCenter);
+      clone.position.sub(_iceModelCenter);
+      clone.updateMatrixWorld(true);
+      spawnRoot = new THREE.Group();
+      spawnRoot.name = "SpawnedIceCreamRoot";
+      spawnRoot.add(clone);
+    }
 
-    // 물리 바디: 모델 바운딩 박스 기반
-    const box = new THREE.Box3().setFromObject(clone);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const minHalf = 0.08;
-    const halfExtents = new CANNON.Vec3(
-      Math.max(size.x * 0.5, minHalf),
-      Math.max(size.y * 0.5, minHalf),
-      Math.max(size.z * 0.5, minHalf),
+    // 2) 스폰 위치: 카트 바운딩 중심 주변 수평 원환에서 랜덤
+    const radiusMin = Number(config.icecreamCart?.["spawnRadiusMin"] ?? 0.3);
+    const radiusMax = Number(config.icecreamCart?.["spawnRadiusMax"] ?? 1.15);
+    const span = Math.max(0, radiusMax - radiusMin);
+    const angle = Math.random() * Math.PI * 2;
+    // 균등 분포(원판): r² 균등
+    const t = Math.random();
+    const r = radiusMin + Math.sqrt(t) * span;
+    const dx = Math.cos(angle) * r;
+    const dz = Math.sin(angle) * r;
+    const sx = _iceCartWorld.x + dx;
+    const sz = _iceCartWorld.z + dz;
+    const heightJitter = Number(
+      config.icecreamCart?.["spawnHeightJitter"] ?? 0.2,
     );
+    const floorY = getIceCreamPhysicsGroundY();
+    const baseY = Math.max(
+      floorY + 0.35,
+      _iceCartWorld.y + (config.icecreamCart?.spawnHeightAboveCart ?? 0.55),
+    );
+    const sy = baseY + (Math.random() * 2 - 1) * Math.max(0, heightJitter);
+
+    // 발사 방향: 기본은 [스폰 지점 → 유저 캐릭터]. 없으면 카트→캐릭 / 카트 앞쪽 폴백.
+    const charPos = character?.getPosition?.() ?? null;
+    if (charPos) {
+      _iceSpawnDir.set(charPos.x - sx, 0, charPos.z - sz);
+    }
+    if (!charPos || _iceSpawnDir.lengthSq() < 1e-6) {
+      if (charPos) {
+        _iceSpawnDir.set(
+          charPos.x - _iceCartWorld.x,
+          0,
+          charPos.z - _iceCartWorld.z,
+        );
+      } else if (iceCreamCartRef) {
+        _iceSpawnDir.set(0, 0, -1);
+        _iceSpawnDir.applyQuaternion(
+          iceCreamCartRef.getWorldQuaternion(_iceCartQuat),
+        );
+        _iceSpawnDir.y = 0;
+      } else {
+        _iceSpawnDir.set(dx, 0, dz);
+      }
+    }
+    if (_iceSpawnDir.lengthSq() < 1e-6) {
+      _iceSpawnDir.set(0, 0, 1);
+    }
+    _iceSpawnDir.normalize();
+    const spreadRad = Number(
+      config.icecreamCart?.["launchTowardPlayerSpread"] ?? 0.28,
+    );
+    if (spreadRad > 0) {
+      const jitter = (Math.random() * 2 - 1) * spreadRad;
+      const c = Math.cos(jitter);
+      const s = Math.sin(jitter);
+      const x = _iceSpawnDir.x;
+      const z = _iceSpawnDir.z;
+      _iceSpawnDir.set(x * c - z * s, 0, x * s + z * c);
+      _iceSpawnDir.normalize();
+    }
+
+    /** @type {THREE.Object3D} */
+    let groupForScene = clone;
+    if (spawnRoot) {
+      spawnRoot.position.set(sx, sy, sz);
+      spawnRoot.updateMatrixWorld(true);
+      groupForScene = spawnRoot;
+    } else {
+      clone.position.set(sx, sy, sz);
+      clone.updateMatrixWorld(true);
+    }
+
+    // 3) 물리 바디 생성
+    if (!halfExtents) {
+      const box = new THREE.Box3().setFromObject(groupForScene);
+      box.getSize(_iceModelSize);
+      const minHalf = 0.08;
+      halfExtents = new CANNON.Vec3(
+        Math.max(_iceModelSize.x * 0.5, minHalf),
+        Math.max(_iceModelSize.y * 0.5, minHalf),
+        Math.max(_iceModelSize.z * 0.5, minHalf),
+      );
+    }
     const boxShape = new CANNON.Box(halfExtents);
     const body = new CANNON.Body({
       mass: 0.3,
@@ -701,14 +1110,14 @@ export function Stage3() {
       linearDamping: 0.1,
       angularDamping: 0.3,
     });
-
-    const angle = Math.random() * Math.PI * 2;
-    const horizontalSpeed = 2.5 + Math.random() * 2;
-    body.velocity.set(
-      Math.cos(angle) * horizontalSpeed,
-      3 + Math.random() * 2,
-      Math.sin(angle) * horizontalSpeed,
-    );
+    const vHoriz =
+      Number(config.icecreamCart?.["launchHorizontalMin"] ?? 3.1) +
+      Math.random() *
+        Number(config.icecreamCart?.["launchHorizontalSpread"] ?? 1.6);
+    const vUp =
+      Number(config.icecreamCart?.["launchUpMin"] ?? 5.6) +
+      Math.random() * Number(config.icecreamCart?.["launchUpSpread"] ?? 3.2);
+    body.velocity.set(_iceSpawnDir.x * vHoriz, vUp, _iceSpawnDir.z * vHoriz);
     body.angularVelocity.set(
       (Math.random() - 0.5) * 4,
       (Math.random() - 0.5) * 4,
@@ -716,8 +1125,28 @@ export function Stage3() {
     );
 
     iceCreamPhysicsWorld.addBody(body);
-    sceneRef.add(clone);
-    spawnedIceCreams.push({ group: clone, body });
+    sceneRef.add(groupForScene);
+    const iceEntry = { group: groupForScene, body };
+    const landHandler = (e) => {
+      if (iceEntry.landSoundPlayed) return;
+      if (e.body !== iceCreamGroundBody) return;
+      iceEntry.landSoundPlayed = true;
+      if (ICECREAM_LAND_SOUND_PATHS.length === 0) return;
+      const path =
+        ICECREAM_LAND_SOUND_PATHS[
+          Math.floor(Math.random() * ICECREAM_LAND_SOUND_PATHS.length)
+        ];
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const landAudio = new window.Audio();
+      const v = Number(config.icecreamCart?.landSoundVolume ?? 0.22);
+      landAudio.volume = Math.min(1, Math.max(0, v));
+      landAudio.src = base + path;
+      landAudio.play().catch(() => {});
+    };
+    iceEntry.landSoundHandler = landHandler;
+    iceEntry.landSoundPlayed = false;
+    body.addEventListener("collide", landHandler);
+    spawnedIceCreams.push(iceEntry);
   }
 
   function updateSpawnedIceCreams(delta) {
@@ -726,6 +1155,7 @@ export function Stage3() {
     iceCreamPhysicsWorld.step(1 / 60, delta, substeps);
     for (let i = 0; i < spawnedIceCreams.length; i++) {
       const s = spawnedIceCreams[i];
+      if (!s.body) continue;
       s.group.position.copy(s.body.position);
       s.group.quaternion.copy(s.body.quaternion);
     }
@@ -869,7 +1299,6 @@ export function Stage3() {
       // (연속 REST 할당에도 마지막 SVG가 반영되도록)
       while (nextSvgUrl) {
         const currentSvgUrl = nextSvgUrl;
-        const currentDebugId = nextDebugId;
         nextSvgUrl = null;
         nextDebugId = null;
 
@@ -984,10 +1413,6 @@ export function Stage3() {
             landed: false,
             hitCount: 0,
           };
-
-          console.log(
-            `[Stage3] 글자 낙하 시작 (debugId=${currentDebugId ?? "unknown"})`,
-          );
         } catch (e) {
           console.warn("[Stage3] svg 로드 실패:", e);
         }
@@ -1005,9 +1430,6 @@ export function Stage3() {
       }
       const metadata = await getLatestHandwritingMetadata();
       if (!metadata?.url) {
-        if (import.meta.env.DEV) {
-          console.log("[Stage3] 표시할 handwriting 없음");
-        }
         return;
       }
       let shapes = await loadSVGShapes(metadata.url);
@@ -1117,9 +1539,6 @@ export function Stage3() {
         landed: false,
         hitCount: 0,
       };
-      if (import.meta.env.DEV) {
-        console.log("[Stage3] 최신 글자 1개 낙하 시작 (2배 크기)");
-      }
     } catch (e) {
       if (import.meta.env.DEV) {
         console.warn("[Stage3] 글자 로드 실패:", e);
@@ -1132,7 +1551,6 @@ export function Stage3() {
   async function loadLatestLetter(scene, camera, groundY) {
     const metadata = await getLatestHandwritingMetadata();
     if (!metadata?.url) {
-      console.log("[Stage3] 표시할 handwriting 없음");
       return;
     }
     await loadLetterFromSvgUrl(
@@ -1166,9 +1584,6 @@ export function Stage3() {
       s.bounces = 0;
       s.landed = false;
       s.hitCount = 0;
-      if (import.meta.env.DEV) {
-        console.log("[Stage3] 0키: 글자 재낙하");
-      }
       return;
     }
     if (sceneRef && cameraRef && stage3GroundY > 0) {
@@ -1180,12 +1595,8 @@ export function Stage3() {
           assignedSvgUrl,
           assignedWorryId,
         );
-        console.log("[Stage3] 0키: 할당 글자 로드 후 낙하");
       } else {
         loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
-        if (import.meta.env.DEV) {
-          console.log("[Stage3] 0키: 글자 없음 → 최신 글자 로드 후 낙하");
-        }
       }
     }
   }
@@ -1772,6 +2183,14 @@ export function Stage3() {
     setup(scene, renderer) {
       isStage3Active = true;
       gumCancelled = false;
+      stage3LightingRestore = {
+        toneMappingExposure: renderer.toneMappingExposure,
+        environmentIntensity: scene.environmentIntensity,
+        renderer,
+      };
+      renderer.toneMappingExposure += STAGE3_TONE_MAPPING_EXPOSURE_DELTA;
+      scene.environmentIntensity += STAGE3_ENVIRONMENT_INTENSITY_DELTA;
+
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
@@ -1804,7 +2223,10 @@ export function Stage3() {
         this.camera.lookAt(0, 0, 0);
       }
 
-      scene.background = new THREE.Color(config.background.color);
+      skyBackgroundTexture = createSkyGradientTexture(
+        config.background.gradient,
+      );
+      scene.background = skyBackgroundTexture;
 
       keyboard.mount();
       window.addEventListener("keydown", handleStageKeyDown, { capture: true });
@@ -1854,10 +2276,6 @@ export function Stage3() {
             playStage3IntroAudioTwice();
           }
           debugControls.setOrbitTarget(center);
-          if (import.meta.env.DEV) {
-            console.log("✅ Stage3 배경 모델 로드 완료");
-          }
-
           cameraRef = this.camera;
           stage3GroundY = backgroundMaxY;
           if (assignedSvgUrl) {
@@ -1889,19 +2307,7 @@ export function Stage3() {
               )
             : [];
           if (import.meta.env.DEV) {
-            if (!useStatic) {
-              console.log(
-                "[Stage3] 정적 장애물 충돌 비활성화(model.useStaticObstacleColliders). 바운딩만 사용.",
-              );
-            } else {
-              const dropped =
-                rawColliders.length - islandStaticColliders.length;
-              console.log(
-                `[Stage3] INT_/OBJ_ 충돌 AABB: ${islandStaticColliders.length}개 적용` +
-                  (dropped > 0 ? ` (${dropped}개 넓은 슬라브 후보 제외)` : "") +
-                  " (INT_Portal 제외)",
-              );
-            }
+            // dev-only collider diagnostics intentionally muted to reduce console noise.
           }
           character.setup(
             backgroundMaxY,
@@ -1951,7 +2357,7 @@ export function Stage3() {
       });
 
       if (import.meta.env.DEV) {
-        console.log("✅ Stage3 생성 완료");
+        // dev-only setup diagnostics intentionally muted to reduce console noise.
       }
     },
 
@@ -1968,6 +2374,8 @@ export function Stage3() {
           skipCameraFollow: cameraIntro.active || !cameraIntro.completed,
         });
       }
+      updateStreetLightProximitySound();
+      updateClockProximitySound();
       updateCameraIntro(delta);
       if (gumFollowers) {
         gumFollowers.update(delta);
@@ -2007,27 +2415,38 @@ export function Stage3() {
         canvasRef = null;
       }
       window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
-      noticeRef = null;
       closeMinigame({
         camera: cameraRef ?? this.camera,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
       cameraRef = null;
       dispatchMinigameClose();
-      dispatchMirrorModalClose();
+      dispatchGumCardsModalClose();
       intRaycastMeshes.length = 0;
+      streetLightWorldPositions.length = 0;
+      wasNearStreetLight = false;
+      lastStreetLightSoundAtMs = 0;
+      clockWorldPositions.length = 0;
+      wasNearClock = false;
+      lastClockSoundAtMs = 0;
       if (unlistenMinigameClose) {
         unlistenMinigameClose();
         unlistenMinigameClose = null;
       }
       gameMachineRef = null;
-      if (noticePaperAudio) {
-        noticePaperAudio.pause();
-        noticePaperAudio.src = "";
-        noticePaperAudio = null;
+      disposeNoticePaperAudio();
+      disposeStreetLightSound();
+      if (gameMachineClickAudio) {
+        gameMachineClickAudio.pause();
+        gameMachineClickAudio.src = "";
+        gameMachineClickAudio = null;
       }
 
       spawnedIceCreams.forEach((s) => {
+        if (s.body && s.landSoundHandler) {
+          s.body.removeEventListener("collide", s.landSoundHandler);
+          s.landSoundHandler = undefined;
+        }
         if (iceCreamPhysicsWorld && s.body) {
           iceCreamPhysicsWorld.removeBody(s.body);
         }
@@ -2108,9 +2527,25 @@ export function Stage3() {
         backgroundModel = null;
       }
 
+      if (skyBackgroundTexture) {
+        skyBackgroundTexture.dispose();
+        skyBackgroundTexture = null;
+      }
       scene.background = null;
+
+      if (stage3LightingRestore) {
+        const {
+          renderer: r,
+          toneMappingExposure,
+          environmentIntensity,
+        } = stage3LightingRestore;
+        r.toneMappingExposure = toneMappingExposure;
+        scene.environmentIntensity = environmentIntensity;
+        stage3LightingRestore = null;
+      }
+
       if (import.meta.env.DEV) {
-        console.log("🧹 Stage3 정리 완료");
+        // dev-only cleanup diagnostics intentionally muted to reduce console noise.
       }
     },
   };

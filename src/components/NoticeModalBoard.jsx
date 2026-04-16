@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
+
+const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
+const NOTICE_POSTER = NOTICE.posterImages;
+const THIRD_POSTER_SRC =
+  NOTICE.voteCandidateImages?.[2] ?? "/assets/poster/icecream_poster.png";
 
 const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
 const card = "oklch(0.99 0.012 85)";
 const amber50 = "#fffbeb";
+const posterBorderColor = "oklch(0.85 0.02 60)";
 
 /** 한 줄 가로 배치: 모달 너비의 1/3씩 균등 분배, 화면이 클수록 포스터만 함께 커짐 */
+/** @type {import('framer-motion').MotionStyle} */
 const POSTER_BASE = {
   flex: "1 1 0",
   minWidth: 0,
@@ -23,7 +32,7 @@ const POSTER_BASE = {
  * @param {function} props.onClose
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
-  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "lost" | "vote" | null
+  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "icecream" | null
 
   useEffect(() => {
     if (!isOpen) return;
@@ -158,13 +167,21 @@ export function NoticeModalBoard({ isOpen, onClose }) {
               <motion.div
                 role="button"
                 tabIndex={0}
-                onClick={() => setZoomedPoster("feast")}
-                onKeyDown={(e) => e.key === "Enter" && setZoomedPoster("feast")}
+                onClick={() => {
+                  playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                  setZoomedPoster("feast");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                    setZoomedPoster("feast");
+                  }
+                }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 style={{
                   ...POSTER_BASE,
-                  border: "2px solid oklch(0.85 0.02 60)",
+                  border: `2px solid ${posterBorderColor}`,
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
                   cursor: "pointer",
@@ -195,7 +212,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src="/assets/poster/party_poster.png"
+                    src={NOTICE_POSTER.party}
                     alt="껌딱지 마을 잔치"
                     draggable={false}
                     style={{
@@ -208,18 +225,26 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 </div>
               </motion.div>
 
-              {/* 포스터 2: best_gum_poster.svg */}
+              {/* 포스터 2: notice.posterImages.bestGum */}
               <motion.div
                 role="button"
                 tabIndex={0}
-                onClick={() => setZoomedPoster("vote")}
-                onKeyDown={(e) => e.key === "Enter" && setZoomedPoster("vote")}
+                onClick={() => {
+                  playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                  setZoomedPoster("vote");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                    setZoomedPoster("vote");
+                  }
+                }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 style={{
                   ...POSTER_BASE,
                   cursor: "pointer",
-                  border: "2px solid #fde047",
+                  border: `2px solid ${posterBorderColor}`,
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)",
                 }}
@@ -249,7 +274,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src="/assets/poster/best_gum_poster.svg"
+                    src={NOTICE_POSTER.bestGum}
                     alt="투표 포스터"
                     draggable={false}
                     style={{
@@ -262,13 +287,28 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 </div>
               </motion.div>
 
-              {/* 포스터 3: 빈 박스 (투표는 2번째 포스터에서만) */}
+              {/* 포스터 3: 아이스크림 포스터 */}
               <motion.div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                  setZoomedPoster("icecream");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    playRandomNoticePaperSound(NOTICE.paperSoundPaths);
+                    setZoomedPoster("icecream");
+                  }
+                }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 style={{
                   ...POSTER_BASE,
-                  border: "2px solid rgba(249,168,212,0.35)",
+                  border: `2px solid ${posterBorderColor}`,
                   boxShadow:
                     "0 4px 12px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06)",
+                  cursor: "pointer",
                 }}
               >
                 <div
@@ -295,7 +335,19 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     height: "100%",
                     background: "rgba(255,255,255,0.08)",
                   }}
-                />
+                >
+                  <img
+                    src={THIRD_POSTER_SRC}
+                    alt="아이스크림 포스터"
+                    draggable={false}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                </div>
               </motion.div>
             </div>
           </motion.div>
@@ -373,7 +425,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       }}
                     >
                       <img
-                        src="/assets/poster/party_poster.png"
+                        src={NOTICE_POSTER.party}
                         alt="껌딱지 마을 잔치"
                         draggable={false}
                         style={{
@@ -386,7 +438,9 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     </div>
                   )}
 
-                  {zoomedPoster === "lost" && (
+                  {zoomedPoster === "vote" && <GgumddiVoteSection />}
+
+                  {zoomedPoster === "icecream" && (
                     <div
                       style={{
                         borderRadius: 16,
@@ -395,8 +449,8 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       }}
                     >
                       <img
-                        src="/assets/poster/best_gum_poster.svg"
-                        alt="투표 포스터"
+                        src={THIRD_POSTER_SRC}
+                        alt="아이스크림 포스터"
                         draggable={false}
                         style={{
                           width: "100%",
@@ -407,8 +461,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                       />
                     </div>
                   )}
-
-                  {zoomedPoster === "vote" && <GgumddiVoteSection />}
                 </motion.div>
               </motion.div>
             )}
