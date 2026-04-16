@@ -6,14 +6,14 @@ export const STAGE6_CONFIG = {
     fov: 60,
     near: 0.1,
     far: 1000,
-    position: { x: -2.32, y: 3.69, z: 3.85 },
-    lookAt: { x: -3.24, y: 2.49, z: -0.01 },
+    position: { x: -3.02, y: 3.89, z: 4.19 },
+    lookAt: { x: -5.81, y: -1.01, z: -10.53 },
   },
   background: {
     color: 0xdfe6e9, // 공항 하이앵글
   },
   model: {
-    path: "/models/stage6/airport.glb",
+    path: "/models/stage6/airport3_compression.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,

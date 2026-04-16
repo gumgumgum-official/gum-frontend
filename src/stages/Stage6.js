@@ -5,7 +5,10 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
-import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../utils/common/gltfTemplateCache.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
@@ -36,6 +39,15 @@ export function Stage6() {
     : [];
   const glbLoader = getGLBLoader();
   const fbxLoader = new FBXLoader();
+  const userAgent =
+    typeof window !== "undefined" && window.navigator
+      ? window.navigator.userAgent
+      : "";
+  const isElectronLike = /Electron|Cursor/i.test(userAgent);
+  const stage6ModelUrl = resolvePublicAssetUrl(config.model.path);
+  // Stage6 진입 직전에 디코더/파서를 워밍업해서 첫 표시 지연을 줄인다.
+  void loadGltfTemplateCached(stage6ModelUrl).catch(() => {});
+  let isStage6Active = true;
   const intRaycastMeshes = [];
   const pointer = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
@@ -206,6 +218,59 @@ export function Stage6() {
       .replace(/[^a-z0-9]/g, "");
   }
 
+  /**
+   * 템플릿 씬과 분리된 인스턴스 (cleanup 시 dispose 안전)
+   * @param {import("three").Object3D} source
+   */
+  function cloneStage6ModelInstance(source) {
+    const root = source.clone(true);
+    root.traverse((obj) => {
+      const mesh = /** @type {any} */ (obj);
+      if (!mesh.isMesh) return;
+      if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
+      const mat = mesh.material;
+      if (Array.isArray(mat)) {
+        mesh.material = mat.map((m) => (m?.clone ? m.clone() : m));
+      } else if (mat?.clone) {
+        mesh.material = mat.clone();
+      }
+
+      const materials = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material];
+      for (const material of materials) {
+        if (!material) continue;
+        // 외부 Chrome에서는 transmission 유리를 유지하고,
+        // Cursor/Electron 웹뷰에서만 fallback glass로 치환한다.
+        if (
+          isElectronLike &&
+          typeof material.transmission === "number" &&
+          material.transmission > 0
+        ) {
+          const originalOpacity =
+            typeof material.opacity === "number" ? material.opacity : 1;
+          material.transmission = 0;
+          material.transparent = true;
+          material.opacity = Math.min(originalOpacity, 0.42);
+          if (typeof material.roughness === "number") {
+            material.roughness = Math.max(material.roughness, 0.08);
+          }
+          if (typeof material.metalness === "number") {
+            material.metalness = Math.min(material.metalness, 0.05);
+          }
+          if (typeof material.envMapIntensity === "number") {
+            material.envMapIntensity = Math.max(material.envMapIntensity, 1.15);
+          }
+          if ("depthWrite" in material) {
+            material.depthWrite = false;
+          }
+          material.needsUpdate = true;
+        }
+      }
+    });
+    return root;
+  }
+
   function registerIntInteractions(rootModel) {
     intRaycastMeshes.length = 0;
     /** @type {Set<THREE.Mesh>} */
@@ -252,6 +317,7 @@ export function Stage6() {
     camera: null,
 
     setup(scene, renderer) {
+      isStage6Active = true;
       const canvas = renderer.domElement;
       canvasRef = canvas;
       this.camera = new THREE.PerspectiveCamera(
@@ -307,11 +373,11 @@ export function Stage6() {
       };
       canvas.addEventListener("pointermove", onPointerMove);
 
-      // 배경 GLB 로드
-      glbLoader.load(config.model.path, {
-        onLoad: (gltf) => {
-          const model = gltf.scene;
-
+      // 배경 GLB 로드: 템플릿 캐시 + 인스턴스 클론
+      void loadGltfTemplateCached(stage6ModelUrl)
+        .then((gltf) => {
+          if (!isStage6Active) return;
+          const model = cloneStage6ModelInstance(gltf.scene);
           model.position.set(
             config.model.position?.x ?? 0,
             config.model.position?.y ?? 0,
@@ -320,12 +386,13 @@ export function Stage6() {
           model.updateMatrixWorld(true);
 
           model.traverse((child) => {
-            if (child.isMesh) {
+            const mesh = /** @type {any} */ (child);
+            if (mesh.isMesh) {
               if (config.model.castShadow !== undefined) {
-                child.castShadow = config.model.castShadow;
+                mesh.castShadow = config.model.castShadow;
               }
               if (config.model.receiveShadow !== undefined) {
-                child.receiveShadow = config.model.receiveShadow;
+                mesh.receiveShadow = config.model.receiveShadow;
               }
             }
           });
@@ -333,9 +400,13 @@ export function Stage6() {
           objects.push(model);
           scene.add(model);
           registerIntInteractions(model);
-        },
-        onError: (err) => console.error("❌ Stage6 배경 로드 에러:", err),
-      });
+        })
+        .catch((err) =>
+          console.error(
+            `❌ Stage6 배경 로드 에러 (${config.model.path}):`,
+            err,
+          ),
+        );
 
       // 벤치 로드 (config.bench 있을 때)
       const benchConfig = config.bench;
@@ -413,6 +484,7 @@ export function Stage6() {
     update(_delta) {},
 
     cleanup(scene) {
+      isStage6Active = false;
       cancelAirplaneCallSignScheduled();
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));

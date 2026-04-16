@@ -53,6 +53,11 @@ export function initThreeApp(canvasElement, options = {}) {
   }
 
   const perfMode = APP_CONFIG?.renderer?.performanceMode ?? false;
+  const userAgent =
+    typeof window !== "undefined" && window.navigator
+      ? window.navigator.userAgent
+      : "";
+  const isElectronLike = /Electron|Cursor/i.test(userAgent);
   const antialias = perfMode
     ? false
     : (APP_CONFIG?.renderer?.antialias ?? true);
@@ -60,12 +65,18 @@ export function initThreeApp(canvasElement, options = {}) {
     ? Math.min(1.5, Math.max(1, window.devicePixelRatio || 1))
     : (APP_CONFIG?.renderer?.pixelRatio ??
       Math.min(2, Math.max(1, window.devicePixelRatio || 1)));
+  // Cursor/Electron 웹뷰는 동일 장비에서도 외부 Chrome보다 GPU/합성 성능이 낮은 경우가 많다.
+  // 이 환경에서는 픽셀 수를 제한해 GLB 표시 체감 지연을 줄인다.
+  const finalAntialias = isElectronLike ? false : antialias;
+  const finalPixelRatio = isElectronLike
+    ? Math.min(1.25, pixelRatio)
+    : pixelRatio;
 
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({
       canvas: canvasElement,
-      antialias,
+      antialias: finalAntialias,
     });
   } catch (err) {
     reportError(
@@ -75,8 +86,37 @@ export function initThreeApp(canvasElement, options = {}) {
     return { dispose: noopDispose };
   }
 
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(pixelRatio);
+  let stageManager = null;
+
+  const getViewportSize = () => {
+    const w = Math.max(
+      1,
+      Math.floor(canvasElement.clientWidth || window.innerWidth || 1),
+    );
+    const h = Math.max(
+      1,
+      Math.floor(canvasElement.clientHeight || window.innerHeight || 1),
+    );
+    return { w, h };
+  };
+
+  const applyRendererSize = () => {
+    const { w, h } = getViewportSize();
+    renderer.setSize(w, h, false);
+    const camera = stageManager?.getCurrentCamera?.();
+    if (camera) {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+  };
+
+  applyRendererSize();
+  renderer.setPixelRatio(finalPixelRatio);
+  if (isElectronLike) {
+    console.info(
+      `[initThreeApp] Electron/Cursor 최적화 적용: antialias=${finalAntialias}, pixelRatio=${finalPixelRatio.toFixed(2)}`,
+    );
+  }
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.33;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -131,7 +171,7 @@ export function initThreeApp(canvasElement, options = {}) {
   getGLBLoader().preloadDecoders();
 
   // Stage Manager
-  const stageManager = createStageManager(renderer, scene);
+  stageManager = createStageManager(renderer, scene);
 
   safeAllowedStages.forEach((stageNum) => {
     const factory = STAGE_FACTORIES[stageNum];
@@ -184,6 +224,13 @@ export function initThreeApp(canvasElement, options = {}) {
   function animate() {
     animationId = requestAnimationFrame(animate);
     try {
+      // DevTools 열림/닫힘, 패널 리사이즈 등으로 캔버스 실제 크기가 바뀌는 경우를 매 프레임 보정
+      const { w, h } = getViewportSize();
+      const drawingSize = renderer.getSize(new THREE.Vector2());
+      if (drawingSize.x !== w || drawingSize.y !== h) {
+        applyRendererSize();
+      }
+
       const delta = clock.getDelta();
       stageManager.update(delta);
       const camera = stageManager.getCurrentCamera();
@@ -214,12 +261,7 @@ export function initThreeApp(canvasElement, options = {}) {
   // Resize
   function handleResize() {
     try {
-      const camera = stageManager.getCurrentCamera();
-      if (camera) {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-      }
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      applyRendererSize();
     } catch (err) {
       console.error("[initThreeApp] resize 오류:", err);
     }
