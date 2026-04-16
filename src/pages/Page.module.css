@@ -16,9 +16,11 @@
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
   padding-top: 32vh;
+  gap: 3vh;
 }
 
 .startButtonHit {
@@ -53,26 +55,16 @@
 }
 
 .startToast {
-  position: fixed;
-  left: 50%;
-  bottom: 5vh;
-  transform: translateX(-50%);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 20vh;
-  width: min(92vw, 60vh);
-  padding: 2vh 3vh;
-  border-radius: 2.5vh;
-  background: rgba(0, 0, 0, 0.78);
-  color: #fff;
-  font-size: clamp(24px, 4vh, 64px);
+  padding: 1.6vh 3vw;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px);
+  color: #222;
+  font-size: clamp(18px, 2.5vw, 40px);
   font-weight: 600;
   letter-spacing: -0.02em;
   text-align: center;
-  line-height: 1.35;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  line-height: 1.4;
   pointer-events: none;
   animation: startToastIn 0.35s ease-out;
 }
@@ -80,10 +72,10 @@
 @keyframes startToastIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }

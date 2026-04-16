@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import confetti from "canvas-confetti";
 import styles from "./Page.module.css";
 import {
   MONITOR_POLL_MS,
@@ -14,6 +15,55 @@ export function StartPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [toastMessage, setToastMessage] = useState(null);
+  const prevToast = useRef(null);
+  const toastRef = useRef(null);
+
+  useEffect(() => {
+    if (toastMessage && !prevToast.current) {
+      requestAnimationFrame(() => {
+        const el = toastRef.current;
+        const rect = el?.getBoundingClientRect();
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const yRatio = rect ? rect.bottom / h : 0.6;
+        const xLeft = rect ? rect.left / w : 0.3;
+        const xRight = rect ? rect.right / w : 0.7;
+
+        const common = {
+          particleCount: 250,
+          spread: 160,
+          startVelocity: 70,
+          ticks: 300,
+          gravity: 0.5,
+          scalar: 2.5,
+          drift: 0,
+          shapes: /** @type {import("canvas-confetti").Shape[]} */ ([
+            "square",
+            "circle",
+          ]),
+          colors: [
+            "#ff6b6b",
+            "#ffd93d",
+            "#6bcb77",
+            "#4d96ff",
+            "#ff9ff3",
+            "#f0932b",
+          ],
+        };
+        confetti({
+          ...common,
+          angle: 70,
+          origin: { x: xLeft - 0.05, y: yRatio },
+        });
+        confetti({
+          ...common,
+          angle: 110,
+          origin: { x: xRight + 0.05, y: yRatio },
+        });
+      });
+    }
+    prevToast.current = toastMessage;
+  }, [toastMessage]);
 
   useEffect(() => {
     const poll = async () => {
@@ -95,12 +145,17 @@ export function StartPage() {
             decoding="async"
           />
         </div>
+        {toastMessage ? (
+          <div
+            ref={toastRef}
+            className={styles.startToast}
+            role="status"
+            aria-live="polite"
+          >
+            {toastMessage}
+          </div>
+        ) : null}
       </div>
-      {toastMessage ? (
-        <div className={styles.startToast} role="status" aria-live="polite">
-          {toastMessage}
-        </div>
-      ) : null}
     </div>
   );
 }
