@@ -6,10 +6,8 @@ export const STAGE2_CONFIG = {
     fov: 25.0,
     near: 1,
     far: 20000,
-    // position = 카메라 위치 (맨꼭대기/측면 등 시점은 여기만 바꾸면 됨)
-    position: { x: -0.2, y: 8.7, z: 17.3 },
-    // lookAt = 바라보는 점 (보통 씬 중심 (0,0,0) 고정. 맨꼭대기/측면 다 같아도 됨)
-    lookAt: { x: 0.0, y: 0.0, z: 0.0 },
+    position: { x: 107.7, y: 70.2, z: -44.4 },
+    lookAt: { x: -14.9, y: 5.6, z: -11.1 },
   },
   fog: {
     color: 0xb0e0e6,
@@ -20,23 +18,27 @@ export const STAGE2_CONFIG = {
     color: 0xb0e0e6,
   },
   model: {
-    path: "/models/stage2/background1.glb",
+    path: "/models/stage2/beam1.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
     receiveShadow: true,
   },
   /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
-  characterModelPath: "/models/common/user_walking_color.glb",
+  characterModelPath: "/models/common/gum_walk_dogle.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
-  characterScale: 0.5,
-  /** 5명 캐릭터 위치 (x, y, z) - 섬 위에 배치 */
+  characterScale: 1.7,
+  /** 초기 위치를 섬 걸음 영역 안에서 랜덤 분산 */
+  scatterCharacters: true,
+  /** 분산 시 서로 최소 이 거리(m) 이상 */
+  characterScatterMinDistance: 4,
+  /** 5명 (scatterCharacters면 XZ는 무시·y만 선택 적용) */
   characters: [
-    { position: { x: -4, y: 0.7, z: 1 } },
-    { position: { x: -2, y: 0.7, z: 2 } },
-    { position: { x: 0, y: 0.7, z: 2 } },
-    { position: { x: 2, y: 0.7, z: 2 } },
-    { position: { x: 4, y: 0.7, z: 1 } },
+    { position: {} },
+    { position: {} },
+    { position: {} },
+    { position: {} },
+    { position: {} },
   ],
   props: [
     {

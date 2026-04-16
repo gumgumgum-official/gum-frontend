@@ -46,7 +46,6 @@ export function createStageManager(renderer, scene) {
         currentStage = newStage;
         currentStageNumber = stageNumber;
         currentStage.setup(scene, renderer);
-        console.log(`✅ Stage ${stageNumber} 로드 완료`);
         // Stage3 인트로 MP3는 섬 GLB onReady 이후 재생 (stage3IntroAudio)
       }
     },

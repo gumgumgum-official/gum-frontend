@@ -6,11 +6,15 @@ import {
   useRef,
   useState,
 } from "react";
+import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 
 type VoteId = 1 | 2 | 3;
 
 const STORAGE_KEY = "gum-ggumddi-vote-v2";
-const ASSET = "/assets/poster";
+
+const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
+const [voteImg1, voteImg2, voteImg3] = NOTICE.voteCandidateImages;
 
 const INITIAL_VOTES: Record<VoteId, number> = { 1: 0, 2: 0, 3: 0 };
 
@@ -18,19 +22,19 @@ const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
   {
     id: 1,
     name: "1. 껌뚝지",
-    image: `${ASSET}/gum_poster_1.svg`,
+    image: voteImg1,
     dot: "#FF8B33",
   },
   {
     id: 2,
     name: "2. 껌떡지",
-    image: `${ASSET}/gum_poster_2.svg`,
+    image: voteImg2,
     dot: "#c4a882",
   },
   {
     id: 3,
     name: "3. 껌뚱지",
-    image: `${ASSET}/gum_poster_3.svg`,
+    image: voteImg3,
     dot: "#FF4A89",
   },
 ];
@@ -85,7 +89,7 @@ type VoteBundle = {
   myVote: VoteId | null;
 };
 
-/** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 (`gum_vote_prototype.html`와 동일한 흐름). */
+/** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 */
 export function GgumddiVoteSection({ className }: { className?: string }) {
   const [bundle, setBundle] = useState<VoteBundle>(loadPersisted);
   const { votes, myVote } = bundle;
@@ -139,6 +143,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const onPosterWrapClick = useCallback(
     (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest("button")) return;
+      playRandomNoticePaperSound(NOTICE.paperSoundPaths);
       togglePopup();
     },
     [togglePopup],
@@ -147,6 +152,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const onSubPosterClick = useCallback(
     (e: MouseEvent, id: VoteId) => {
       e.stopPropagation();
+      playRandomNoticePaperSound(NOTICE.paperSoundPaths);
       onVote(id);
     },
     [onVote],
@@ -154,22 +160,23 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      <div className="flex flex-col items-center gap-20 min-[900px]:flex-row min-[900px]:items-start min-[900px]:justify-center min-[900px]:gap-10">
+      <div className="mx-auto flex w-full max-w-[min(92vw,1080px)] items-start justify-center gap-6">
         <div
           ref={posterWrapRef}
-          className="group/poster relative mx-auto aspect-[3/4] w-[min(90vw,60vh)] shrink-0 cursor-pointer overflow-visible rounded-md min-[900px]:mx-0"
+          className="group/poster relative aspect-[3/4] w-[min(56vw,52vh)] max-w-[420px] min-w-[260px] shrink cursor-pointer overflow-visible rounded-md"
           role="button"
           tabIndex={0}
           onClick={onPosterWrapClick}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
+              playRandomNoticePaperSound(NOTICE.paperSoundPaths);
               togglePopup();
             }
           }}
         >
           <img
-            src={`${ASSET}/best_gum_poster.svg`}
+            src={NOTICE.posterImages.bestGum}
             alt="껌딱지 외모짱 선발 대회 포스터"
             draggable={false}
             className={`absolute inset-0 block h-full w-full rounded-md object-contain shadow-[0_12px_48px_rgba(0,0,0,0.18)] transition-[filter,transform] duration-300 ease-in-out select-none ${
@@ -246,7 +253,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
           </div>
         </div>
 
-        <div className="box-border w-full max-w-[min(360px,100%)] rounded-[22px] border border-slate-200/90 bg-white px-5 pt-6 pb-6 font-['Noto_Sans_KR',system-ui,sans-serif] text-slate-800 shadow-[0_16px_40px_rgba(15,23,42,0.08)] transition-[opacity,transform] duration-500 min-[900px]:translate-x-0">
+        <div className="box-border w-[min(34vw,360px)] min-w-[260px] rounded-[22px] border border-slate-200/90 bg-white px-5 pt-6 pb-6 font-['Noto_Sans_KR',system-ui,sans-serif] text-slate-800 shadow-[0_16px_40px_rgba(15,23,42,0.08)] transition-[opacity,transform] duration-500">
           <div className="flex items-center justify-between gap-3 border-b border-slate-200/90 pb-5">
             <div>
               <h2 className="m-0 text-[15px] font-bold tracking-tight text-slate-900">

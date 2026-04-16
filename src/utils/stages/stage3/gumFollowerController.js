@@ -1,7 +1,7 @@
 /**
  * Stage3 껌딱지(사이드 캐릭터) 컨트롤러
  * - 유저 좌/우 후방(약 45도 사선) 목표 위치를 계산해 lerp 추종
- * - 유저 이동 중이면 'walk' 애니메이션 재생, 정지면 paused로 전환
+ * - 유저 이동 중이면 'walk', 정지면 'idle(서있기)' 애니메이션 재생
  * - 유저를 바라보도록 yaw만 회전 제어
  */
 import * as THREE from "three";
@@ -27,7 +27,8 @@ export function createGumFollowersController({
   const gumModelCfg = gumCfg?.models;
   const gumBehaviorCfg = gumCfg?.behavior;
 
-  const modelPath = gumModelCfg?.modelPath ?? "/models/common/walk__gum.glb";
+  const modelPath =
+    gumModelCfg?.modelPath ?? "/models/common/gum_walk_dogle.glb";
   const distance = gumBehaviorCfg?.distance ?? 2.2;
   const angleDeg = gumBehaviorCfg?.angleDeg ?? 45;
   const followLerpFactor = gumBehaviorCfg?.followLerpFactor ?? 8;
@@ -54,7 +55,7 @@ export function createGumFollowersController({
     groundOffsetOverride ?? config.character?.groundOffset ?? 0;
 
   /**
-   * @type {{ id: "A"|"B", side: -1|1, model: THREE.Group, mixer: THREE.AnimationMixer, walkAction: THREE.AnimationAction|null, offsetYaw: number|null, breakDriftScalar: number }[]}
+   * @type {{ id: "A"|"B", side: -1|1, model: THREE.Group, mixer: THREE.AnimationMixer, walkAction: THREE.AnimationAction|null, idleAction: THREE.AnimationAction|null, offsetYaw: number|null, breakDriftScalar: number }[]}
    */
   const followers = [];
 
@@ -70,7 +71,6 @@ export function createGumFollowersController({
   const _look = new THREE.Vector3();
 
   let isMovingPrev = false;
-  let stopOnNextLoop = false;
   let elapsedSec = 0;
   let breakOffUntil = 0;
   let prevUserYaw = null;
@@ -125,8 +125,11 @@ export function createGumFollowersController({
       { id: "B", side: 1 },
     ];
 
-    // walk 클립: gltf.animations[0]를 그대로 사용(기존 Stage3 characterController 패턴)
-    const walkClip = gltf.animations?.[0] ?? null;
+    const clips = gltf.animations ?? [];
+    const findClipByName = (regex) =>
+      clips.find((clip) => regex.test(String(clip?.name ?? ""))) ?? null;
+    const walkClip = findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
+    const idleClip = findClipByName(/idle|stand|wait|pose/i) ?? null;
 
     clones.forEach(({ id, side }) => {
       const model = SkeletonUtils.clone(baseModel);
@@ -139,18 +142,19 @@ export function createGumFollowersController({
 
       const mixer = new THREE.AnimationMixer(model);
       const walkAction = walkClip ? mixer.clipAction(walkClip) : null;
+      const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
       if (walkAction) {
         walkAction.loop = THREE.LoopRepeat;
         walkAction.timeScale = animationSpeed;
         walkAction.play();
         walkAction.paused = true;
       }
-
-      // loop 이벤트는 한 번만 바인딩해두고, stopOnNextLoop 플래그로 제어
-      mixer.addEventListener("loop", () => {
-        if (!stopOnNextLoop) return;
-        if (walkAction) walkAction.paused = true;
-      });
+      if (idleAction) {
+        idleAction.loop = THREE.LoopRepeat;
+        idleAction.timeScale = animationSpeed;
+        idleAction.play();
+        idleAction.paused = false;
+      }
 
       followers.push({
         id,
@@ -158,6 +162,7 @@ export function createGumFollowersController({
         model,
         mixer,
         walkAction,
+        idleAction,
         offsetYaw: null,
         breakDriftScalar: side * breakOffDriftAmplitude,
       });
@@ -221,14 +226,16 @@ export function createGumFollowersController({
       // 이동 여부가 바뀌는 프레임에서만 애니메이션 paused 처리를 함
       if (moving !== isMovingPrev) {
         if (moving) {
-          stopOnNextLoop = false;
           followers.forEach((f) => {
             if (!f.walkAction) return;
             f.walkAction.paused = false;
+            if (f.idleAction) f.idleAction.paused = true;
           });
         } else {
-          stopOnNextLoop = true;
-          // loop 끝나면 mixer loop 이벤트에서 paused=true로 전환됨
+          followers.forEach((f) => {
+            if (f.walkAction) f.walkAction.paused = true;
+            if (f.idleAction) f.idleAction.paused = false;
+          });
         }
         isMovingPrev = moving;
       }
@@ -314,7 +321,6 @@ export function createGumFollowersController({
       followerYOffsetFromUserY = null;
       isReady = false;
       isMovingPrev = false;
-      stopOnNextLoop = false;
       elapsedSec = 0;
       breakOffUntil = 0;
       prevUserYaw = null;
