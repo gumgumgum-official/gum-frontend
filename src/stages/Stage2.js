@@ -10,6 +10,8 @@ import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { createAutonomousCharacters } from "../utils/stages/stage2/autonomousCharacters.js";
+import { createStage2GumSpeechBubbles } from "../utils/stages/stage2/stage2GumSpeechBubbles.js";
+import { STAGE2_GUM_SPEECH_LINES } from "../config/stages/stage2/gumSpeechLines.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE2_CONFIG } from "../config/stages/stage2.js";
 import { subscribeHandwritingRealtime } from "../utils/handwriting/handwritingRealtime.js";
@@ -60,6 +62,208 @@ function findChildByName(obj, name) {
   return null;
 }
 
+/** Stage3 배경 로더와 같이 이름이 island인 첫 오브젝트(섬 지형) */
+function findIslandNamedObject(model) {
+  let found = null;
+  model.traverse((obj) => {
+    if (found) return;
+    const n = typeof obj.name === "string" ? obj.name.trim() : "";
+    if (n.toLowerCase() === "island") found = obj;
+  });
+  return found;
+}
+
+/** 울타리 경계용 — 이름이 Fence / fence / FenceBounds / 울타리 등인 첫 오브젝트 */
+function findFenceNamedObject(model) {
+  if (!model) return null;
+  const byExact = findChildByName(model, "Fence");
+  if (byExact) return byExact;
+  let found = null;
+  model.traverse((obj) => {
+    if (found) return;
+    const n = typeof obj.name === "string" ? obj.name.trim() : "";
+    const lower = n.toLowerCase();
+    if (
+      lower === "fence" ||
+      lower === "fencearea" ||
+      lower === "fence_bounds" ||
+      lower === "fencebounds" ||
+      lower.includes("울타리")
+    ) {
+      found = obj;
+    }
+  });
+  return found;
+}
+
+/**
+ * @param {{ minX: number, maxX: number, minZ: number, maxZ: number }} a
+ * @param {{ minX: number, maxX: number, minZ: number, maxZ: number }} b
+ * @returns {{ minX: number, maxX: number, minZ: number, maxZ: number } | null}
+ */
+function intersectXZBounds(a, b) {
+  const o = {
+    minX: Math.max(a.minX, b.minX),
+    maxX: Math.min(a.maxX, b.maxX),
+    minZ: Math.max(a.minZ, b.minZ),
+    maxZ: Math.min(b.maxZ, a.maxZ),
+  };
+  if (o.minX > o.maxX || o.minZ > o.maxZ) return null;
+  return o;
+}
+
+/**
+ * 섬 걸음 영역 ∩ 울타리(config 또는 GLB). 캐릭터는 이 안에서만 이동.
+ * @param {import("../types.js").Stage2Config} config
+ */
+function computeCharacterMoveBounds(islandBounds, fenceSourceModel, config) {
+  if (!islandBounds) return null;
+  /** @type {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} */
+  let fenceXZ = null;
+  const cfgFence = config?.characterFenceBounds;
+  if (
+    cfgFence &&
+    typeof cfgFence.minX === "number" &&
+    typeof cfgFence.maxX === "number" &&
+    typeof cfgFence.minZ === "number" &&
+    typeof cfgFence.maxZ === "number"
+  ) {
+    fenceXZ = {
+      minX: cfgFence.minX,
+      maxX: cfgFence.maxX,
+      minZ: cfgFence.minZ,
+      maxZ: cfgFence.maxZ,
+    };
+  } else if (fenceSourceModel) {
+    const fenceRoot = findFenceNamedObject(fenceSourceModel);
+    if (fenceRoot) {
+      fenceRoot.updateMatrixWorld(true);
+      const fbox = new THREE.Box3().setFromObject(fenceRoot);
+      fenceXZ = {
+        minX: fbox.min.x,
+        maxX: fbox.max.x,
+        minZ: fbox.min.z,
+        maxZ: fbox.max.z,
+      };
+      if (import.meta.env.DEV) {
+        console.log(
+          `[Stage2] 울타리 메쉬로 걸음 영역 축소: minX=${fenceXZ.minX.toFixed(2)}, maxX=${fenceXZ.maxX.toFixed(2)}, minZ=${fenceXZ.minZ.toFixed(2)}, maxZ=${fenceXZ.maxZ.toFixed(2)}`,
+        );
+      }
+    }
+  }
+  if (!fenceXZ) return islandBounds;
+  const inter = intersectXZBounds(islandBounds, fenceXZ);
+  if (!inter) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        "[Stage2] 섬과 울타리 XZ가 겹치지 않아 섬 경계만 사용합니다.",
+      );
+    }
+    return islandBounds;
+  }
+  return inter;
+}
+
+/** 섬 메쉬 AABB 상단 = 지면에 가깝게 (lerp는 메쉬 내부로 파묻히기 쉬움) */
+const ISLAND_GROUND_SURFACE_EPS = 0.06;
+
+/**
+ * 배경에서 XZ 걸음 영역 + 지면 Y 후보 (Walkable → island 이름 → 루트)
+ * @returns {{
+ *   usedWalkable: boolean,
+ *   bounds: { minX: number, maxX: number, minZ: number, maxZ: number },
+ *   suggestedGroundY: number,
+ * }}
+ */
+function computeIslandBoundsFromModel(model) {
+  model.updateMatrixWorld(true);
+  const walkableObj = findChildByName(model, "Walkable");
+  const islandObj = findIslandNamedObject(model);
+  const boundsSource = walkableObj || islandObj || model;
+  if (
+    import.meta.env.DEV &&
+    !walkableObj &&
+    !islandObj &&
+    boundsSource === model
+  ) {
+    console.warn(
+      "[Stage2] 배경에 Walkable 또는 이름이 'Island'인 메쉬가 없으면 지면 Y가 바다·하늘 전체 박스로 어긋날 수 있습니다. GLB에 Island 메쉬를 두거나 config.characterGroundY로 지정하세요.",
+    );
+  }
+  boundsSource.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(boundsSource);
+
+  const maxY = box.max.y;
+  const suggestedGroundY = maxY + ISLAND_GROUND_SURFACE_EPS;
+
+  if (walkableObj) {
+    return {
+      usedWalkable: true,
+      bounds: {
+        minX: box.min.x,
+        maxX: box.max.x,
+        minZ: box.min.z,
+        maxZ: box.max.z,
+      },
+      suggestedGroundY,
+    };
+  }
+  const w = box.max.x - box.min.x;
+  const d = box.max.z - box.min.z;
+  const inset = ISLAND_BOUNDS_INSET_RATIO;
+  return {
+    usedWalkable: false,
+    bounds: {
+      minX: box.min.x + w * inset,
+      maxX: box.max.x - w * inset,
+      minZ: box.min.z + d * inset,
+      maxZ: box.max.z - d * inset,
+    },
+    suggestedGroundY,
+  };
+}
+
+/**
+ * boundsPadding 적용 후에도 min≤max·최소 폭이 되도록 바깥 박스를 확장한다.
+ * @param {{ minX: number, maxX: number, minZ: number, maxZ: number }} raw
+ * @param {number} padding
+ */
+function sanitizeWalkBoundsXZ(raw) {
+  const ok = (n) => typeof n === "number" && Number.isFinite(n);
+  if (
+    !raw ||
+    !ok(raw.minX) ||
+    !ok(raw.maxX) ||
+    !ok(raw.minZ) ||
+    !ok(raw.maxZ)
+  ) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        "[Stage2] 걸음 XZ 경계가 유효하지 않음 — 기본 사각 영역(-10~10) 사용",
+      );
+    }
+    return { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
+  }
+  return raw;
+}
+
+function ensureWalkBoundsMinSpanForPadding(raw, padding) {
+  const minSpan = 2 * padding + 1.0;
+  let { minX, maxX, minZ, maxZ } = raw;
+  if (maxX - minX < minSpan) {
+    const c = (minX + maxX) * 0.5;
+    minX = c - minSpan * 0.5;
+    maxX = c + minSpan * 0.5;
+  }
+  if (maxZ - minZ < minSpan) {
+    const c = (minZ + maxZ) * 0.5;
+    minZ = c - minSpan * 0.5;
+    maxZ = c + minSpan * 0.5;
+  }
+  return { minX, maxX, minZ, maxZ };
+}
+
 /**
  * island.glb 기반 자동 계산 bounds가 너무 좁게 잡히는 경우(메쉬/스케일/원점 이슈 등),
  * 예전 수동 측정값(LEGACY_ISLAND_BOUNDS)으로 안전하게 fallback 한다.
@@ -83,6 +287,8 @@ export function Stage2() {
   const propRoots = [];
   let debugControls = null;
   let autonomousCharacters = null;
+  /** @type {{ update: (delta: number) => void, cleanup: () => void } | null} */
+  let gumSpeechBubbles = null;
   let realtimeSubscription = null;
   const fallingTexts = [];
   /** 초기 로드 + Realtime 공통 중복 방지 키 저장소 */
@@ -92,10 +298,15 @@ export function Stage2() {
   let cameraRef = null;
   /** 섬 XZ 범위 — island.glb 로드 시 자동 계산됨 (검증: 예전 수치 fallback 없이 이 값만 사용) */
   let islandBounds = null;
+  /** 섬 ∩ 울타리 — 자율 이동 캐릭터 클램프용 (필기 스폰은 islandBounds 유지) */
+  let characterMoveBounds = null;
+  /** 배경 바운딩 기준 껌 캐릭터 발 Y (island4_1 등 큰 섬에서도 지면 위에 서게 함) */
+  let characterWalkGroundY = GROUND_Y;
 
   function updateIslandBoundsFromRoots(roots) {
     if (!roots || roots.length === 0) {
       islandBounds = null;
+      characterMoveBounds = null;
       return;
     }
     // collision.glb가 여러 조각(여러 root)으로 로드되는 경우가 있어,
@@ -108,6 +319,11 @@ export function Stage2() {
     const minZ = box.min.z;
     const maxZ = box.max.z;
     islandBounds = { minX, maxX, minZ, maxZ };
+    characterMoveBounds = computeCharacterMoveBounds(
+      islandBounds,
+      null,
+      config,
+    );
     const p = roots[0]?.position ?? { x: 0, y: 0, z: 0 };
     console.log(
       `📐 [Stage2] collision (prop[0]) position: x=${p.x.toFixed(2)}, y=${p.y.toFixed(2)}, z=${p.z.toFixed(2)}`,
@@ -201,6 +417,8 @@ export function Stage2() {
           stageName: "stage2",
           getInitialCameraConfig: () => config.camera,
           onConfigChange: (roots) => updateIslandBoundsFromRoots(roots),
+          /** 고정 카메라: config.camera + lookAt, Orbit 비활성 */
+          enableOrbit: false,
         },
       });
 
@@ -228,10 +446,32 @@ export function Stage2() {
           config,
           scene,
           objects,
-          (controller) => {
+          (controller, characterModels) => {
             autonomousCharacters = controller;
+            if (gumSpeechBubbles) {
+              gumSpeechBubbles.cleanup();
+              gumSpeechBubbles = null;
+            }
+            if (
+              characterModels &&
+              characterModels.length > 0 &&
+              STAGE2_GUM_SPEECH_LINES.length > 0
+            ) {
+              gumSpeechBubbles = createStage2GumSpeechBubbles({
+                camera: this.camera,
+                renderer,
+                models: characterModels,
+                lines: STAGE2_GUM_SPEECH_LINES,
+                options: {
+                  minIntervalSec: 5,
+                  maxIntervalSec: 6,
+                  visibleSec: 2.2,
+                },
+              });
+            }
           },
-          islandBounds,
+          characterMoveBounds ?? islandBounds,
+          characterWalkGroundY,
         );
         loadInitialHandwritings(
           scene,
@@ -248,40 +488,67 @@ export function Stage2() {
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        if (!config.camera.lookAt) debugControls.setOrbitTarget(center);
+        debugControls.setOrbitTarget(center);
         this.camera.far = Math.max(config.camera.far ?? 10000, maxDim * 10);
         this.camera.updateProjectionMatrix();
+
+        let suggestedGroundY = GROUND_Y;
+        if (!box.isEmpty()) {
+          suggestedGroundY = box.max.y + ISLAND_GROUND_SURFACE_EPS;
+        }
+
         if (islandModel) {
-          islandModel.updateMatrixWorld(true);
-          // 디자이너가 "걸을 수 있는 영역" 메쉬를 Walkable 이름으로 넣어두면 그걸로만 사용 (inset 불필요)
-          const walkableObj = findChildByName(islandModel, "Walkable");
-          const boundsSource = walkableObj || islandModel;
-          boundsSource.updateMatrixWorld(true);
-          const box = new THREE.Box3().setFromObject(boundsSource);
-          if (walkableObj) {
-            islandBounds = {
-              minX: box.min.x,
-              maxX: box.max.x,
-              minZ: box.min.z,
-              maxZ: box.max.z,
-            };
+          const {
+            usedWalkable,
+            bounds,
+            suggestedGroundY: sg,
+          } = computeIslandBoundsFromModel(islandModel);
+          islandBounds = bounds;
+          suggestedGroundY = sg;
+          if (usedWalkable) {
             console.log(
               `📐 [Stage2] island.glb Walkable 사용 (디자이너 정의): minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
           } else {
-            const w = box.max.x - box.min.x;
-            const d = box.max.z - box.min.z;
-            const inset = ISLAND_BOUNDS_INSET_RATIO;
-            islandBounds = {
-              minX: box.min.x + w * inset,
-              maxX: box.max.x - w * inset,
-              minZ: box.min.z + d * inset,
-              maxZ: box.max.z - d * inset,
-            };
             console.log(
-              `📐 [Stage2] island.glb Walkable 없음 → 전체 박스 + ${(inset * 100).toFixed(0)}% inset: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
+              `📐 [Stage2] island.glb Walkable 없음 → island 이름·루트 박스 + ${(ISLAND_BOUNDS_INSET_RATIO * 100).toFixed(0)}% inset: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
           }
+        } else if (allModels.length > 0) {
+          const {
+            usedWalkable,
+            bounds,
+            suggestedGroundY: sg,
+          } = computeIslandBoundsFromModel(allModels[0]);
+          islandBounds = bounds;
+          suggestedGroundY = sg;
+          if (usedWalkable) {
+            console.log(
+              `📐 [Stage2] 배경 GLB Walkable 사용: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
+            );
+          } else {
+            console.log(
+              `📐 [Stage2] 단일 배경 GLB → island 이름·XZ inset ${(ISLAND_BOUNDS_INSET_RATIO * 100).toFixed(0)}%: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
+            );
+          }
+        }
+
+        if (islandBounds) {
+          characterMoveBounds = computeCharacterMoveBounds(
+            islandBounds,
+            islandModel ?? (allModels.length > 0 ? allModels[0] : null),
+            config,
+          );
+        } else {
+          characterMoveBounds = null;
+        }
+
+        {
+          const cfgY = config.characterGroundY;
+          characterWalkGroundY =
+            typeof cfgY === "number" && Number.isFinite(cfgY)
+              ? cfgY
+              : suggestedGroundY;
         }
         if (config.props?.length) {
           loadPropsFromConfig(
@@ -292,7 +559,9 @@ export function Stage2() {
             propRoots,
             () => {
               debugControls.setDraggableObjects(propRoots);
-              if (!islandModel) updateIslandBoundsFromRoots(propRoots);
+              if (!islandModel && islandBounds == null) {
+                updateIslandBoundsFromRoots(propRoots);
+              }
               onReady();
             },
           );
@@ -324,7 +593,6 @@ export function Stage2() {
               gltfs.map((g) => g.scene),
               islandModel,
             );
-            console.log("✅ Stage2 배경 로드 완료 (island/sea/sky)");
           })
           .catch((err) => console.error("❌ Stage2 배경 로드 에러:", err));
       } else {
@@ -333,30 +601,14 @@ export function Stage2() {
             const model = gltf.scene;
             applyModel(model);
             finishBackground([model], null);
-            console.log("✅ Stage2 배경 로드 완료 (단일)");
-          },
-          onProgress: (xhr) => {
-            if (xhr.total > 0)
-              console.log(
-                `Stage2 배경: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-              );
           },
           onError: (err) => console.error("❌ Stage2 배경 로드 에러:", err),
         });
       }
 
-      const axesHelper = new THREE.AxesHelper(50);
-      scene.add(axesHelper);
-      objects.push(axesHelper);
-
       // Handwriting: 실시간 수신 (누적 로드는 GLB 로드 후 섬 땅 높이 적용 뒤 호출)
       realtimeSubscription = subscribeHandwritingRealtime({
         onNewHandwriting: (metadata) => {
-          console.log(
-            "[Stage2] Realtime 수신 → falling text 생성:",
-            metadata.id,
-            metadata.url,
-          );
           void ingestHandwriting(metadata, "realtime");
         },
         onError: (error) => {
@@ -373,7 +625,6 @@ export function Stage2() {
             );
             return;
           }
-          console.log(`[Stage2] 0키: 재낙하 (${fallingTexts.length}개 글자)`);
           const spawn = getSpawnBounds(islandBounds);
           const { minX, maxX, minZ, maxZ } = spawn;
           fallingTexts.forEach((ft) => {
@@ -411,13 +662,12 @@ export function Stage2() {
       objects.push({
         dispose: () => window.removeEventListener("keydown", handleKeyDown),
       });
-
-      console.log("✅ Stage2 setup 완료");
     },
 
     update(delta) {
       if (debugControls) debugControls.update(delta);
       if (autonomousCharacters) autonomousCharacters.update(delta);
+      if (gumSpeechBubbles) gumSpeechBubbles.update(delta);
 
       // 떨어지는 텍스트 애니메이션 업데이트
       updateFallingTexts(delta, cameraRef, fallingTexts);
@@ -449,6 +699,10 @@ export function Stage2() {
       fallingTexts.length = 0;
       processedHandwritingKeys.clear();
 
+      if (gumSpeechBubbles) {
+        gumSpeechBubbles.cleanup();
+        gumSpeechBubbles = null;
+      }
       if (autonomousCharacters) {
         autonomousCharacters.cleanup();
         autonomousCharacters = null;
@@ -474,7 +728,8 @@ export function Stage2() {
       scene.fog = null;
       scene.background = null;
       cameraRef = null;
-      console.log("🧹 Stage2 정리 완료");
+      islandBounds = null;
+      characterMoveBounds = null;
     },
   };
 }
@@ -485,8 +740,9 @@ export function Stage2() {
  * @param {object} config - STAGE2_CONFIG
  * @param {import("three").Scene} scene
  * @param {import("three").Object3D[]} objects
- * @param {(controller: { update: function, cleanup: function } | null) => void} onControllerReady
- * @param {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} [bounds] - 섬 XZ 범위 (island.glb 자동 계산값만 사용 중, 검증용)
+ * @param {(controller: { update: function, cleanup: function } | null, characterModels: import("three").Object3D[]) => void} onControllerReady
+ * @param {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} [bounds] - 섬∩울타리 XZ (또는 characterWalkBounds)
+ * @param {number} [walkGroundY] - 껌 캐릭터 발 Y (배경 상단 기준)
  */
 function loadCharacters(
   loader,
@@ -495,27 +751,30 @@ function loadCharacters(
   objects,
   onControllerReady,
   bounds,
+  walkGroundY = GROUND_Y,
 ) {
   const characterPath =
-    config.characterModelPath ?? "/models/common/user_walking2.glb";
+    config.characterModelPath ?? "/models/common/gum_walk_dogle.glb";
   const characterPositions = config.characters ?? [
-    { position: { x: -4, y: 0.7, z: 1 } },
-    { position: { x: -2, y: 0.7, z: 2 } },
-    { position: { x: 0, y: 0.7, z: 2 } },
-    { position: { x: 2, y: 0.7, z: 2 } },
-    { position: { x: 4, y: 0.7, z: 1 } },
+    { position: {} },
+    { position: {} },
+    { position: {} },
+    { position: {} },
+    { position: {} },
   ];
 
-  // island.glb 기준 이동 범위 — 캐릭터는 이 안에서만 걸음 (초기 위치도 여기 안으로 클램프)
-  const walkBounds =
-    bounds ??
-    (() => {
-      console.warn(
-        "[Stage2] island bounds 없음 — island.glb 로드 후 자동 계산된 값만 사용 중. 단일 배경이면 bounds가 null일 수 있음.",
-      );
-      return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
-    })();
   const padding = 0.5;
+  const rawWalkBounds = sanitizeWalkBoundsXZ(
+    config.characterWalkBounds ??
+      bounds ??
+      (() => {
+        console.warn(
+          "[Stage2] island bounds 없음 — 배경·prop에서도 못 찾으면 임시 영역 사용.",
+        );
+        return { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
+      })(),
+  );
+  const walkBounds = ensureWalkBoundsMinSpanForPadding(rawWalkBounds, padding);
 
   loader.load(characterPath, {
     onLoad: (gltf) => {
@@ -527,15 +786,61 @@ function loadCharacters(
       const maxX = walkBounds.maxX - padding;
       const minZ = walkBounds.minZ + padding;
       const maxZ = walkBounds.maxZ - padding;
+      const yExtra = config.characterGroundYOffset ?? 0;
+      const surfaceY = walkGroundY + yExtra;
+      const scatter = config.scatterCharacters !== false;
+      const minSep = Math.max(0, config.characterScatterMinDistance ?? 3.5);
+      const spanX = maxX - minX;
+      const spanZ = maxZ - minZ;
+      /** @type {{ x: number, z: number }[]} */
+      const scatterPlaced = [];
+
+      function randomXZ() {
+        return {
+          x: minX + Math.random() * spanX,
+          z: minZ + Math.random() * spanZ,
+        };
+      }
+
+      function tooClose(x, z) {
+        if (minSep <= 0 || scatterPlaced.length === 0) return false;
+        const r2 = minSep * minSep;
+        return scatterPlaced.some((p) => {
+          const dx = p.x - x;
+          const dz = p.z - z;
+          return dx * dx + dz * dz < r2;
+        });
+      }
+
       for (let i = 0; i < count; i++) {
         const model = i === 0 ? source : SkeletonUtils.clone(source);
         model.scale.setScalar(scale);
         const pos = characterPositions[i]?.position ?? {};
-        let x = pos.x ?? 0;
-        let z = pos.z ?? 0;
-        x = THREE.MathUtils.clamp(x, minX, maxX);
-        z = THREE.MathUtils.clamp(z, minZ, maxZ);
-        model.position.set(x, pos.y ?? GROUND_Y, z);
+        let x;
+        let z;
+        if (scatter && spanX > 1e-6 && spanZ > 1e-6) {
+          let attempts = 0;
+          do {
+            const p = randomXZ();
+            x = p.x;
+            z = p.z;
+            attempts++;
+          } while (attempts < 100 && tooClose(x, z));
+          scatterPlaced.push({ x, z });
+        } else {
+          x = pos.x ?? 0;
+          z = pos.z ?? 0;
+          x = THREE.MathUtils.clamp(x, minX, maxX);
+          z = THREE.MathUtils.clamp(z, minZ, maxZ);
+        }
+        if (pos.y != null && Number.isFinite(pos.y)) {
+          model.position.set(x, pos.y, z);
+        } else {
+          model.position.set(x, 0, z);
+          model.updateMatrixWorld(true);
+          const charBox = new THREE.Box3().setFromObject(model);
+          model.position.y = surfaceY - charBox.min.y;
+        }
         model.traverse((child) => {
           if (child.isMesh) {
             child.castShadow = true;
@@ -546,24 +851,39 @@ function loadCharacters(
         characterModels.push(model);
         scene.add(model);
       }
-      let controller = null;
-      if (gltf.animations?.length > 0) {
-        controller = createAutonomousCharacters({
-          models: characterModels,
-          walkClip: gltf.animations[0],
-          bounds: walkBounds,
-          groundY: GROUND_Y,
-          options: { moveSpeed: 0.8, boundsPadding: padding },
-        });
+      const rootYForWalk = characterModels[0]?.position.y ?? surfaceY;
+      const clips = gltf.animations ?? [];
+      const findClipByName = (regex) =>
+        clips.find((clip) => regex.test(String(clip?.name ?? ""))) ?? null;
+      const walkClip =
+        clips.length > 0
+          ? (findClipByName(/walk|run|move/i) ?? clips[0] ?? null)
+          : null;
+      const idleClip =
+        clips.length > 0
+          ? (findClipByName(/idle|stand|wait|pose/i) ?? null)
+          : null;
+      if (clips.length === 0 && import.meta.env.DEV) {
+        console.warn(
+          "[Stage2] 캐릭터 GLB에 애니메이션 클립이 없습니다. 이동만 적용합니다.",
+        );
       }
-      onControllerReady(controller);
+      const controller = createAutonomousCharacters({
+        models: characterModels,
+        walkClip,
+        idleClip,
+        bounds: walkBounds,
+        groundY: rootYForWalk,
+        options: { moveSpeed: 0.8, boundsPadding: padding },
+      });
+      onControllerReady(controller, characterModels);
       console.log(
-        `✅ Stage2 캐릭터 ${count}명 로드 완료 (island.glb 범위 안에서만 이동)`,
+        `✅ Stage2 캐릭터 ${count}명 로드 완료 (${scatter ? "초기 분산·" : ""}걸음 영역 안에서만 이동)`,
       );
     },
     onError: (err) => {
       console.error("❌ Stage2 캐릭터 로드 에러:", err);
-      onControllerReady(null);
+      onControllerReady(null, []);
     },
   });
 }

@@ -47,6 +47,9 @@
  * @property {boolean} [castShadow]
  * @property {boolean} [receiveShadow]
  * @property {boolean} [useStaticObstacleColliders] - Stage3: `INT_`/`OBJ_` 메시 기반 XZ 정적 충돌(기본 true). false면 바운딩 클램프만 사용(디버그·임시)
+ * @property {string} [island] - Stage2: 섬 GLB (island/sea/sky 분할 로드 시)
+ * @property {string} [sea]
+ * @property {string} [sky]
  */
 
 /**
@@ -67,6 +70,12 @@
  * @property {Stage2ModelConfig} model
  * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {number} [characterScale] - 캐릭터 스케일 (1 = 원본)
+ * @property {number} [characterGroundY] - 캐릭터 발 위치 Y(m). 미설정 시 배경 GLB 바운딩 상단 기준으로 추정
+ * @property {number} [characterGroundYOffset] - 추정 지면에 더할 Y(m). 미세 조정용
+ * @property {boolean} [scatterCharacters] - true면 초기 XZ를 걸음 영역 안에서 랜덤 분산(기본 true)
+ * @property {number} [characterScatterMinDistance] - 분산 시 캐릭터 간 최소 거리(m)
+ * @property {{ minX: number, maxX: number, minZ: number, maxZ: number }} [characterWalkBounds] - 캐릭터 이동 XZ(미설정 시 배경·island·prop 순으로 추정)
+ * @property {{ minX: number, maxX: number, minZ: number, maxZ: number }} [characterFenceBounds] - 울타리 안 XZ(섬 걸음 영역과 교집합; GLB에 Fence 메쉬가 없을 때 수동 지정)
  * @property {Array<{ position?: { x?: number, y?: number, z?: number } }>} [characters] - 캐릭터 위치 (5명)
  * @property {Stage2PropConfig[]} [props]
  */
@@ -126,6 +135,7 @@
  * @property {number} boundsPadding - 바운드 경계 여유 공간
  * @property {{x: number, y: number, z: number}} cameraOffset - 캐릭터 뒤 카메라 오프셋
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
+ * @property {number} [walkSoundVolume] - 이동(걷기) 루프 사운드 볼륨 0~1
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
  * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정
  * @property {{x?: number, z?: number}} [spawnOffset] - 섬 바운딩 XZ 중심 기준 스폰 추가 오프셋(m)
@@ -140,6 +150,13 @@
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
  * @property {string[]} [paperSoundPaths] - 게시판 등 클릭 시 재생할 사운드 경로
+ * @property {number} [paperSoundVolume] - 종이 효과음 볼륨 0~1
+ * @property {string[]} [tentSoundPaths] - 텐트(INT_tent) 클릭 시 재생할 사운드 경로
+ * @property {number} [tentSoundVolume] - 텐트 클릭 효과음 볼륨 0~1
+ * @property {string[]} [wellSoundPaths] - 우물(INT_Well) 클릭 시 재생할 사운드 경로
+ * @property {number} [wellSoundVolume] - 우물 클릭 효과음 볼륨 0~1
+ * @property {string[]} [clockSoundPaths] - 시계(INT_Clock) 클릭 시 재생할 사운드 경로
+ * @property {number} [clockSoundVolume] - 시계 클릭 효과음 볼륨 0~1
  */
 
 /**
@@ -164,15 +181,47 @@
  * @property {number} [scale]
  * @property {string[]} [spawnPaths] - 카트 클릭 시 복제해 스폰할 GLB 경로(public 기준, 예: /models/…)
  * @property {number} [spawnScale] - 스폰 아이스크림 스케일
+ * @property {number} [maxVisualSize] - 스폰 아이스크림의 최대 외곽 길이(월드 단위)
+ * @property {number} [minVisualSize] - 스폰 아이스크림의 최소 외곽 길이(월드 단위)
+ * @property {number} [spawnRadiusMin] - 카트 중심 주변 스폰 최소 반경(m)
+ * @property {number} [spawnRadiusMax] - 카트 중심 주변 스폰 최대 반경(m)
+ * @property {number} [spawnHeightAboveCart] - 카트 중심 Y 위 추가 높이(m)
+ * @property {number} [spawnHeightJitter] - 스폰 높이 무작위 오차(m)
+ * @property {number} [launchHorizontalMin] - 스폰 직후 수평 속도 하한(m/s)
+ * @property {number} [launchHorizontalSpread] - 수평 속도 무작위 가산(m/s)
+ * @property {number} [launchUpMin] - 수직 초기 속도 하한(m/s)
+ * @property {number} [launchUpSpread] - 수직 초기 속도 무작위 가산(m/s)
+ * @property {number} [launchTowardPlayerSpread] - 캐릭터 방향 발사 시 좌우 무작위 각(rad)
+ * @property {number} [physicsGroundYOffset] - 아이스크림 Cannon 지면 Y 보정(m)
  * @property {number} [maxSpawns] - 스폰 최대 개수
  * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
+ * @property {number} [landSoundVolume] - 착지 시 icecream 효과음 볼륨 0~1
  */
 
 /**
+ * Stage3 인트로·배경 루프 볼륨
+ * @typedef {Object} Stage3AudioConfig
+ * @property {number} [introVolume] - 인트로(새소리) 0~1
+ * @property {number} [backgroundAmbientVolume] - 배경 루프 목표 볼륨 0~1
+ */
+
+/**
+ * @typedef {Object} Stage3SkyGradientStop
+ * @property {number} t - 0(화면 위)~1(화면 아래)
+ * @property {number} color
+ *
  * @typedef {Object} Stage3Config
  * @property {StageCameraConfig} camera
- * @property {{color: number}} background
+ * @property {{
+ *   gradient: {
+ *     top?: number,
+ *     bottom?: number,
+ *     stops?: Stage3SkyGradientStop[],
+ *   },
+ * }} background
+ * @property {Stage3AudioConfig} [audio]
  * @property {string} [characterModelPath] - 캐릭터 GLB 경로
+ * @property {string} [characterIdleModelPath] - 캐릭터 idle(서있기) 애니메이션 GLB 경로
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
@@ -186,7 +235,7 @@
  * @property {Stage3PropConfig} [gameMachine]
  * @property {Stage3PropConfig} [bench]
  * @property {Stage3PropConfig} [signs]
- * @property {Stage3PropConfig} [mirror]
+ * @property {Stage3PropConfig} [tent]
  */
 
 export {};

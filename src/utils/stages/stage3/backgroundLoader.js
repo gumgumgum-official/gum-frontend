@@ -50,6 +50,7 @@ export function loadStage3Background({
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
 
+      /** @type {import("three").Object3D | null} */
       let islandObject = null;
       model.traverse((obj) => {
         if (islandObject) return;
@@ -61,11 +62,6 @@ export function loadStage3Background({
       if (islandObject) {
         islandObject.updateMatrixWorld(true);
         backgroundBounds = new THREE.Box3().setFromObject(islandObject);
-        if (import.meta.env.DEV) {
-          console.log(
-            `🏝️ Island 바운딩 박스: min=(${backgroundBounds.min.x.toFixed(2)}, ${backgroundBounds.min.y.toFixed(2)}, ${backgroundBounds.min.z.toFixed(2)}), max=(${backgroundBounds.max.x.toFixed(2)}, ${backgroundBounds.max.y.toFixed(2)}, ${backgroundBounds.max.z.toFixed(2)})`,
-          );
-        }
       } else {
         if (import.meta.env.DEV) {
           console.warn(
@@ -104,12 +100,6 @@ export function loadStage3Background({
             : 0.5;
         const nearTopY = maxY - Math.max(0, inset);
         backgroundMaxY = Math.max(lerpY, nearTopY);
-      }
-
-      if (import.meta.env.DEV) {
-        console.log(
-          `📐 배경 모델 바운딩 박스: min=(${box.min.x.toFixed(2)}, ${box.min.y.toFixed(2)}, ${box.min.z.toFixed(2)}), max=(${box.max.x.toFixed(2)}, ${box.max.y.toFixed(2)}, ${box.max.z.toFixed(2)}), groundY(backgroundMaxY)=${backgroundMaxY.toFixed(2)}, sceneCenter.y=${center.y.toFixed(2)}`,
-        );
       }
 
       const isUnderIntInteractive = (mesh) => {
@@ -154,11 +144,6 @@ export function loadStage3Background({
       }
 
       scene.add(model);
-      if (import.meta.env.DEV) {
-        console.log(
-          "✅ Stage3 배경 모델 로드 완료 (템플릿 재사용 또는 프리로드 완료)",
-        );
-      }
       inspectModel(model, null, "배경 모델");
 
       onReady({ model, center, backgroundMaxY, backgroundBounds });
