@@ -21,6 +21,7 @@ const AIRPORT_SUBTITLE_UPDATE_EVENT = "gum:airportAnnouncementSubtitle:update";
 const AIRPORT_SUBTITLE_HIDE_EVENT = "gum:airportAnnouncementSubtitle:hide";
 const AIRPORT_CHIME_SHOW_EVENT = "gum:airportAnnouncementChime:show";
 const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";
+const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
 
 export function Stage6() {
   const objects = [];
@@ -182,6 +183,13 @@ export function Stage6() {
     }, AIRPLANE_CALL_SIGN_DELAY_MS);
   }
 
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
+    }
+  };
+
   return {
     camera: null,
 
@@ -216,6 +224,7 @@ export function Stage6() {
       );
 
       scene.background = new THREE.Color(config.background.color);
+      window.addEventListener("keydown", handleKeyDown, { capture: true });
 
       // 배경 GLB 로드
       glbLoader.load(config.model.path, {
@@ -397,6 +406,7 @@ export function Stage6() {
 
     cleanup(scene) {
       cancelAirplaneCallSignScheduled();
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
       if (orbitControls) {
         orbitControls.dispose();
         orbitControls = null;
