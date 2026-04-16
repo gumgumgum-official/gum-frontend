@@ -828,6 +828,36 @@ export function Stage3() {
     dir.normalize();
     const yaw = Math.atan2(dir.x, dir.z);
     group.rotation.set(0, yaw, 0);
+    // #region agent log
+    let _letterCount = 0;
+    let _allYs = [];
+    group.parent?.traverse?.((o) => {
+      if (o.userData?.isStage3Letter) {
+        _letterCount++;
+        _allYs.push(+o.position.y.toFixed(3));
+      }
+    });
+    fetch("http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "d47433",
+      },
+      body: JSON.stringify({
+        sessionId: "d47433",
+        hypothesisId: "B",
+        location: "Stage3.js:setReadableRotationTowardCamera",
+        message: "landed letter rotated toward camera",
+        data: {
+          landedGroupUUID: group.uuid,
+          yaw,
+          letterGroupCountInScene: _letterCount,
+          allLetterYs: _allYs,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
   }
 
   // Stage3에서는 낙하 중 회전을 사용하지 않으므로, 회전 속도 계산 유틸은 제거.
@@ -850,6 +880,30 @@ export function Stage3() {
 
   async function loadLetterFromSvgUrl(scene, camera, groundY, svgUrl, debugId) {
     if (!svgUrl) return;
+
+    // #region agent log
+    fetch("http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "d47433",
+      },
+      body: JSON.stringify({
+        sessionId: "d47433",
+        hypothesisId: "A",
+        location: "Stage3.js:loadLetterFromSvgUrl:entry",
+        message: "loadLetterFromSvgUrl called",
+        data: {
+          svgUrl: String(svgUrl).slice(-80),
+          debugId,
+          letterLoadInProgress,
+          pending: !!pendingSvgUrlToLoad,
+          hasLetterState: !!letterState,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     // 로딩 중 중복 요청이 들어오면 마지막 요청만 저장했다가 이어서 처리
     if (letterLoadInProgress) {
@@ -964,6 +1018,33 @@ export function Stage3() {
           group.rotation.set(0, 0, 0);
           scene.add(group);
 
+          // #region agent log
+          fetch(
+            "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Debug-Session-Id": "d47433",
+              },
+              body: JSON.stringify({
+                sessionId: "d47433",
+                hypothesisId: "A",
+                location: "Stage3.js:loadLetterFromSvgUrl:while-scene-add",
+                message: "[FIRST] letter group added in while loop",
+                data: {
+                  debugId: currentDebugId,
+                  startY,
+                  landingY,
+                  meshCount: meshes.length,
+                  groupUUID: group.uuid,
+                },
+                timestamp: Date.now(),
+              }),
+            },
+          ).catch(() => {});
+          // #endregion
+
           const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0
           const gravity = STAGE3_GRAVITY * speedFactor;
           const initialVy =
@@ -1003,6 +1084,34 @@ export function Stage3() {
           nextSvgUrl = null;
         }
       }
+      // #region agent log
+      let _stage3LetterCountAfterWhile = 0;
+      scene.traverse((o) => {
+        if (o.userData?.isStage3Letter) _stage3LetterCountAfterWhile++;
+      });
+      fetch(
+        "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "d47433",
+          },
+          body: JSON.stringify({
+            sessionId: "d47433",
+            hypothesisId: "A",
+            location: "Stage3.js:loadLetterFromSvgUrl:after-while",
+            message:
+              "while loop finished; about to fetch latest handwriting AGAIN (duplicate block)",
+            data: {
+              letterGroupCountInScene: _stage3LetterCountAfterWhile,
+              hasLetterState: !!letterState,
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
       const metadata = await getLatestHandwritingMetadata();
       if (!metadata?.url) {
         if (import.meta.env.DEV) {
@@ -1099,6 +1208,37 @@ export function Stage3() {
         return;
       }
       scene.add(group);
+      // #region agent log
+      let _stage3LetterCountAfterSecond = 0;
+      scene.traverse((o) => {
+        if (o.userData?.isStage3Letter) _stage3LetterCountAfterSecond++;
+      });
+      fetch(
+        "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "d47433",
+          },
+          body: JSON.stringify({
+            sessionId: "d47433",
+            hypothesisId: "A",
+            location: "Stage3.js:loadLetterFromSvgUrl:second-scene-add",
+            message: "[SECOND] letter group added (duplicate block)",
+            data: {
+              metadataId: metadata?.id,
+              startY,
+              landingY,
+              meshCount: meshes.length,
+              groupUUID: group.uuid,
+              letterGroupCountInScene: _stage3LetterCountAfterSecond,
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
       const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0: 전반적으로 더 빠르게
       const gravity = STAGE3_GRAVITY * speedFactor;
       const initialVy = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
@@ -2094,14 +2234,13 @@ export function Stage3() {
         scene.remove(backgroundModel);
         portalVortexMaterial = null;
         backgroundModel.traverse((child) => {
-          if (child.isMesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
+          if (!child.isMesh && !child.isPoints) return;
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m.dispose());
+            } else {
+              child.material.dispose();
             }
           }
         });
