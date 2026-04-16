@@ -68,7 +68,8 @@ const STAGE3_STROKE_FILL = 1.3;
 // OUTLINE/FILL 레이어 간 Z 오프셋도 최소화해서 볼륨감 과한 느낌을 줄임
 const STAGE3_OUTLINE_Z_OFFSET = 0.004;
 const STAGE3_FILL_Z_OFFSET = 0.008;
-const STAGE3_SPAWN_HEIGHT = 5;
+/** 착지면(landingY) 위로 띄우는 높이 — 글자 밑면·지형 오차를 줄이려면 landingY 기준과 함께 키움 */
+const STAGE3_SPAWN_HEIGHT = 8;
 // 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
 const STAGE3_GRAVITY = -35;
 const STAGE3_INITIAL_VY = -12;
@@ -1411,7 +1412,8 @@ export function Stage3() {
           const letterBottomOffset = Math.max(0, -box.min.y);
           const landingY = groundY + letterBottomOffset;
 
-          const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
+          // 그룹 origin은 landingY에 맞춰 두므로, 시작 높이도 landingY 기준(0키 재낙하와 동일). groundY만 쓰면 밑면이 지면 아래로 내려갈 수 있음.
+          const startY = landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
           const spawnX = config.letterSpawnXZ?.x ?? 0;
           const spawnZ = config.letterSpawnXZ?.z ?? 0;
           group.position.set(spawnX, startY, spawnZ);
