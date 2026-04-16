@@ -5,6 +5,7 @@
  */
 
 import { STAGE3_AUDIO_CONFIG } from "../../config/stages/stage3/stage3AudioConfig.js";
+import { resolvePublicAssetUrl } from "./gltfTemplateCache.js";
 
 let hasPlayedStage3Intro = false;
 /** @type {HTMLAudioElement | null} */
@@ -32,11 +33,6 @@ const STAGE3_BACKGROUND_DELAY_AFTER_INTRO_SEC = 0.3;
 /** 배경을 0 → 목표 볼륨까지 올리는 시간 (초) */
 const STAGE3_BACKGROUND_FADE_IN_SEC = 3.2;
 
-function resolveStage3SoundUrl(relativePath) {
-  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-  return base + relativePath;
-}
-
 function cancelStage3BackgroundTimers() {
   if (stage3BackgroundDelayTimeoutId) {
     window.clearTimeout(stage3BackgroundDelayTimeoutId);
@@ -61,7 +57,7 @@ function startStage3BackgroundFadeIn() {
     stage3BackgroundAudio = new window.Audio();
     stage3BackgroundAudio.preload = "auto";
     stage3BackgroundAudio.loop = true;
-    stage3BackgroundAudio.src = resolveStage3SoundUrl(
+    stage3BackgroundAudio.src = resolvePublicAssetUrl(
       "/static/sounds/background/stage3_background_sound.mp3",
     );
   }
@@ -182,7 +178,7 @@ export function playStage3IntroAudioTwice() {
   hasPlayedStage3Intro = true;
   stage3IntroPlayCount = 0;
 
-  const src = resolveStage3SoundUrl(
+  const src = resolvePublicAssetUrl(
     "/static/sounds/20711 finch bird isolated tweet-full.mp3",
   );
 

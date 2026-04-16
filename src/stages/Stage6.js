@@ -3,19 +3,16 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
-import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
-import { createSpeechBubbleHover } from "../utils/stages/stage6/speechBubbleHover.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC,
 } from "../config/stages/stage6AirportAnnouncement.js";
 
-const DEFAULT_CHARACTER_PATH = "/models/common/user_walking2.glb";
 const AIRPORT_SUBTITLE_SHOW_EVENT = "gum:airportAnnouncementSubtitle:show";
 const AIRPORT_SUBTITLE_UPDATE_EVENT = "gum:airportAnnouncementSubtitle:update";
 const AIRPORT_SUBTITLE_HIDE_EVENT = "gum:airportAnnouncementSubtitle:hide";
@@ -25,7 +22,6 @@ const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
 
 export function Stage6() {
   const objects = [];
-  const characterModels = [];
   const config = STAGE6_CONFIG;
   const airportSubtitleLeadSec =
     Number(STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC ?? 0.75) || 0;
@@ -36,7 +32,6 @@ export function Stage6() {
     : [];
   const glbLoader = getGLBLoader();
   const fbxLoader = new FBXLoader();
-  let speechBubbleHover = null;
   let orbitControls = null;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
@@ -48,6 +43,8 @@ export function Stage6() {
 
   const AIRPLANE_CALL_SIGN_DELAY_MS = 1500;
   const AIRPLANE_CALL_SIGN_VOLUME = 0.55;
+  /** 칠 사인 오디오 재생 후 chime 아이콘을 표시하기 시작할 시간(초) */
+  const CHIME_INDICATOR_TRIGGER_TIME_SEC = 0.58;
   const AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS = 100;
   const AIRPORT_ANNOUNCE_INTRO_VOLUME = 0.55;
   let activeSubtitleCueIndex = -1;
@@ -165,7 +162,12 @@ export function Stage6() {
       airplaneCallSignAudio.onplay = null;
       airplaneCallSignAudio.ontimeupdate = () => {
         if (isAirportChimeVisible) return;
-        if (Number(airplaneCallSignAudio?.currentTime ?? 0) < 0.58) return;
+        if (
+          Number(airplaneCallSignAudio?.currentTime ?? 0) <
+          CHIME_INDICATOR_TRIGGER_TIME_SEC
+        ) {
+          return;
+        }
         window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_SHOW_EVENT));
         isAirportChimeVisible = true;
       };
@@ -194,7 +196,6 @@ export function Stage6() {
     camera: null,
 
     setup(scene, renderer) {
-      const stage = this;
       this.camera = new THREE.PerspectiveCamera(
         config.camera.fov,
         window.innerWidth / window.innerHeight,
@@ -262,59 +263,6 @@ export function Stage6() {
           }
         },
         onError: (err) => console.error("❌ Stage6 배경 로드 에러:", err),
-      });
-
-      // 캐릭터 5명 GLB 로드 (config.characters 위치 적용)
-      const characterPositions = config.characters ?? [
-        { position: { x: 0, y: 0, z: 0 } },
-        { position: { x: 1.2, y: 0, z: 0 } },
-        { position: { x: 2.4, y: 0, z: 0 } },
-        { position: { x: 3.6, y: 0, z: 0 } },
-        { position: { x: 4.8, y: 0, z: 0 } },
-      ];
-      const characterPath = config.characterModelPath ?? DEFAULT_CHARACTER_PATH;
-      glbLoader.load(characterPath, {
-        onLoad: (gltf) => {
-          const source = gltf.scene;
-          const scale = config.characterScale ?? 1;
-          for (let i = 0; i < 5; i++) {
-            const model = i === 0 ? source : SkeletonUtils.clone(source);
-            model.scale.setScalar(scale);
-            const pos = characterPositions[i]?.position ?? {};
-            model.position.set(pos.x ?? 0, pos.y ?? 0, pos.z ?? 0);
-            model.traverse((child) => {
-              if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-              }
-            });
-            objects.push(model);
-            const messages = config.speechBubbleMessages ?? [];
-            characterModels.push({
-              model,
-              message: messages[i % messages.length],
-            });
-            scene.add(model);
-          }
-          speechBubbleHover = createSpeechBubbleHover({
-            camera: stage.camera,
-            renderer,
-            characterModels,
-            options: {
-              cheerSoundPath: config.cheerSoundPath,
-              bubbleOffsetY: 0.7,
-            },
-          });
-          console.log("✅ Stage6 캐릭터 5명 로드 완료");
-        },
-        onProgress: (xhr) => {
-          if (xhr.total > 0) {
-            console.log(
-              `Stage6 캐릭터: ${((xhr.loaded / xhr.total) * 100).toFixed(0)}%`,
-            );
-          }
-        },
-        onError: (err) => console.error("❌ Stage6 캐릭터 로드 에러:", err),
       });
 
       // 벤치 로드 (config.bench 있을 때)
@@ -411,12 +359,6 @@ export function Stage6() {
         orbitControls.dispose();
         orbitControls = null;
       }
-      if (speechBubbleHover) {
-        speechBubbleHover.cleanup();
-        speechBubbleHover = null;
-      }
-      characterModels.length = 0;
-
       objects.forEach((obj) => {
         scene.remove(obj);
         obj.traverse((child) => {

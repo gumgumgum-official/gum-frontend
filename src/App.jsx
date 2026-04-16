@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { BeamPage } from "./pages/BeamPage.jsx";
 import { KioskPage } from "./pages/KioskPage.jsx";
@@ -14,6 +14,7 @@ export function App() {
   const [showAirportSubtitle, setShowAirportSubtitle] = useState(false);
   const [fadeOutAirportSubtitle, setFadeOutAirportSubtitle] = useState(false);
   const [showAirportChime, setShowAirportChime] = useState(false);
+  const hideTimerRef = useRef(0);
 
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
@@ -27,15 +28,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    let hideTimerId = 0;
-
     const showSubtitle = (event) => {
       const text =
         typeof event?.detail?.text === "string" ? event.detail.text : "";
       if (!text) return;
-      if (hideTimerId) {
-        window.clearTimeout(hideTimerId);
-        hideTimerId = 0;
+      if (hideTimerRef.current) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = 0;
       }
       setAirportSubtitleText(text);
       setFadeOutAirportSubtitle(false);
@@ -54,11 +53,14 @@ export function App() {
     const hideSubtitle = () => {
       if (!showAirportSubtitle) return;
       setFadeOutAirportSubtitle(true);
-      hideTimerId = window.setTimeout(() => {
+      if (hideTimerRef.current) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+      hideTimerRef.current = window.setTimeout(() => {
         setShowAirportSubtitle(false);
         setFadeOutAirportSubtitle(false);
         setAirportSubtitleText("");
-        hideTimerId = 0;
+        hideTimerRef.current = 0;
       }, 600);
     };
 
@@ -76,8 +78,9 @@ export function App() {
     );
 
     return () => {
-      if (hideTimerId) {
-        window.clearTimeout(hideTimerId);
+      if (hideTimerRef.current) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = 0;
       }
       window.removeEventListener(
         "gum:airportAnnouncementSubtitle:show",
