@@ -24,6 +24,12 @@ export function warmStage3GltfTemplateUrls() {
   for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
     urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
   }
+  for (const rel of [
+    "/models/common/flowers/pink2.glb",
+    "/models/common/flowers/white2.glb",
+  ]) {
+    urls.push(resolvePublicAssetUrl(rel));
+  }
   for (const u of urls) {
     void loadGltfTemplateCached(u).catch(() => {});
   }
