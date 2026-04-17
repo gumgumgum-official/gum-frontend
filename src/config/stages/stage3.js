@@ -12,6 +12,8 @@ export const STAGE3_CONFIG = {
    * island8_portal_fixed: `INT_Tent`·`OBJ_Fountain`(분수) 바운딩 중점 근처.
    */
   letterSpawnXZ: { x: 8.56, z: -33.72 },
+  /** SVG 원본 크기와 무관하게 낙하 글자 그룹이 차지할 목표 월드 높이(Y) */
+  letterTargetHeight: 5.4,
   camera: {
     fov: 42.0,
     near: 0.1,

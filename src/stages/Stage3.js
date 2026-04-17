@@ -57,8 +57,9 @@ import {
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
 
-/** Stage2 대비 4배 크기 (글자 일부도 크게 보이도록) */
-const STAGE3_LETTER_SCALE = 0.006 * 0.75 * 4;
+/** Stage2 대비 8배 크기 (글자 일부도 크게 보이도록) */
+/** SVG 원본 크기와 무관하게 글자 그룹이 차지할 목표 월드 높이(Y). config.letterTargetHeight로 덮어쓸 수 있음 */
+const STAGE3_LETTER_TARGET_HEIGHT = 1.8;
 // Z 방향 입체감은 살짝만 주고 거의 평면에 가깝게
 const STAGE3_LETTER_Z_SCALE = 1.0;
 const STAGE3_LETTER_COLOR = 0x111111;
@@ -1380,11 +1381,6 @@ export function Stage3() {
             const mesh = new THREE.Mesh(geometry, material);
             mesh.castShadow = true;
             mesh.receiveShadow = true;
-            mesh.scale.set(
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_Z_SCALE,
-            );
             group.add(mesh);
             meshes.push(mesh);
 
@@ -1401,11 +1397,6 @@ export function Stage3() {
             const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
             fillMesh.castShadow = true;
             fillMesh.receiveShadow = true;
-            fillMesh.scale.set(
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_Z_SCALE,
-            );
             group.add(fillMesh);
             meshes.push(fillMesh);
           });
@@ -1416,6 +1407,16 @@ export function Stage3() {
               mesh.geometry?.computeBoundingBox();
             }
           });
+
+          // SVG 원본 좌표계 크기에 의존하지 않도록, 그룹 높이(Y)를 목표치로 정규화
+          group.updateMatrixWorld(true);
+          const normBox = new THREE.Box3().setFromObject(group);
+          const normSize = normBox.getSize(new THREE.Vector3());
+          const targetH =
+            config.letterTargetHeight ?? STAGE3_LETTER_TARGET_HEIGHT;
+          const norm = normSize.y > 1e-4 ? targetH / normSize.y : 1;
+          group.scale.set(norm, norm, norm * STAGE3_LETTER_Z_SCALE);
+          group.updateMatrixWorld(true);
 
           // outline: 먼저 push 된 메쉬, fill: 그 다음 메쉬
           // meshes 배열에서 짝수 index를 OUTLINE, 홀수 index를 FILL로 간주
