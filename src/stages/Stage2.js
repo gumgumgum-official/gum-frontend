@@ -180,45 +180,56 @@ function computeIslandBoundsFromModel(model) {
   model.updateMatrixWorld(true);
   const walkableObj = findChildByName(model, "Walkable");
   const islandObj = findIslandNamedObject(model);
-  const boundsSource = walkableObj || islandObj || model;
+  const boundsSource = walkableObj || islandObj;
+  const groundSource = boundsSource || model;
   if (
     import.meta.env.DEV &&
     !walkableObj &&
     !islandObj &&
-    boundsSource === model
+    boundsSource == null
   ) {
     console.warn(
-      "[Stage2] 배경에 Walkable 또는 이름이 'Island'인 메쉬가 없으면 지면 Y가 바다·하늘 전체 박스로 어긋날 수 있습니다. GLB에 Island 메쉬를 두거나 config.characterGroundY로 지정하세요.",
+      "[Stage2] 배경에 Walkable/Island 메쉬가 없어 섬 경계를 확정하지 못했습니다. collision.glb 또는 LEGACY 경계로 fallback 합니다.",
     );
   }
-  boundsSource.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(boundsSource);
+  groundSource.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(groundSource);
 
   const maxY = box.max.y;
   const suggestedGroundY = maxY + ISLAND_GROUND_SURFACE_EPS;
+
+  if (!boundsSource) {
+    return {
+      usedWalkable: false,
+      bounds: null,
+      suggestedGroundY,
+    };
+  }
+
+  const boundsBox = new THREE.Box3().setFromObject(boundsSource);
 
   if (walkableObj) {
     return {
       usedWalkable: true,
       bounds: {
-        minX: box.min.x,
-        maxX: box.max.x,
-        minZ: box.min.z,
-        maxZ: box.max.z,
+        minX: boundsBox.min.x,
+        maxX: boundsBox.max.x,
+        minZ: boundsBox.min.z,
+        maxZ: boundsBox.max.z,
       },
       suggestedGroundY,
     };
   }
-  const w = box.max.x - box.min.x;
-  const d = box.max.z - box.min.z;
+  const w = boundsBox.max.x - boundsBox.min.x;
+  const d = boundsBox.max.z - boundsBox.min.z;
   const inset = ISLAND_BOUNDS_INSET_RATIO;
   return {
     usedWalkable: false,
     bounds: {
-      minX: box.min.x + w * inset,
-      maxX: box.max.x - w * inset,
-      minZ: box.min.z + d * inset,
-      maxZ: box.max.z - d * inset,
+      minX: boundsBox.min.x + w * inset,
+      maxX: boundsBox.max.x - w * inset,
+      minZ: boundsBox.min.z + d * inset,
+      maxZ: boundsBox.max.z - d * inset,
     },
     suggestedGroundY,
   };
@@ -227,7 +238,6 @@ function computeIslandBoundsFromModel(model) {
 /**
  * boundsPadding 적용 후에도 min≤max·최소 폭이 되도록 바깥 박스를 확장한다.
  * @param {{ minX: number, maxX: number, minZ: number, maxZ: number }} raw
- * @param {number} padding
  */
 function sanitizeWalkBoundsXZ(raw) {
   const ok = (n) => typeof n === "number" && Number.isFinite(n);
@@ -270,13 +280,32 @@ function ensureWalkBoundsMinSpanForPadding(raw, padding) {
  */
 function getSafeIslandBounds(bounds) {
   if (!bounds) return LEGACY_ISLAND_BOUNDS;
-  const w = bounds.maxX - bounds.minX;
-  const d = bounds.maxZ - bounds.minZ;
-  // 섬이 이보다 작게 잡히면 스폰 영역이 과도하게 좁아져 겹침이 급증하므로 fallback
-  if (!Number.isFinite(w) || !Number.isFinite(d) || w < 6 || d < 6) {
+  const { minX, maxX, minZ, maxZ } = bounds;
+  if (
+    !Number.isFinite(minX) ||
+    !Number.isFinite(maxX) ||
+    !Number.isFinite(minZ) ||
+    !Number.isFinite(maxZ) ||
+    minX >= maxX ||
+    minZ >= maxZ
+  ) {
     return LEGACY_ISLAND_BOUNDS;
   }
-  return bounds;
+  const w = maxX - minX;
+  const d = maxZ - minZ;
+  // 섬이 이보다 작게 잡히면 스폰 영역이 과도하게 좁아져 겹침이 급증하므로 fallback
+  // 너무 큰 값도 대부분 "섬+바다 전체 박스"인 경우라 fallback.
+  if (
+    !Number.isFinite(w) ||
+    !Number.isFinite(d) ||
+    w < 6 ||
+    d < 6 ||
+    w > 120 ||
+    d > 120
+  ) {
+    return LEGACY_ISLAND_BOUNDS;
+  }
+  return { minX, maxX, minZ, maxZ };
 }
 
 export function Stage2() {
@@ -307,18 +336,19 @@ export function Stage2() {
     if (!roots || roots.length === 0) {
       islandBounds = null;
       characterMoveBounds = null;
-      return;
+      return false;
     }
     // collision.glb가 여러 조각(여러 root)으로 로드되는 경우가 있어,
     // 첫 번째 root만 쓰면 "맨 위/왼쪽/오른쪽/아래" 일부만 잡혀 스폰 영역이 과도하게 좁아질 수 있다.
     // 따라서 전체 roots를 union(Box3) 해서 섬 전체 XZ 범위를 구한다.
     const box = new THREE.Box3();
     roots.forEach((r) => box.expandByObject(r));
+    if (box.isEmpty()) return false;
     const minX = box.min.x;
     const maxX = box.max.x;
     const minZ = box.min.z;
     const maxZ = box.max.z;
-    islandBounds = { minX, maxX, minZ, maxZ };
+    islandBounds = getSafeIslandBounds({ minX, maxX, minZ, maxZ });
     characterMoveBounds = computeCharacterMoveBounds(
       islandBounds,
       null,
@@ -329,8 +359,9 @@ export function Stage2() {
       `📐 [Stage2] collision (prop[0]) position: x=${p.x.toFixed(2)}, y=${p.y.toFixed(2)}, z=${p.z.toFixed(2)}`,
     );
     console.log(
-      `📐 [Stage2] 섬 범위 (XZ): minX=${minX.toFixed(2)}, maxX=${maxX.toFixed(2)}, minZ=${minZ.toFixed(2)}, maxZ=${maxZ.toFixed(2)}`,
+      `📐 [Stage2] collision fallback 섬 범위 (XZ): minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
     );
+    return true;
   }
 
   return {
@@ -503,15 +534,19 @@ export function Stage2() {
             bounds,
             suggestedGroundY: sg,
           } = computeIslandBoundsFromModel(islandModel);
-          islandBounds = bounds;
+          islandBounds = bounds ? getSafeIslandBounds(bounds) : null;
           suggestedGroundY = sg;
-          if (usedWalkable) {
+          if (usedWalkable && islandBounds) {
             console.log(
               `📐 [Stage2] island.glb Walkable 사용 (디자이너 정의): minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
-          } else {
+          } else if (islandBounds) {
             console.log(
               `📐 [Stage2] island.glb Walkable 없음 → island 이름·루트 박스 + ${(ISLAND_BOUNDS_INSET_RATIO * 100).toFixed(0)}% inset: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
+            );
+          } else {
+            console.warn(
+              "[Stage2] island.glb에서 Walkable/Island를 찾지 못해 collision.glb fallback 대기",
             );
           }
         } else if (allModels.length > 0) {
@@ -520,28 +555,51 @@ export function Stage2() {
             bounds,
             suggestedGroundY: sg,
           } = computeIslandBoundsFromModel(allModels[0]);
-          islandBounds = bounds;
+          islandBounds = bounds ? getSafeIslandBounds(bounds) : null;
           suggestedGroundY = sg;
-          if (usedWalkable) {
+          if (usedWalkable && islandBounds) {
             console.log(
               `📐 [Stage2] 배경 GLB Walkable 사용: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
-          } else {
+          } else if (islandBounds) {
             console.log(
               `📐 [Stage2] 단일 배경 GLB → island 이름·XZ inset ${(ISLAND_BOUNDS_INSET_RATIO * 100).toFixed(0)}%: minX=${islandBounds.minX.toFixed(2)}, maxX=${islandBounds.maxX.toFixed(2)}, minZ=${islandBounds.minZ.toFixed(2)}, maxZ=${islandBounds.maxZ.toFixed(2)}`,
             );
+          } else {
+            console.warn(
+              "[Stage2] 배경 GLB에서 Walkable/Island를 찾지 못해 collision.glb fallback 대기",
+            );
           }
         }
-
+        const backgroundBoundsSourceModel =
+          islandModel ?? (allModels.length > 0 ? allModels[0] : null);
         if (islandBounds) {
           characterMoveBounds = computeCharacterMoveBounds(
             islandBounds,
-            islandModel ?? (allModels.length > 0 ? allModels[0] : null),
+            backgroundBoundsSourceModel,
             config,
           );
         } else {
           characterMoveBounds = null;
         }
+
+        const ensureFinalIslandBounds = () => {
+          if (!islandBounds) {
+            // B안 우선순위: Walkable/island 부재 시 collision.glb union bounds 사용
+            updateIslandBoundsFromRoots(propRoots);
+          }
+          if (!islandBounds) {
+            islandBounds = LEGACY_ISLAND_BOUNDS;
+            characterMoveBounds = computeCharacterMoveBounds(
+              islandBounds,
+              backgroundBoundsSourceModel,
+              config,
+            );
+            console.warn(
+              "[Stage2] collision.glb에서도 섬 경계를 확정하지 못해 LEGACY_ISLAND_BOUNDS 사용",
+            );
+          }
+        };
 
         {
           const cfgY = config.characterGroundY;
@@ -559,13 +617,12 @@ export function Stage2() {
             propRoots,
             () => {
               debugControls.setDraggableObjects(propRoots);
-              if (!islandModel && islandBounds == null) {
-                updateIslandBoundsFromRoots(propRoots);
-              }
+              ensureFinalIslandBounds();
               onReady();
             },
           );
         } else {
+          ensureFinalIslandBounds();
           onReady();
         }
       };
@@ -1445,12 +1502,16 @@ function getSpawnBounds(bounds) {
   const insetX = fullW * SPAWN_INSET_SIDE_RATIO;
   const insetZTop = fullD * SPAWN_INSET_RATIO;
   const insetZBottom = fullD * SPAWN_INSET_BOTTOM_RATIO;
-  return {
+  const safeSpawn = {
     minX: b.minX + insetX,
     maxX: b.maxX - insetX,
     minZ: b.minZ + insetZTop,
     maxZ: b.maxZ - insetZBottom,
   };
+  if (safeSpawn.minX >= safeSpawn.maxX || safeSpawn.minZ >= safeSpawn.maxZ) {
+    return { ...b };
+  }
+  return safeSpawn;
 }
 
 /**

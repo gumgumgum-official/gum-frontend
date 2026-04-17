@@ -2,7 +2,7 @@
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
-    path: "/models/stage3/island8_portal_fixed.glb",
+    path: "/models/stage3/island9_portal_fixed.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
