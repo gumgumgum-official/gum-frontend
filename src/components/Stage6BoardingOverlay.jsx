@@ -362,13 +362,6 @@ export function Stage6BoardingOverlay() {
             >
               탑승하기
             </button>
-            <button
-              type="button"
-              className="bp-btn bp-btn-close"
-              onClick={() => setIsOverlayOpen(false)}
-            >
-              ✕ 닫기
-            </button>
           </div>
         </div>
       </div>

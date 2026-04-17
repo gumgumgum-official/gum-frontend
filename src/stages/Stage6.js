@@ -158,6 +158,7 @@ export function Stage6() {
     activeSubtitleCueIndex = -1;
     isAirportSubtitleVisible = false;
     window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
+    isSceneInteractionLocked = false;
   }
 
   function playAirportAnnounceIntro() {
@@ -184,8 +185,11 @@ export function Stage6() {
       activeSubtitleCueIndex = -1;
       isAirportSubtitleVisible = false;
       window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
+      isSceneInteractionLocked = false;
     };
-    airportAnnounceIntroAudio.play().catch(() => {});
+    airportAnnounceIntroAudio.play().catch(() => {
+      isSceneInteractionLocked = false;
+    });
   }
 
   function playAirplaneCallSignOnce(onStarted) {
@@ -262,7 +266,12 @@ export function Stage6() {
           playAirportAnnounceIntro();
         }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
       };
-      airplaneCallSignAudio.play().catch(() => {});
+      airplaneCallSignAudio.play().catch(() => {
+        airportAnnounceIntroTimeoutId = window.setTimeout(() => {
+          airportAnnounceIntroTimeoutId = 0;
+          playAirportAnnounceIntro();
+        }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
+      });
     }, AIRPLANE_CALL_SIGN_DELAY_MS);
   }
 
@@ -584,6 +593,9 @@ export function Stage6() {
       };
       canvas.addEventListener("pointermove", onPointerMove);
 
+      scheduleAirplaneCallSign();
+      isSceneInteractionLocked = true;
+
       // 배경 GLB 로드: 템플릿 캐시 + 인스턴스 클론
       void loadGltfTemplateCached(stage6ModelUrl)
         .then((gltf) => {
@@ -688,8 +700,6 @@ export function Stage6() {
           },
         );
       }
-
-      scheduleAirplaneCallSign();
     },
 
     update(delta) {
