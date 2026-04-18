@@ -68,7 +68,8 @@ const STAGE3_STROKE_FILL = 1.3;
 // OUTLINE/FILL 레이어 간 Z 오프셋도 최소화해서 볼륨감 과한 느낌을 줄임
 const STAGE3_OUTLINE_Z_OFFSET = 0.004;
 const STAGE3_FILL_Z_OFFSET = 0.008;
-const STAGE3_SPAWN_HEIGHT = 5;
+/** 착지면(landingY) 위로 띄우는 높이 — 글자 밑면·지형 오차를 줄이려면 landingY 기준과 함께 키움 */
+const STAGE3_SPAWN_HEIGHT = 8;
 // 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
 const STAGE3_GRAVITY = -35;
 const STAGE3_INITIAL_VY = -12;
@@ -228,6 +229,8 @@ export function Stage3() {
     active: false,
     transitioning: false,
     completed: false,
+    /** 인트로에서 위에서 내려다보는 카메라 포즈를 한 번이라도 적용했으면 true */
+    introTopViewCommitted: false,
     elapsed: 0,
     transitionElapsed: 0,
     /** 인트로 회전 구간 길이 — 클수록 같은 sweep 각에서 더 천천히 회전 */
@@ -272,6 +275,7 @@ export function Stage3() {
     cameraIntro.active = true;
     cameraIntro.transitioning = false;
     cameraIntro.completed = false;
+    cameraIntro.introTopViewCommitted = false;
     cameraIntro.elapsed = 0;
     cameraIntro.transitionElapsed = 0;
     cameraIntro.center.copy(center);
@@ -319,6 +323,12 @@ export function Stage3() {
         cameraIntro.lookAtY,
         cameraIntro.center.z,
       );
+      if (!cameraIntro.introTopViewCommitted) {
+        cameraIntro.introTopViewCommitted = true;
+        if (isStage3Active) {
+          playStage3IntroAudioTwice();
+        }
+      }
 
       if (
         t >= 1 &&
@@ -573,6 +583,9 @@ export function Stage3() {
         stage3GroundY,
         assignedSvgUrl,
         assignedWorryId,
+        {
+          holdFallUntilIntroTopView: !cameraIntro.completed,
+        },
       );
     }
   }
@@ -1278,8 +1291,19 @@ export function Stage3() {
     letterState = null;
   }
 
-  async function loadLetterFromSvgUrl(scene, camera, groundY, svgUrl, debugId) {
+  /**
+   * @param {{ holdFallUntilIntroTopView?: boolean }} [letterOptions]
+   */
+  async function loadLetterFromSvgUrl(
+    scene,
+    camera,
+    groundY,
+    svgUrl,
+    debugId,
+    letterOptions = {},
+  ) {
     if (!svgUrl) return;
+    const { holdFallUntilIntroTopView = false } = letterOptions;
 
     // 로딩 중 중복 요청이 들어오면 마지막 요청만 저장했다가 이어서 처리
     if (letterLoadInProgress) {
@@ -1292,7 +1316,7 @@ export function Stage3() {
     removeAllLetterGroupsFromScene(scene);
 
     let nextSvgUrl = svgUrl;
-    let nextDebugId = debugId;
+    let _nextDebugId = debugId;
 
     try {
       // pending을 포함해 "하나라도 더 있으면" 순차 처리
@@ -1300,7 +1324,7 @@ export function Stage3() {
       while (nextSvgUrl) {
         const currentSvgUrl = nextSvgUrl;
         nextSvgUrl = null;
-        nextDebugId = null;
+        _nextDebugId = null;
 
         try {
           let shapes = await loadSVGShapes(currentSvgUrl);
@@ -1388,8 +1412,11 @@ export function Stage3() {
           const letterBottomOffset = Math.max(0, -box.min.y);
           const landingY = groundY + letterBottomOffset;
 
-          const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
-          group.position.set(0, startY, 0);
+          // 그룹 origin은 landingY에 맞춰 두므로, 시작 높이도 landingY 기준(0키 재낙하와 동일). groundY만 쓰면 밑면이 지면 아래로 내려갈 수 있음.
+          const startY = landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
+          const spawnX = config.letterSpawnXZ?.x ?? 0;
+          const spawnZ = config.letterSpawnXZ?.z ?? 0;
+          group.position.set(spawnX, startY, spawnZ);
           group.rotation.set(0, 0, 0);
           scene.add(group);
 
@@ -1400,8 +1427,10 @@ export function Stage3() {
 
           letterState = {
             group,
+            holdFallUntilIntroTopView,
+            initialVyDeferred: initialVy,
             velocity: {
-              y: initialVy,
+              y: holdFallUntilIntroTopView ? 0 : initialVy,
               rotationX: 0,
               rotationY: 0,
               rotationZ: 0,
@@ -1420,7 +1449,7 @@ export function Stage3() {
         // while 내부에서 계속 로딩이 필요할 경우 pending을 소비
         if (pendingSvgUrlToLoad) {
           nextSvgUrl = pendingSvgUrlToLoad;
-          nextDebugId = pendingSvgUrlDebugId;
+          _nextDebugId = pendingSvgUrlDebugId;
           pendingSvgUrlToLoad = null;
           pendingSvgUrlDebugId = null;
           removeAllLetterGroupsFromScene(scene);
@@ -1428,117 +1457,6 @@ export function Stage3() {
           nextSvgUrl = null;
         }
       }
-      const metadata = await getLatestHandwritingMetadata();
-      if (!metadata?.url) {
-        return;
-      }
-      let shapes = await loadSVGShapes(metadata.url);
-      if (shapes.length === 0) return;
-
-      const outlineShapes = expandShapesStroke(shapes, STAGE3_STROKE_OUTLINE);
-      const fillShapes = expandShapesStroke(shapes, STAGE3_STROKE_FILL);
-
-      const group = new THREE.Group();
-      group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
-      // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
-      const extrudeSettings = {
-        // depth를 줄여 앞뒤 볼륨감을 과하지 않게 유지
-        depth: 0.18,
-        bevelEnabled: true,
-        bevelThickness: 0.035,
-        bevelSize: 0.025,
-        bevelSegments: 8,
-      };
-      const meshes = [];
-      const sharedMaterialOptions = {
-        color: STAGE3_LETTER_COLOR,
-        metalness: 0.1,
-        roughness: 0.8,
-      };
-
-      outlineShapes.forEach((shape, index) => {
-        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        const material = new THREE.MeshStandardMaterial(sharedMaterialOptions);
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        mesh.scale.set(
-          STAGE3_LETTER_SCALE,
-          STAGE3_LETTER_SCALE,
-          STAGE3_LETTER_Z_SCALE,
-        );
-        group.add(mesh);
-        meshes.push(mesh);
-
-        const fillShape = fillShapes[index];
-        if (!fillShape) return;
-        const fillGeometry = new THREE.ExtrudeGeometry(
-          fillShape,
-          extrudeSettings,
-        );
-        const fillMaterial = new THREE.MeshStandardMaterial(
-          sharedMaterialOptions,
-        );
-        const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
-        fillMesh.castShadow = true;
-        fillMesh.receiveShadow = true;
-        fillMesh.scale.set(
-          STAGE3_LETTER_SCALE,
-          STAGE3_LETTER_SCALE,
-          STAGE3_LETTER_Z_SCALE,
-        );
-        group.add(fillMesh);
-        meshes.push(fillMesh);
-      });
-      centerGroupGeometries(meshes);
-      meshes.forEach((mesh) => {
-        if (!mesh.geometry || !mesh.geometry.boundingBox) {
-          mesh.geometry?.computeBoundingBox();
-        }
-        // OUTLINE/FILL 모두 같은 스케일을 쓰되, 생성 순서로 Z 오프셋을 나눠 적용
-        // outline: 먼저 push 된 메쉬, fill: 그 다음 메쉬
-        // meshes 배열에서 짝수 index를 OUTLINE, 홀수 index를 FILL로 간주
-      });
-      meshes.forEach((mesh, idx) => {
-        mesh.position.z +=
-          idx % 2 === 0 ? -STAGE3_OUTLINE_Z_OFFSET : STAGE3_FILL_Z_OFFSET;
-      });
-      group.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(group);
-      const letterBottomOffset = Math.max(0, -box.min.y);
-      const landingY = groundY + letterBottomOffset;
-
-      const startY = groundY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
-      group.position.set(0, startY, 0);
-      group.rotation.set(0, 0, 0);
-      if (!isStage3Active) {
-        group.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) child.material.dispose();
-          }
-        });
-        return;
-      }
-      scene.add(group);
-      const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0: 전반적으로 더 빠르게
-      const gravity = STAGE3_GRAVITY * speedFactor;
-      const initialVy = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
-      letterState = {
-        group,
-        velocity: {
-          y: initialVy,
-          rotationX: 0,
-          rotationY: 0,
-          rotationZ: 0,
-        },
-        gravity,
-        groundY,
-        landingY,
-        bounces: 0,
-        landed: false,
-        hitCount: 0,
-      };
     } catch (e) {
       if (import.meta.env.DEV) {
         console.warn("[Stage3] 글자 로드 실패:", e);
@@ -1548,7 +1466,10 @@ export function Stage3() {
     }
   }
 
-  async function loadLatestLetter(scene, camera, groundY) {
+  /**
+   * @param {{ holdFallUntilIntroTopView?: boolean }} [letterOptions]
+   */
+  async function loadLatestLetter(scene, camera, groundY, letterOptions = {}) {
     const metadata = await getLatestHandwritingMetadata();
     if (!metadata?.url) {
       return;
@@ -1559,6 +1480,7 @@ export function Stage3() {
       groundY,
       metadata.url,
       metadata.id,
+      letterOptions,
     );
   }
 
@@ -1568,8 +1490,8 @@ export function Stage3() {
       const s = letterState;
       const speedFactor = 0.25 + Math.random() * 0.75;
       const startY = s.landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
-      const startX = 0;
-      const startZ = 0;
+      const startX = config.letterSpawnXZ?.x ?? 0;
+      const startZ = config.letterSpawnXZ?.z ?? 0;
       const gravity = STAGE3_GRAVITY * speedFactor;
       const initialVy = (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
 
@@ -1594,6 +1516,7 @@ export function Stage3() {
           stage3GroundY,
           assignedSvgUrl,
           assignedWorryId,
+          { holdFallUntilIntroTopView: false },
         );
       } else {
         loadLatestLetter(sceneRef, cameraRef, stage3GroundY);
@@ -1604,6 +1527,14 @@ export function Stage3() {
   function updateLetter(delta, camera) {
     if (!letterState || letterState.landed) return;
     const s = letterState;
+    if (s.holdFallUntilIntroTopView) {
+      if (cameraIntro.introTopViewCommitted || cameraIntro.completed) {
+        s.holdFallUntilIntroTopView = false;
+        s.velocity.y = s.initialVyDeferred;
+      } else {
+        return;
+      }
+    }
     const nextY = s.group.position.y + s.velocity.y * delta;
     if (nextY <= s.landingY) {
       // 첫 충돌 시 한 번만 가볍게 바운스해서 무게감을 표현
@@ -2285,6 +2216,7 @@ export function Stage3() {
               backgroundMaxY,
               assignedSvgUrl,
               assignedWorryId,
+              { holdFallUntilIntroTopView: true },
             );
           } else {
             // 우선순위: REST busy(1순위)를 기다리고,
@@ -2292,7 +2224,9 @@ export function Stage3() {
             const stageCamera = this.camera;
             monitorFallbackTimeoutId = window.setTimeout(() => {
               if (monitorRestAssignmentReceived || assignedSvgUrl) return;
-              loadLatestLetter(scene, stageCamera, backgroundMaxY);
+              loadLatestLetter(scene, stageCamera, backgroundMaxY, {
+                holdFallUntilIntroTopView: false,
+              });
             }, STAGE3_MONITOR_FALLBACK_TIMEOUT_MS);
           }
 
@@ -2366,6 +2300,7 @@ export function Stage3() {
       if (portalVortexMaterial) {
         portalVortexMaterial.uniforms.uTime.value += delta;
       }
+      updateCameraIntro(delta);
       updateLetter(delta, this.camera);
       updateFragments(delta);
       updateSpawnedIceCreams(delta);
@@ -2376,7 +2311,6 @@ export function Stage3() {
       }
       updateStreetLightProximitySound();
       updateClockProximitySound();
-      updateCameraIntro(delta);
       if (gumFollowers) {
         gumFollowers.update(delta);
       }
@@ -2388,6 +2322,7 @@ export function Stage3() {
       cameraIntro.active = false;
       cameraIntro.transitioning = false;
       cameraIntro.completed = false;
+      cameraIntro.introTopViewCommitted = false;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,
@@ -2513,14 +2448,13 @@ export function Stage3() {
         scene.remove(backgroundModel);
         portalVortexMaterial = null;
         backgroundModel.traverse((child) => {
-          if (child.isMesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
+          if (!child.isMesh && !child.isPoints) return;
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m.dispose());
+            } else {
+              child.material.dispose();
             }
           }
         });
