@@ -76,7 +76,10 @@ export function App() {
     <BrowserRouter>
       <NoticeModalBoard
         isOpen={showNoticeModal}
-        onClose={() => setShowNoticeModal(false)}
+        onClose={() => {
+          setShowNoticeModal(false);
+          window.dispatchEvent(new CustomEvent("gum:noticeModalClosed"));
+        }}
       />
       <Stage6PosterModal
         isOpen={showStage6PosterModal}

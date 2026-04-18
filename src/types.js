@@ -114,6 +114,7 @@
  * @property {number} [turnLerpFactor] - 오프셋 yaw lerp
  * @property {number} [facingLerpFactor] - 바라보기 yaw lerp
  * @property {number} [lookAtHeightOffset] - 유저 바라볼 때 y 오프셋
+ * @property {number} [bubbleOffsetY] - 말풍선 세로 앵커 (AABB 높이 배율, Stage2 기본 0.85)
  * @property {number} [animationSpeed] - 애니메이션 속도(미지정 시 스케일로 보정)
  * @property {number|null} [groundOffset] - 발 높이 보정(null이면 캐릭터 groundOffset)
  * @property {Stage3GumFollowerBreakOffConfig} [breakOff]

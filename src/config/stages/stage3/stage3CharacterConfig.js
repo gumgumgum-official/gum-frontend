@@ -37,6 +37,8 @@ export const STAGE3_CHARACTER_CONFIG = {
         turnLerpFactor: 7, // 유저가 급회전할 때 오프셋 yaw 스무딩
         facingLerpFactor: 6, // 유저/목표 방향 바라보기 yaw 스무딩
         lookAtHeightOffset: 0.9, // 유저 바라볼 때 y 오프셋
+        /** Stage2 껌 말풍선과 동일 — 월드 AABB 높이 대비 세로 앵커 (center + height×값) */
+        bubbleOffsetY: 0.85,
         breakOff: {
           enabled: true,
           yawThresholdDeg: 120, // 유저 yaw 변화가 이 이상이면 잠깐 "분리" 모드

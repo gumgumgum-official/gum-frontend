@@ -8,8 +8,7 @@ import { STAGE3_AUDIO_CONFIG } from "./stage3/stage3AudioConfig.js";
 /** @type {import("../../types.js").Stage3Config} */
 export const STAGE3_CONFIG = {
   /**
-   * 낙하 글자 시작 XZ (월드; island8 GLB 원점 기준).
-   * island8_portal_fixed: `INT_Tent`·`OBJ_Fountain`(분수) 바운딩 중점 근처.
+   * 낙하 글자 시작 XZ (월드; island GLB 원점 기준).
    */
   letterSpawnXZ: { x: 8.56, z: -33.72 },
   camera: {

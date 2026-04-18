@@ -151,6 +151,18 @@ body {
   border-top: 8px solid #ffdec7;
 }
 
+/* Stage3 껌딱지 힌트 — Stage2 말풍선과 동일 형태, 배경만 흰색 */
+.speech-bubble-stage2.speech-bubble-stage3-user {
+  z-index: 2260;
+  background: #ffffff;
+  color: #3a2820;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.speech-bubble-stage2.speech-bubble-stage3-user::after {
+  border-top-color: #ffffff;
+}
+
 /* Stage6 공항 안내 자막 */
 .airport-subtitle-container {
   position: fixed;
@@ -276,6 +288,90 @@ body {
   font-size: 14px;
   font-weight: 300;
   line-height: 1.7;
+}
+
+/* Stage3: 이스터에그 스탬프 · 걱정 라벨 · 포탈 화이트아웃 */
+.stage3-ui-root {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2250;
+  pointer-events: none;
+  font-family: "Noto Sans KR", sans-serif;
+}
+
+.stage3-stamp-panel {
+  background: rgba(40, 40, 40, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: 8px;
+  padding: 10px 14px;
+  transition:
+    box-shadow 0.35s ease,
+    opacity 0.5s ease,
+    transform 0.5s ease,
+    visibility 0.5s ease;
+}
+
+.stage3-stamp-panel.stage3-stamp-panel--hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+.stage3-stamp-title {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+.stage3-stamp-slots {
+  display: flex;
+  gap: 8px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.stage3-stamp-slot {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.stage3-stamp-slot.filled {
+  filter: drop-shadow(0 0 4px rgba(255, 220, 120, 0.7));
+}
+
+.stage3-stamp-pop {
+  animation: stage3-stamp-pop-anim 0.45s ease;
+}
+
+@keyframes stage3-stamp-pop-anim {
+  0% {
+    transform: scale(1.5);
+  }
+  70% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.stage3-stamp-glow {
+  box-shadow:
+    0 0 22px rgba(255, 200, 120, 0.55),
+    0 0 42px rgba(200, 120, 255, 0.35);
+}
+
+.stage3-whiteout-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: #fff;
+  pointer-events: none;
+  opacity: 0;
 }
 
 .overlay {
