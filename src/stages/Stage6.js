@@ -86,7 +86,8 @@ export function Stage6() {
   let airportAnnounceIntroAudio = null;
   let isAirportChimeVisible = false;
 
-  const AIRPLANE_CALL_SIGN_DELAY_MS = 1500;
+  /** Stage3 포탈 전환 직후 안내·자막이 바로 이어지도록 진입 무음 구간 최소화 */
+  const AIRPLANE_CALL_SIGN_DELAY_MS = 420;
   const AIRPLANE_CALL_SIGN_VOLUME = 0.55;
   /** 칠 사인 오디오 재생 후 chime 아이콘을 표시하기 시작할 시간(초) */
   const CHIME_INDICATOR_TRIGGER_TIME_SEC = 0.58;

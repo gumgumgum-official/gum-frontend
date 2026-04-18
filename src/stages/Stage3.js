@@ -6,6 +6,7 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
+import gsap from "gsap";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import {
   loadGltfTemplateCached,
@@ -113,6 +114,12 @@ const STAGE3_MONITOR_FALLBACK_TIMEOUT_MS = 5000;
 const STAGE6_SUBTITLE_SEQUENCE_EVENT = "gum:stage6-subtitle:sequence";
 /** Stage6BoardingOverlay `runSubtitleSequence`와 동일: hold + fade(600) + gap(200) × 구간 */
 const STAGE3_ENTRY_SUBTITLE_TOTAL_MS = 2500 + 600 + 200 + 2000 + 600;
+
+/** 포탈 → Stage6: 페이드 인 후 풀 화이트 유지 시간(ms), 그다음 stage:switch */
+const PORTAL_WHITEOUT_FADE_SEC = 1.85;
+const PORTAL_WHITEOUT_HOLD_MS = 500;
+/** 스테이지 전환 후 새 씬이 드러나도록 화이트 페이드 아웃 */
+const PORTAL_WHITEOUT_FADE_OUT_SEC = 1.45;
 /** App.jsx NoticeModalBoard onClose — 게시판 UI가 닫힌 뒤(Stage3 이스터에그 자막용) */
 const NOTICE_MODAL_USER_CLOSED_EVENT = "gum:noticeModalClosed";
 
@@ -249,6 +256,13 @@ export function Stage3() {
   let stampUiRoot = null;
   /** @type {HTMLDivElement | null} */
   let userWorryEnterBubbleEl = null;
+  /** 포탈 → 다음 스테이지 전환용 풀스크린 화이트아웃 */
+  /** @type {HTMLDivElement | null} */
+  let whiteoutOverlayEl = null;
+  let portalTransitionTween = null;
+  /** @type {number | null} */
+  let portalTransitionHoldTimeoutId = null;
+  let portalTransitionInProgress = false;
   /** @type {'off' | 'show' | 'gap'} */
   let userWorryEnterBubblePhase = "off";
   let userWorryEnterBubbleT = 0;
@@ -489,7 +503,75 @@ export function Stage3() {
     document.body.appendChild(userWorryEnterBubbleEl);
   }
 
+  function ensureWhiteoutOverlay() {
+    if (whiteoutOverlayEl) return;
+    const el = document.createElement("div");
+    el.className = "stage3-whiteout-overlay";
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    whiteoutOverlayEl = el;
+  }
+
+  /**
+   * 화면을 흰색으로 덮은 뒤 stage:switch 를 보낸다.
+   * @param {number} targetStage
+   */
+  function startPortalTransitionToStage6(targetStage) {
+    if (portalTransitionInProgress || !isStage3Active) return;
+    ensureWhiteoutOverlay();
+    if (!whiteoutOverlayEl) return;
+    portalTransitionInProgress = true;
+    portalTransitionTween?.kill();
+    if (portalTransitionHoldTimeoutId != null) {
+      window.clearTimeout(portalTransitionHoldTimeoutId);
+      portalTransitionHoldTimeoutId = null;
+    }
+    gsap.killTweensOf(whiteoutOverlayEl);
+    whiteoutOverlayEl.style.pointerEvents = "auto";
+    gsap.set(whiteoutOverlayEl, { opacity: 0 });
+    portalTransitionTween = gsap.to(whiteoutOverlayEl, {
+      opacity: 1,
+      duration: PORTAL_WHITEOUT_FADE_SEC,
+      ease: "power2.inOut",
+      onComplete: () => {
+        portalTransitionTween = null;
+        portalTransitionHoldTimeoutId = window.setTimeout(() => {
+          portalTransitionHoldTimeoutId = null;
+          window.dispatchEvent(
+            new CustomEvent("stage:switch", {
+              detail: { targetStage },
+            }),
+          );
+        }, PORTAL_WHITEOUT_HOLD_MS);
+      },
+    });
+  }
+
   function disposeStage3Ui() {
+    portalTransitionTween?.kill();
+    portalTransitionTween = null;
+    if (portalTransitionHoldTimeoutId != null) {
+      window.clearTimeout(portalTransitionHoldTimeoutId);
+      portalTransitionHoldTimeoutId = null;
+    }
+    if (whiteoutOverlayEl) {
+      const el = whiteoutOverlayEl;
+      gsap.killTweensOf(el);
+      el.style.pointerEvents = "none";
+      portalTransitionTween = gsap.to(el, {
+        opacity: 0,
+        duration: PORTAL_WHITEOUT_FADE_OUT_SEC,
+        ease: "power2.inOut",
+        onComplete: () => {
+          portalTransitionTween = null;
+          if (whiteoutOverlayEl === el) {
+            whiteoutOverlayEl = null;
+          }
+          el.remove();
+        },
+      });
+    }
+    portalTransitionInProgress = false;
     stampUiRoot?.remove();
     stampUiRoot = null;
     userWorryEnterBubbleEl?.remove();
@@ -978,13 +1060,10 @@ export function Stage3() {
     event.stopPropagation();
 
     if (target === "portal") {
+      if (portalTransitionInProgress) return;
       if (easterEggCount >= REQUIRED_EGG_COUNT && textDestroyed) {
         const targetStage = config.portal_bright?.targetStage ?? 6;
-        window.dispatchEvent(
-          new CustomEvent("stage:switch", {
-            detail: { targetStage },
-          }),
-        );
+        startPortalTransitionToStage6(targetStage);
         return;
       }
       if (easterEggCount >= REQUIRED_EGG_COUNT && !textDestroyed) {
