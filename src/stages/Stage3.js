@@ -22,11 +22,7 @@ import {
 import { applyPortalVortexToModel } from "../utils/stages/stage3/portalVortexMaterial.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
-import {
-  createHandwritingSvgPlaneGroup,
-  disposeHandwritingSvgPlaneGroup,
-} from "../utils/handwritingSvgPlane.js";
-import { createHandwritingSvgVolumeGroup } from "../utils/stages/stage3/stage3HandwritingSvgVolume.js";
+import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
 import * as CANNON from "cannon-es";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import {
@@ -61,10 +57,18 @@ import {
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
 
-/** Base letter height (Y); scaled by randomFactor like Stage2 (MIN..MAX). */
-const STAGE3_LETTER_TARGET_HEIGHT = 0.9;
-const STAGE3_LETTER_HEIGHT_RANDOM_MIN = 0.5;
-const STAGE3_LETTER_HEIGHT_RANDOM_MAX = 1.0;
+/** Stage2 대비 8배 크기 (글자 일부도 크게 보이도록) */
+/** SVG 원본 크기와 무관하게 글자 그룹이 차지할 목표 월드 높이(Y). config.letterTargetHeight로 덮어쓸 수 있음 */
+const STAGE3_LETTER_TARGET_HEIGHT = 1.8;
+// Z 방향 입체감은 살짝만 주고 거의 평면에 가깝게
+const STAGE3_LETTER_Z_SCALE = 1.0;
+const STAGE3_LETTER_COLOR = 0x111111;
+// Stage3 전용: 글자 겹침 줄이기 위해 스트로크 확장 값을 과하지 않게 유지
+const STAGE3_STROKE_OUTLINE = 1.6;
+const STAGE3_STROKE_FILL = 1.3;
+// OUTLINE/FILL 레이어 간 Z 오프셋도 최소화해서 볼륨감 과한 느낌을 줄임
+const STAGE3_OUTLINE_Z_OFFSET = 0.004;
+const STAGE3_FILL_Z_OFFSET = 0.008;
 /** 착지면(landingY) 위로 띄우는 높이 — 글자 밑면·지형 오차를 줄이려면 landingY 기준과 함께 키움 */
 const STAGE3_SPAWN_HEIGHT = 8;
 // 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
@@ -1260,6 +1264,21 @@ export function Stage3() {
     return { id: latest.id, url: urlData?.publicUrl ?? "" };
   }
 
+  function centerGroupGeometries(meshes) {
+    const box = new THREE.Box3();
+    const tempBox = new THREE.Box3();
+    for (const mesh of meshes) {
+      mesh.geometry.computeBoundingBox();
+      tempBox.copy(mesh.geometry.boundingBox);
+      box.union(tempBox);
+    }
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    for (const mesh of meshes) {
+      mesh.geometry.translate(-center.x, -center.y, -center.z);
+    }
+  }
+
   function setReadableRotationTowardCamera(group, camera, _groundY) {
     const dir = new THREE.Vector3(
       camera.position.x - group.position.x,
@@ -1282,7 +1301,10 @@ export function Stage3() {
     });
     toRemove.forEach((obj) => {
       scene.remove(obj);
-      disposeHandwritingSvgPlaneGroup(obj);
+      obj.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
     });
     letterState = null;
   }
@@ -1323,32 +1345,92 @@ export function Stage3() {
         _nextDebugId = null;
 
         try {
-          const baseH =
+          let shapes = await loadSVGShapes(currentSvgUrl);
+          if (!Array.isArray(shapes) || shapes.length === 0) return;
+
+          const outlineShapes = expandShapesStroke(
+            shapes,
+            STAGE3_STROKE_OUTLINE,
+          );
+          const fillShapes = expandShapesStroke(shapes, STAGE3_STROKE_FILL);
+
+          const group = new THREE.Group();
+          group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
+
+          // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
+          const extrudeSettings = {
+            depth: 0.18,
+            bevelEnabled: true,
+            bevelThickness: 0.035,
+            bevelSize: 0.025,
+            bevelSegments: 8,
+          };
+
+          const meshes = [];
+          const sharedMaterialOptions = {
+            color: STAGE3_LETTER_COLOR,
+            metalness: 0.1,
+            roughness: 0.8,
+          };
+
+          outlineShapes.forEach((shape, index) => {
+            const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            const material = new THREE.MeshStandardMaterial(
+              sharedMaterialOptions,
+            );
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            group.add(mesh);
+            meshes.push(mesh);
+
+            const fillShape = fillShapes[index];
+            if (!fillShape) return;
+
+            const fillGeometry = new THREE.ExtrudeGeometry(
+              fillShape,
+              extrudeSettings,
+            );
+            const fillMaterial = new THREE.MeshStandardMaterial(
+              sharedMaterialOptions,
+            );
+            const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+            fillMesh.castShadow = true;
+            fillMesh.receiveShadow = true;
+            group.add(fillMesh);
+            meshes.push(fillMesh);
+          });
+
+          centerGroupGeometries(meshes);
+          meshes.forEach((mesh) => {
+            if (!mesh.geometry || !mesh.geometry.boundingBox) {
+              mesh.geometry?.computeBoundingBox();
+            }
+          });
+
+          // SVG 원본 좌표계 크기에 의존하지 않도록, 그룹 높이(Y)를 목표치로 정규화
+          group.updateMatrixWorld(true);
+          const normBox = new THREE.Box3().setFromObject(group);
+          const normSize = normBox.getSize(new THREE.Vector3());
+          const targetH =
             config.letterTargetHeight ?? STAGE3_LETTER_TARGET_HEIGHT;
-          const randomFactor =
-            STAGE3_LETTER_HEIGHT_RANDOM_MIN +
-            Math.random() *
-              (STAGE3_LETTER_HEIGHT_RANDOM_MAX -
-                STAGE3_LETTER_HEIGHT_RANDOM_MIN);
-          const targetH = baseH * randomFactor;
+          const norm = normSize.y > 1e-4 ? targetH / normSize.y : 1;
+          group.scale.set(norm, norm, norm * STAGE3_LETTER_Z_SCALE);
+          group.updateMatrixWorld(true);
 
-          const built =
-            (await createHandwritingSvgVolumeGroup(currentSvgUrl, {
-              targetWorldHeight: targetH,
-            })) ??
-            (await createHandwritingSvgPlaneGroup(currentSvgUrl, {
-              targetWorldHeight: targetH,
-            }));
-          if (!built) return;
-
-          const { group } = built;
-          group.userData.isStage3Letter = true;
+          // outline: 먼저 push 된 메쉬, fill: 그 다음 메쉬
+          // meshes 배열에서 짝수 index를 OUTLINE, 홀수 index를 FILL로 간주
+          meshes.forEach((mesh, idx) => {
+            mesh.position.z +=
+              idx % 2 === 0 ? -STAGE3_OUTLINE_Z_OFFSET : STAGE3_FILL_Z_OFFSET;
+          });
 
           group.updateMatrixWorld(true);
           const box = new THREE.Box3().setFromObject(group);
           const letterBottomOffset = Math.max(0, -box.min.y);
           const landingY = groundY + letterBottomOffset;
 
+          // 그룹 origin은 landingY에 맞춰 두므로, 시작 높이도 landingY 기준(0키 재낙하와 동일). groundY만 쓰면 밑면이 지면 아래로 내려갈 수 있음.
           const startY = landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
           const spawnX = config.letterSpawnXZ?.x ?? 0;
           const spawnZ = config.letterSpawnXZ?.z ?? 0;
@@ -1356,7 +1438,7 @@ export function Stage3() {
           group.rotation.set(0, 0, 0);
           scene.add(group);
 
-          const speedFactor = 0.6 + Math.random() * 0.4;
+          const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0
           const gravity = STAGE3_GRAVITY * speedFactor;
           const initialVy =
             (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
@@ -2036,7 +2118,10 @@ export function Stage3() {
 
     if (remaining.length === 0 || hitCount >= HITS_TO_DESTROY) {
       sceneRef.remove(group);
-      disposeHandwritingSvgPlaneGroup(group);
+      group.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
       letterState = null;
       return;
     }
@@ -2044,12 +2129,7 @@ export function Stage3() {
     const letterMaterial = group.children.find(
       (c) => c.isMesh && c.material,
     )?.material;
-    /** Slice merge is single BufferGeometry — use cap (textured) material only if array. */
-    const remMat = Array.isArray(letterMaterial)
-      ? letterMaterial[0].clone()
-      : letterMaterial
-        ? letterMaterial.clone()
-        : mat.clone();
+    const remMat = letterMaterial ? letterMaterial.clone() : mat.clone();
     if (!remMat.transparent) {
       remMat.transparent = true;
       remMat.opacity = 1;
@@ -2084,7 +2164,8 @@ export function Stage3() {
     while (group.children.length > 0) {
       const old = group.children[0];
       group.remove(old);
-      disposeHandwritingSvgPlaneGroup(old);
+      if (old.geometry) old.geometry.dispose();
+      if (old.material) old.material.dispose();
     }
     group.add(remainingMesh);
     group.position.copy(remainingCenter);
