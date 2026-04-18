@@ -19,7 +19,7 @@ export function warmStage3GltfTemplateUrls() {
   urls.push(resolvePublicAssetUrl(charIdlePath));
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
-    "/models/common/gum_walk_final.glb";
+    "/models/common/gum_walk_dogle.glb";
   urls.push(resolvePublicAssetUrl(gumPath));
   for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
     urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
