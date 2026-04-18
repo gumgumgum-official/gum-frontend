@@ -13,7 +13,7 @@ export const STAGE3_CONFIG = {
    */
   letterSpawnXZ: { x: 8.56, z: -33.72 },
   /** SVG 원본 크기와 무관하게 낙하 글자 그룹이 차지할 목표 월드 높이(Y) */
-  letterTargetHeight: 5.4,
+  letterTargetHeight: 2.7,
   camera: {
     fov: 42.0,
     near: 0.1,
