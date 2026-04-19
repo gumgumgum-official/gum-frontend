@@ -11,6 +11,7 @@ import { Stage3 } from "../stages/Stage3.js";
 import { Stage6 } from "../stages/Stage6.js";
 import { APP_CONFIG } from "../config/appConfig.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
 import {
   disposeStage6LoadingTransition,
@@ -59,11 +60,7 @@ export function initThreeApp(canvasElement, options = {}) {
   }
 
   const perfMode = APP_CONFIG?.renderer?.performanceMode ?? false;
-  const userAgent =
-    typeof window !== "undefined" && window.navigator
-      ? window.navigator.userAgent
-      : "";
-  const isElectronLike = /Electron|Cursor/i.test(userAgent);
+  const isElectronLike = isElectronLikeUserAgent();
   const antialias = perfMode
     ? false
     : (APP_CONFIG?.renderer?.antialias ?? true);
@@ -222,6 +219,7 @@ export function initThreeApp(canvasElement, options = {}) {
 
   // Animation Loop
   const clock = new THREE.Clock();
+  const drawingSizeScratch = new THREE.Vector2();
   let animationId = null;
 
   /** Stage3 성능 프로파일: localStorage.setItem('STAGE3_PROFILE','1') 후 새로고침 */
@@ -236,8 +234,8 @@ export function initThreeApp(canvasElement, options = {}) {
     try {
       // DevTools 열림/닫힘, 패널 리사이즈 등으로 캔버스 실제 크기가 바뀌는 경우를 매 프레임 보정
       const { w, h } = getViewportSize();
-      const drawingSize = renderer.getSize(new THREE.Vector2());
-      if (drawingSize.x !== w || drawingSize.y !== h) {
+      renderer.getSize(drawingSizeScratch);
+      if (drawingSizeScratch.x !== w || drawingSizeScratch.y !== h) {
         applyRendererSize();
       }
 

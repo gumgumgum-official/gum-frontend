@@ -163,62 +163,6 @@ body {
   border-top-color: #ffffff;
 }
 
-/* Stage6 공항 안내 자막 */
-.airport-subtitle-container {
-  position: fixed;
-  left: 50%;
-  bottom: 60px;
-  transform: translateX(-50%);
-  z-index: 100;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.airport-subtitle-box {
-  background: rgba(255, 255, 255, 0.12) !important;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  padding: 10px 28px;
-  border-radius: 6px;
-  max-width: 700px;
-  text-align: center;
-  font-family: "Noto Sans KR", sans-serif;
-  opacity: 0;
-  transform: translateY(8px);
-  transition:
-    opacity 0.6s ease,
-    transform 0.6s ease;
-}
-
-.airport-subtitle-box.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.airport-subtitle-box.fade-out {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
-.airport-subtitle-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.45) !important;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  margin-bottom: 2px;
-}
-
-.airport-subtitle-text {
-  color: rgba(255, 255, 255, 0.92) !important;
-  font-size: 15px;
-  font-weight: 300;
-  line-height: 1.6;
-  letter-spacing: 0.3px;
-}
-
 .airport-chime-indicator {
   position: fixed;
   top: 34px;
@@ -735,36 +679,6 @@ body {
 .bp-btn-save:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
-}
-
-.bp-btn-close {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.bp-btn-close:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.save-toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(30, 30, 30, 0.85);
-  color: white;
-  padding: 10px 22px;
-  border-radius: 24px;
-  font-size: 13px;
-  z-index: 2060;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
-.save-toast.visible {
-  opacity: 1;
 }
 
 .name-modal {

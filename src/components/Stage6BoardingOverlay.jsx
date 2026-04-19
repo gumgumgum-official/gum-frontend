@@ -4,19 +4,21 @@ import {
   startStage6LoadingTransition,
 } from "../utils/stages/stage6/stage6LoadingTransition.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import {
+  STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_FINISH_EVENT,
+  STAGE6_INTERACTION_LOCK_EVENT,
+  STAGE6_INTERACTION_UNLOCK_EVENT,
+  STAGE6_NAME_MODAL_HIDE_EVENT,
+  STAGE6_NAME_MODAL_SHOW_EVENT,
+  STAGE6_SUBTITLE_HIDE_EVENT,
+  STAGE6_SUBTITLE_SEQUENCE_EVENT,
+  STAGE6_SUBTITLE_SHOW_EVENT,
+} from "../events/stage6Events.js";
 
 const AIRPORT_SUBTITLE_SHOW_EVENT = "gum:airportAnnouncementSubtitle:show";
 const AIRPORT_SUBTITLE_UPDATE_EVENT = "gum:airportAnnouncementSubtitle:update";
 const AIRPORT_SUBTITLE_HIDE_EVENT = "gum:airportAnnouncementSubtitle:hide";
-const STAGE6_SUBTITLE_SHOW_EVENT = "gum:stage6-subtitle:show";
-const STAGE6_SUBTITLE_HIDE_EVENT = "gum:stage6-subtitle:hide";
-const STAGE6_SUBTITLE_SEQUENCE_EVENT = "gum:stage6-subtitle:sequence";
-const STAGE6_NAME_MODAL_SHOW_EVENT = "gum:stage6-name-modal:show";
-const STAGE6_NAME_MODAL_HIDE_EVENT = "gum:stage6-name-modal:hide";
-const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
-const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
-const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
-const STAGE6_INTERACTION_UNLOCK_EVENT = "gum:stage6-interaction-unlock";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
 /** '탑승권 발급받기' 클릭 시 재생 (랜덤 1종) */
@@ -57,6 +59,8 @@ export function Stage6BoardingOverlay() {
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const nameInputRef = useRef(null);
   const timersRef = useRef([]);
+  /** subtitle effect의 `schedule` — 언마운트/reset 시 timersRef와 함께 정리 */
+  const scheduleRef = useRef(null);
   const sequenceTokenRef = useRef(0);
   const latestPassengerNameRef = useRef("");
   const showSubtitleRef = useRef(false);
@@ -97,6 +101,8 @@ export function Stage6BoardingOverlay() {
       timersRef.current.push(timerId);
       return timerId;
     };
+
+    scheduleRef.current = schedule;
 
     const delay = (ms, token) =>
       new Promise((resolve) => {
@@ -238,6 +244,7 @@ export function Stage6BoardingOverlay() {
 
     return () => {
       clearTimers();
+      scheduleRef.current = null;
       window.removeEventListener(
         AIRPORT_SUBTITLE_SHOW_EVENT,
         onAirportSubtitleShow,
@@ -307,7 +314,7 @@ export function Stage6BoardingOverlay() {
       }),
     );
 
-    window.setTimeout(() => {
+    scheduleRef.current?.(() => {
       setIsOverlayOpen(true);
       window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
     }, 2500);

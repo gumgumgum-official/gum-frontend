@@ -59,6 +59,7 @@ import {
   playRandomPortalTransitionSound,
   disposePortalTransitionSound,
 } from "../utils/common/playPortalTransitionSound.js";
+import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../events/stage6Events.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -80,7 +81,6 @@ const STAGE3_SPAWN_HEIGHT = 8;
 const STAGE3_GRAVITY = -35;
 const STAGE3_INITIAL_VY = -12;
 const LETTER_BOUNCE_RESTITUTION = 0.4;
-const _HITS_TO_DESTROY = 4;
 /** 한 번 타격 시 잘려 나가는 비율 (1/4 → 큰 조각이 깔끔하게 떨어짐) */
 const FRACTION_PER_HIT = 1 / 4;
 const HIT_RANGE = 6; // ilbuni로부터 이 거리 이내만 타격 가능
@@ -115,7 +115,6 @@ const STAGE3_ENVIRONMENT_INTENSITY_DELTA = 0.12;
 /** REST에서 busy를 한 번도 못 받았을 때만 Supabase fallback (ms) */
 const STAGE3_MONITOR_FALLBACK_TIMEOUT_MS = 5000;
 
-const STAGE6_SUBTITLE_SEQUENCE_EVENT = "gum:stage6-subtitle:sequence";
 /** Stage6BoardingOverlay `runSubtitleSequence`와 동일: hold + fade(600) + gap(200) × 구간 */
 const STAGE3_ENTRY_SUBTITLE_TOTAL_MS = 2500 + 600 + 200 + 2000 + 600;
 
@@ -2002,33 +2001,6 @@ export function Stage3() {
       }
     });
     return triangles;
-  }
-
-  /** 자음/모음(shape) 단위로 분할 — 한 번에 한 shape씩 떨어져 나감 (ㅇ, ㅡ, ㅏ 등) */
-  function _partitionTrianglesByShape(triangles) {
-    const byShape = new Map();
-    const _c = new THREE.Vector3();
-    for (const tri of triangles) {
-      const idx = tri.meshIndex ?? 0;
-      if (!byShape.has(idx)) byShape.set(idx, []);
-      byShape.get(idx).push(tri);
-    }
-    const shapeCenters = [];
-    for (const [, list] of byShape) {
-      _c.set(0, 0, 0);
-      for (const t of list) _c.add(t.p0).add(t.p1).add(t.p2);
-      _c.multiplyScalar(1 / (list.length * 3));
-      shapeCenters.push({ list, centroidX: _c.x });
-    }
-    shapeCenters.sort((a, b) => a.centroidX - b.centroidX);
-    const fromLeft = Math.random() < 0.5;
-    const takeIdx = fromLeft ? 0 : shapeCenters.length - 1;
-    const toFly = shapeCenters[takeIdx].list;
-    const remaining = shapeCenters
-      .filter((_, i) => i !== takeIdx)
-      .flatMap((s) => s.list);
-    if (toFly.length === 0) return { remaining: triangles, fragments: [] };
-    return { remaining, fragments: [toFly] };
   }
 
   /** 절단면 위 정점: x를 cutX로 고정, 노멀은 평면 법선(단무지 썬 것처럼 깔끔한 단면) */

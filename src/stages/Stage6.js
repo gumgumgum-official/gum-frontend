@@ -14,21 +14,24 @@ import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC,
 } from "../config/stages/stage6AirportAnnouncement.js";
+import {
+  STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_FINISH_EVENT,
+  STAGE6_INT_CLICK_EVENT,
+  STAGE6_INTERACTION_LOCK_EVENT,
+  STAGE6_INTERACTION_UNLOCK_EVENT,
+  STAGE6_NAME_MODAL_SHOW_EVENT,
+  STAGE6_POSTER_MODAL_HIDE_EVENT,
+  STAGE6_POSTER_MODAL_SHOW_EVENT,
+  STAGE6_SUBTITLE_SEQUENCE_EVENT,
+} from "../events/stage6Events.js";
+import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 
 const AIRPORT_SUBTITLE_SHOW_EVENT = "gum:airportAnnouncementSubtitle:show";
 const AIRPORT_SUBTITLE_UPDATE_EVENT = "gum:airportAnnouncementSubtitle:update";
 const AIRPORT_SUBTITLE_HIDE_EVENT = "gum:airportAnnouncementSubtitle:hide";
 const AIRPORT_CHIME_SHOW_EVENT = "gum:airportAnnouncementChime:show";
 const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";
-const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
-const STAGE6_INT_CLICK_EVENT = "gum:stage6-int-click";
-const STAGE6_POSTER_MODAL_SHOW_EVENT = "gum:stage6PosterModal:show";
-const STAGE6_POSTER_MODAL_HIDE_EVENT = "gum:stage6PosterModal:hide";
-const STAGE6_SUBTITLE_SEQUENCE_EVENT = "gum:stage6-subtitle:sequence";
-const STAGE6_NAME_MODAL_SHOW_EVENT = "gum:stage6-name-modal:show";
-const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
-const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
-const STAGE6_INTERACTION_UNLOCK_EVENT = "gum:stage6-interaction-unlock";
 const INT_PREFIX = "INT_";
 const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
 const ATM_OBJECT_NAME = "OBJ_ATM";
@@ -50,11 +53,7 @@ export function Stage6() {
     : [];
   const glbLoader = getGLBLoader();
   const fbxLoader = new FBXLoader();
-  const userAgent =
-    typeof window !== "undefined" && window.navigator
-      ? window.navigator.userAgent
-      : "";
-  const isElectronLike = /Electron|Cursor/i.test(userAgent);
+  const isElectronLike = isElectronLikeUserAgent();
   const stage6ModelUrl = resolvePublicAssetUrl(config.model.path);
   // Stage6 진입 직전에 디코더/파서를 워밍업해서 첫 표시 지연을 줄인다.
   void loadGltfTemplateCached(stage6ModelUrl).catch(() => {});
@@ -68,7 +67,6 @@ export function Stage6() {
   let onPointerMove = null;
   let onInteractionLock = null;
   let onInteractionUnlock = null;
-  let interactedCount = 0;
   const interactedTargets = new Set();
   let isAtmActivated = false;
   /** @type {THREE.Object3D | null} */
@@ -434,8 +432,7 @@ export function Stage6() {
     const interactionKey = hit.intName || hit.target;
     if (!interactionKey || interactedTargets.has(interactionKey)) return;
     interactedTargets.add(interactionKey);
-    interactedCount = interactedTargets.size;
-    if (interactedCount >= ATM_INTERACTION_REQUIRED_COUNT) {
+    if (interactedTargets.size >= ATM_INTERACTION_REQUIRED_COUNT) {
       activateAtmKiosk();
     }
   }
@@ -587,7 +584,6 @@ export function Stage6() {
       };
       renderer.toneMappingExposure += exposureDelta;
 
-      interactedCount = 0;
       interactedTargets.clear();
       isAtmActivated = false;
       atmEmissiveTarget = 0;
@@ -825,7 +821,6 @@ export function Stage6() {
       onPointerMove = null;
       onInteractionLock = null;
       onInteractionUnlock = null;
-      interactedCount = 0;
       interactedTargets.clear();
       isAtmActivated = false;
       atmRootRef = null;

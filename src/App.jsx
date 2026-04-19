@@ -9,6 +9,10 @@ import { NoticeModalBoard } from "./components/NoticeModalBoard.jsx";
 import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
 import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
 import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
+import {
+  STAGE6_POSTER_MODAL_HIDE_EVENT,
+  STAGE6_POSTER_MODAL_SHOW_EVENT,
+} from "./events/stage6Events.js";
 
 export function App() {
   const [showNoticeModal, setShowNoticeModal] = useState(false);
@@ -39,15 +43,15 @@ export function App() {
       setShowStage6PosterModal(true);
     };
     const hideStage6Poster = () => setShowStage6PosterModal(false);
-    window.addEventListener("gum:stage6PosterModal:show", showStage6Poster);
-    window.addEventListener("gum:stage6PosterModal:hide", hideStage6Poster);
+    window.addEventListener(STAGE6_POSTER_MODAL_SHOW_EVENT, showStage6Poster);
+    window.addEventListener(STAGE6_POSTER_MODAL_HIDE_EVENT, hideStage6Poster);
     return () => {
       window.removeEventListener(
-        "gum:stage6PosterModal:show",
+        STAGE6_POSTER_MODAL_SHOW_EVENT,
         showStage6Poster,
       );
       window.removeEventListener(
-        "gum:stage6PosterModal:hide",
+        STAGE6_POSTER_MODAL_HIDE_EVENT,
         hideStage6Poster,
       );
     };
