@@ -1,6 +1,6 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, bench?: import("../../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, boardPosterImage?: string }} */
+/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, bench?: import("../../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, boardPosterImage?: string, airplane?: { path: string } }} */
 export const STAGE6_CONFIG = {
   camera: {
     fov: 60,
@@ -18,6 +18,10 @@ export const STAGE6_CONFIG = {
     envMapIntensity: 1,
     castShadow: true,
     receiveShadow: true,
+  },
+  /** 로딩 오버레이 전용 비행기 GLB (탑승하기 트랜지션) */
+  airplane: {
+    path: "/models/stage6/airplane_compression.glb",
   },
   boardPosterImage: "/assets/poster/stamp_poster.png",
 };

@@ -10,6 +10,7 @@ import {
   getMonitorDeviceId,
   postMonitorComplete,
 } from "../lib/monitorCurrentApi.js";
+import { resetClientForNextKioskVisitor } from "../utils/common/resetClientForNextKioskVisitor.js";
 
 export function StartPage() {
   const navigate = useNavigate();
@@ -120,12 +121,15 @@ export function StartPage() {
         console.warn("[StartPage] monitor complete 요청 실패:", e);
       })
       .finally(() => {
-        setToastMessage(null);
-        params.delete("complete");
-        const nextQuery = params.toString();
-        navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
-          replace: true,
-        });
+        void (async () => {
+          await resetClientForNextKioskVisitor();
+          setToastMessage(null);
+          params.delete("complete");
+          const nextQuery = params.toString();
+          navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
+            replace: true,
+          });
+        })();
       });
   }, [location.search, navigate]);
 

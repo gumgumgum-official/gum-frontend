@@ -8,6 +8,11 @@ import { getGLBLoader } from "./assetLoaders.js";
 /** @type {Map<string, Promise<import("three/examples/jsm/loaders/GLTFLoader").GLTF>>} */
 const _gltfByAbsoluteUrl = new Map();
 
+/** 다음 세션용으로 파싱된 GLTF 캐시를 비운다(동일 탭에서 재진입 시 네트워크에서 다시 로드). */
+export function clearGltfTemplateCache() {
+  _gltfByAbsoluteUrl.clear();
+}
+
 /**
  * public 상대 경로 → 브라우저 요청 URL (VITE_BASE_URL / 서브패스 대비)
  * @param {string} path - 예: `/models/stage3/island.glb`

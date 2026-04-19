@@ -907,3 +907,56 @@ body {
   line-height: 1;
   cursor: pointer;
 }
+
+/* Stage6 탑승 후 로딩 트랜지션 */
+#loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  display: none;
+}
+
+#loading-bg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #7ec8f5 0%, #b8e3ff 42%, #dff2ff 100%);
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+
+#airplane-canvas {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  pointer-events: none;
+}
+
+#loading-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #143d5c;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 2rem;
+  text-align: center;
+  letter-spacing: 0.1em;
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+
+#loading-text span {
+  font-size: 1rem;
+  opacity: 0.72;
+  color: #2a5570;
+  font-family: "Barlow Condensed", sans-serif;
+  letter-spacing: 0.2em;
+}

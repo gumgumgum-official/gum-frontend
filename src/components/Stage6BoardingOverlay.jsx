@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  cancelStage6LoadingTransition,
+  startStage6LoadingTransition,
+} from "../utils/stages/stage6/stage6LoadingTransition.js";
+import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 
 const AIRPORT_SUBTITLE_SHOW_EVENT = "gum:airportAnnouncementSubtitle:show";
 const AIRPORT_SUBTITLE_UPDATE_EVENT = "gum:airportAnnouncementSubtitle:update";
@@ -14,6 +19,33 @@ const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
 const STAGE6_INTERACTION_UNLOCK_EVENT = "gum:stage6-interaction-unlock";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
+/** '탑승권 발급받기' 클릭 시 재생 (랜덤 1종) */
+const TICKET_ISSUE_SOUND_PATHS = [
+  "/static/sounds/airport/ticket_sound1.mp3",
+  "/static/sounds/airport/ticket_sound2.mp3",
+];
+const TICKET_ISSUE_SOUND_VOLUME = 0.55;
+
+function playRandomTicketIssueSound() {
+  if (TICKET_ISSUE_SOUND_PATHS.length === 0) return;
+  const path =
+    TICKET_ISSUE_SOUND_PATHS[
+      Math.floor(Math.random() * TICKET_ISSUE_SOUND_PATHS.length)
+    ];
+  const audio = new window.Audio();
+  audio.preload = "auto";
+  audio.volume = TICKET_ISSUE_SOUND_VOLUME;
+  audio.src = resolvePublicAssetUrl(path);
+  try {
+    audio.load();
+  } catch {
+    // ignore
+  }
+  const p = audio.play();
+  if (p && typeof p.catch === "function") {
+    p.catch(() => {});
+  }
+}
 
 export function Stage6BoardingOverlay() {
   const [subtitleText, setSubtitleText] = useState("");
@@ -171,6 +203,7 @@ export function Stage6BoardingOverlay() {
     };
 
     const onBoardingReset = () => {
+      cancelStage6LoadingTransition();
       cancelSequence();
       setShowSubtitle(false);
       setFadeOutSubtitle(false);
@@ -259,6 +292,7 @@ export function Stage6BoardingOverlay() {
   }, [isNameModalOpen, isOverlayOpen]);
 
   const submitName = () => {
+    playRandomTicketIssueSound();
     const nextPassengerName = nameInputValue.trim() || DEFAULT_PASSENGER_NAME;
     setPassengerName(nextPassengerName);
     setNameInputValue(nextPassengerName);
@@ -282,11 +316,23 @@ export function Stage6BoardingOverlay() {
   const boardFlight = () => {
     setIsOverlayOpen(false);
     window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
-    window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
+    startStage6LoadingTransition(() => {
+      window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
+    });
   };
 
   return (
     <>
+      <div id="loading-overlay" aria-hidden="true">
+        <div id="loading-bg" />
+        <canvas id="airplane-canvas" />
+        <div id="loading-text">
+          일상으로 복귀하는 중
+          <br />
+          <span>GGUM Airlines GUM 2026</span>
+        </div>
+      </div>
+
       <div className="subtitle-container" aria-live="polite">
         <div
           className={`subtitle-box ${showSubtitle ? "visible" : ""} ${

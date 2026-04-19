@@ -39,7 +39,7 @@ const ATM_EMISSIVE_TWEEN_SPEED = 3.5;
 
 export function Stage6() {
   const objects = [];
-  /** @type {import("../types.js").StageBasicConfig & { model: import("../types.js").Stage2ModelConfig, boardPosterImage?: string, bench?: import("../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean } }} */
+  /** @type {import("../types.js").StageBasicConfig & { model: import("../types.js").Stage2ModelConfig, boardPosterImage?: string, bench?: import("../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, airplane?: { path: string } }} */
   const config = STAGE6_CONFIG;
   const airportSubtitleLeadSec =
     Number(STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC ?? 0.75) || 0;
@@ -87,7 +87,7 @@ export function Stage6() {
   /** @type {HTMLAudioElement | null} */
   let photoboothCurtainAudio = null;
   /** @type {HTMLAudioElement | null} */
-  let atmTicketAudio = null;
+  let atmClickAudio = null;
   let isAirportChimeVisible = false;
 
   /** Stage3 포탈 전환 직후 안내·자막이 바로 이어지도록 진입 무음 구간 최소화 */
@@ -100,12 +100,9 @@ export function Stage6() {
   /** `INT_Photobooth` 클릭 시 (normalize → `photobooth`) */
   const PHOTOBOOTH_CURTAIN_SOUND_PATH = "/static/sounds/airport/curtain.mp3";
   const PHOTOBOOTH_CURTAIN_SOUND_VOLUME = 0.55;
-  /** `OBJ_ATM` 활성화 후 클릭 시 재생 (랜덤 1종) */
-  const ATM_TICKET_SOUND_PATHS = [
-    "/static/sounds/airport/ticket_sound1.mp3",
-    "/static/sounds/airport/ticket_sound2.mp3",
-  ];
-  const ATM_TICKET_SOUND_VOLUME = 0.55;
+  /** `OBJ_ATM` 클릭 시 */
+  const ATM_CLICK_SOUND_PATH = "/static/sounds/click.mp3";
+  const ATM_CLICK_SOUND_VOLUME = 0.5;
   let activeSubtitleCueIndex = -1;
   let isAirportSubtitleVisible = false;
 
@@ -206,6 +203,27 @@ export function Stage6() {
     });
   }
 
+  function playAtmClickSound() {
+    const src = resolvePublicAssetUrl(ATM_CLICK_SOUND_PATH);
+    if (!atmClickAudio) {
+      atmClickAudio = new window.Audio();
+      atmClickAudio.preload = "auto";
+    }
+    atmClickAudio.volume = ATM_CLICK_SOUND_VOLUME;
+    atmClickAudio.pause();
+    atmClickAudio.currentTime = 0;
+    atmClickAudio.src = src;
+    try {
+      atmClickAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = atmClickAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {});
+    }
+  }
+
   function playPhotoboothCurtainSound() {
     const src = resolvePublicAssetUrl(PHOTOBOOTH_CURTAIN_SOUND_PATH);
     if (!photoboothCurtainAudio) {
@@ -222,32 +240,6 @@ export function Stage6() {
       // ignore
     }
     const p = photoboothCurtainAudio.play();
-    if (p && typeof p.catch === "function") {
-      p.catch(() => {});
-    }
-  }
-
-  function playRandomAtmTicketSound() {
-    if (ATM_TICKET_SOUND_PATHS.length === 0) return;
-    const path =
-      ATM_TICKET_SOUND_PATHS[
-        Math.floor(Math.random() * ATM_TICKET_SOUND_PATHS.length)
-      ];
-    const src = resolvePublicAssetUrl(path);
-    if (!atmTicketAudio) {
-      atmTicketAudio = new window.Audio();
-      atmTicketAudio.preload = "auto";
-    }
-    atmTicketAudio.volume = ATM_TICKET_SOUND_VOLUME;
-    atmTicketAudio.pause();
-    atmTicketAudio.currentTime = 0;
-    atmTicketAudio.src = src;
-    try {
-      atmTicketAudio.load();
-    } catch {
-      // ignore
-    }
-    const p = atmTicketAudio.play();
     if (p && typeof p.catch === "function") {
       p.catch(() => {});
     }
@@ -616,6 +608,7 @@ export function Stage6() {
         }
         const isAtmHit = isAtmHitTarget(hit);
         if (isAtmHit) {
+          playAtmClickSound();
           if (!isAtmActivated) {
             dispatchStage6SubtitleSequence([
               {
@@ -624,7 +617,6 @@ export function Stage6() {
               },
             ]);
           } else {
-            playRandomAtmTicketSound();
             window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
           }
         } else {
@@ -787,10 +779,10 @@ export function Stage6() {
         photoboothCurtainAudio.src = "";
         photoboothCurtainAudio = null;
       }
-      if (atmTicketAudio) {
-        atmTicketAudio.pause();
-        atmTicketAudio.src = "";
-        atmTicketAudio = null;
+      if (atmClickAudio) {
+        atmClickAudio.pause();
+        atmClickAudio.src = "";
+        atmClickAudio = null;
       }
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));

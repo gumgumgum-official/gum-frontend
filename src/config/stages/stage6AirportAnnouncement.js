@@ -8,7 +8,7 @@ export const STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES = [
   {
     startSec: 1.7,
     endSec: 7.1,
-    text: "잠시 후, 껌딱지 항공 'GUM 2026'편이\n여러분의 일상을 향해 이륙할 예정입니다.",
+    text: "잠시 후, 껌딱지 항공 GUM 2026편이\n여러분의 일상을 향해 이륙할 예정입니다.",
   },
   {
     startSec: 8.1,

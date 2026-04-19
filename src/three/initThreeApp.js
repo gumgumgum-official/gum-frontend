@@ -12,6 +12,12 @@ import { Stage6 } from "../stages/Stage6.js";
 import { APP_CONFIG } from "../config/appConfig.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import {
+  disposeStage6LoadingTransition,
+  preloadStage6AirplaneModel,
+  resizeStage6LoadingTransition,
+  updateStage6LoadingTransition,
+} from "../utils/stages/stage6/stage6LoadingTransition.js";
 
 /** Stage 1은 별도 프로젝트(태블릿)에서 구현 */
 const STAGE_FACTORIES = {
@@ -189,6 +195,10 @@ export function initThreeApp(canvasElement, options = {}) {
       ? initialStage
       : safeAllowedStages[0];
 
+  if (safeAllowedStages.includes(6)) {
+    preloadStage6AirplaneModel();
+  }
+
   if (safeAllowedStages.includes(3)) {
     warmStage3GltfTemplateUrls();
     void fetch(
@@ -238,6 +248,8 @@ export function initThreeApp(canvasElement, options = {}) {
         renderer.render(scene, camera);
       }
 
+      updateStage6LoadingTransition();
+
       if (profileEnabled() && stageManager.getCurrentStageNumber?.() === 3) {
         const now = window.performance.now();
         if (profileLastTime > 0) profileTimes.push(now - profileLastTime);
@@ -262,6 +274,7 @@ export function initThreeApp(canvasElement, options = {}) {
   function handleResize() {
     try {
       applyRendererSize();
+      resizeStage6LoadingTransition();
     } catch (err) {
       console.error("[initThreeApp] resize 오류:", err);
     }
@@ -338,6 +351,14 @@ export function initThreeApp(canvasElement, options = {}) {
         renderer?.dispose?.();
       } catch (err) {
         console.error("[initThreeApp] renderer dispose 오류:", err);
+      }
+      try {
+        disposeStage6LoadingTransition();
+      } catch (err) {
+        console.error(
+          "[initThreeApp] stage6 loading transition dispose 오류:",
+          err,
+        );
       }
     },
   };
