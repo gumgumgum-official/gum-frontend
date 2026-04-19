@@ -2,7 +2,7 @@
  * Stage2: 배경 GLB + 오브제(GLB) 로드, 디버그 컨트롤로 카메라/오브제 조정
  * - 로드: assetLoaders (GLB)
  * - 입력/디버그: stageDebugControls (Orbit, Transform, Drag, C/G/S)
- * - Handwriting: Supabase Realtime으로 필기 데이터 수신 후 3D로 떨어지는 애니메이션
+ * - Handwriting (제거 예정): Realtime/Storage SVG → handwritingSvgPlane 평면 메시
  * @returns {import("../types.js").StageInstance}
  */
 
@@ -15,7 +15,10 @@ import { STAGE2_GUM_SPEECH_LINES } from "../config/stages/stage2/gumSpeechLines.
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
 import { STAGE2_CONFIG } from "../config/stages/stage2.js";
 import { subscribeHandwritingRealtime } from "../utils/handwriting/handwritingRealtime.js";
-import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
+import {
+  createHandwritingSvgPlaneGroup,
+  disposeHandwritingSvgPlaneGroup,
+} from "../utils/handwritingSvgPlane.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 
@@ -31,7 +34,7 @@ const LEGACY_ISLAND_BOUNDS = {
 };
 const GROUND_Y = 0.7;
 /** 글자끼리 최소 거리(m). 이 값보다 가깝게 스폰되지 않음. */
-const MIN_DISTANCE_BETWEEN = 18;
+const MIN_DISTANCE_BETWEEN = 10;
 // island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
 const ISLAND_BOUNDS_INSET_RATIO = 0.08;
@@ -331,9 +334,11 @@ export function Stage2() {
   let characterMoveBounds = null;
   /** 배경 바운딩 기준 껌 캐릭터 발 Y (island4_1 등 큰 섬에서도 지면 위에 서게 함) */
   let characterWalkGroundY = GROUND_Y;
-  /** beam1.glb 실제 Mesh 목록 — 레이캐스팅 기반 섬 지면 검증용 */
-  let islandRaycastMeshes = [];
-  /** islandRaycastMeshes로 만든 "이 XZ가 섬 지면 위인가" 검증 함수 */
+  /** beam1.glb 섬 지면/오브제 Mesh (울타리 제외) — 다운레이캐스팅용 */
+  let islandGroundMeshes = [];
+  /** beam1.glb 울타리 Mesh — 수평 레이로 "링 내부" 판정용 */
+  let islandFenceMeshes = [];
+  /** 위 두 배열로 만든 "이 XZ가 섬 울타리 안 유효 지점인가" 검증 함수 */
   let islandValidator = null;
 
   function updateIslandBoundsFromRoots(roots) {
@@ -517,13 +522,20 @@ export function Stage2() {
       const finishBackground = (allModels, islandModel) => {
         if (!isStage2Active) return;
 
-        // beam1.glb의 모든 Mesh 수집 (레이캐스팅 기반 섬 지면 검증용)
+        // beam1.glb Mesh 수집 — 울타리(fence/울타리)와 그 외 지면/오브제 분리.
         // applyModel에서 child.raycast = () => {} 가 설정되므로
-        // THREE.Mesh.prototype.raycast.call(mesh, ...) 을 직접 사용해야 함
-        islandRaycastMeshes = [];
+        // THREE.Mesh.prototype.raycast.call(mesh, ...) 을 직접 사용해야 함.
+        islandGroundMeshes = [];
+        islandFenceMeshes = [];
         allModels.forEach((m) =>
           m.traverse((child) => {
-            if (child.isMesh) islandRaycastMeshes.push(child);
+            if (!child.isMesh) return;
+            const nm = (child.name || "").toLowerCase();
+            if (nm.includes("fence") || nm.includes("울타리")) {
+              islandFenceMeshes.push(child);
+            } else {
+              islandGroundMeshes.push(child);
+            }
           }),
         );
         const box = new THREE.Box3();
@@ -618,42 +630,13 @@ export function Stage2() {
               ? cfgY
               : suggestedGroundY;
         }
-        // beam1.glb 메쉬로 섬 지면 검증기 생성 (characterWalkGroundY 확정 후)
+        // beam1.glb 메쉬로 섬 지면 + 울타리 근접 거절 + AABB inset 검증기 생성
         islandValidator = buildIslandValidator(
-          islandRaycastMeshes,
+          islandGroundMeshes,
+          islandFenceMeshes,
           characterWalkGroundY,
+          characterMoveBounds,
         );
-
-        // #region agent log
-        fetch(
-          "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Debug-Session-Id": "dbbf7d",
-            },
-            body: JSON.stringify({
-              sessionId: "dbbf7d",
-              location: "Stage2.js:after-buildValidator",
-              message: "bounds and validator state (before props)",
-              data: {
-                islandBounds,
-                characterMoveBounds,
-                characterWalkGroundY,
-                islandRaycastMeshesCount: islandRaycastMeshes.length,
-                meshNames: islandRaycastMeshes
-                  .slice(0, 20)
-                  .map((m) => m.name || "(unnamed)"),
-                propRootsCount: propRoots.length,
-              },
-              runId: "post-fix",
-              hypothesisId: "H-2a",
-              timestamp: Date.now(),
-            }),
-          },
-        ).catch(() => {});
-        // #endregion
 
         if (config.props?.length) {
           loadPropsFromConfig(
@@ -665,67 +648,6 @@ export function Stage2() {
             () => {
               debugControls.setDraggableObjects(propRoots);
               ensureFinalIslandBounds();
-              // #region agent log
-              (() => {
-                const v = islandValidator;
-                const b = characterMoveBounds ?? islandBounds;
-                const samples = [];
-                if (v && b) {
-                  let accepted = 0;
-                  for (let i = 0; i < 40; i++) {
-                    const x = b.minX + Math.random() * (b.maxX - b.minX);
-                    const z = b.minZ + Math.random() * (b.maxZ - b.minZ);
-                    const rc = new THREE.Raycaster(
-                      new THREE.Vector3(x, characterWalkGroundY + 100, z),
-                      new THREE.Vector3(0, -1, 0),
-                    );
-                    const ints = [];
-                    const meshRaycast = THREE.Mesh.prototype.raycast;
-                    for (const m of islandRaycastMeshes)
-                      meshRaycast.call(m, rc, ints);
-                    ints.sort((a, b) => a.distance - b.distance);
-                    const ok = v(x, z);
-                    if (ok) accepted++;
-                    if (i < 12) {
-                      samples.push({
-                        x: +x.toFixed(2),
-                        z: +z.toFixed(2),
-                        hits: ints.length,
-                        firstY: ints[0]?.point.y ?? null,
-                        firstMesh: ints[0]?.object?.name || "(unnamed)",
-                        accepted: ok,
-                      });
-                    }
-                  }
-                  fetch(
-                    "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
-                    {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        "X-Debug-Session-Id": "dbbf7d",
-                      },
-                      body: JSON.stringify({
-                        sessionId: "dbbf7d",
-                        location: "Stage2.js:after-ensureFinalBounds",
-                        message:
-                          "final bounds + validator 40-sample accept rate",
-                        data: {
-                          islandBounds,
-                          characterMoveBounds,
-                          characterWalkGroundY,
-                          acceptedOutOf40: accepted,
-                          samples,
-                        },
-                        runId: "post-fix",
-                        hypothesisId: "H-2a",
-                        timestamp: Date.now(),
-                      }),
-                    },
-                  ).catch(() => {});
-                }
-              })();
-              // #endregion
               onReady();
             },
           );
@@ -850,16 +772,7 @@ export function Stage2() {
       // 떨어지는 텍스트 정리
       fallingTexts.forEach((fallingText) => {
         scene.remove(fallingText.group);
-        fallingText.group.traverse((child) => {
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach((m) => m.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
+        disposeHandwritingSvgPlaneGroup(fallingText.group);
       });
       fallingTexts.length = 0;
       processedHandwritingKeys.clear();
@@ -895,7 +808,8 @@ export function Stage2() {
       cameraRef = null;
       islandBounds = null;
       characterMoveBounds = null;
-      islandRaycastMeshes = [];
+      islandGroundMeshes = [];
+      islandFenceMeshes = [];
       islandValidator = null;
     },
   };
@@ -921,7 +835,7 @@ function loadCharacters(
   walkGroundY = GROUND_Y,
 ) {
   const characterPath =
-    config.characterModelPath ?? "/models/common/gum_walk_dogle.glb";
+    config.characterModelPath ?? "/models/common/gum_walk_final.glb";
   const characterPositions = config.characters ?? [
     { position: {} },
     { position: {} },
@@ -1126,66 +1040,14 @@ const HANDWRITING_TABLE = "handwriting_files"; // session_id, storage_path, crea
 const STAGGER_MS = 90; // 첫 글자 즉시, 이후 글자는 이 간격으로 순차 스폰
 
 // ------------------------------------------------------------
-// 글씨 스케일 정규화 (입력 크기 무관)
-// - 최대 기준: '남친이랑 맨날 싸움' SVG
-// - 최소: 그 75%  (0.75~1.0 범위 랜덤)
+// 글씨 스케일 정규화 (Stage3 방식)
+// - 입력 SVG 크기와 무관하게 "최종 월드 높이(Y)"를 목표치로 고정
+// - 각 글자마다 randomFactor를 곱해 크기 편차 부여
+// - 최대 크기 ≈ 2.3m (TARGET * RANDOM_MAX), 최소 ≈ 1.15m (약 절반, TARGET * RANDOM_MIN)
 // ------------------------------------------------------------
-const REFERENCE_SVG_URL =
-  "https://cffuybxttyrfjetyqrww.supabase.co/storage/v1/object/public/handwriting/exhibition-2026/2216b9af-0c5f-43dd-b41c-8f87de5046a7_2026-03-17T07:06:57.209Z_84brj4j.svg";
-// 기존 Stage2에서 체감 “최대 크기”로 보이던 값 유지 (reference가 이 크기를 1.0으로 삼음)
-// 5배 기준, 랜덤 0.6~1.4배 적용 → 최종 3~7배
-const BASE_MAX_SCALE = 0.006 * 0.75 * 5; // ≈ 0.0225
-const RANDOM_SCALE_MIN = 0.6;
-const RANDOM_SCALE_MAX = 1.4;
-// 입력 SVG가 극단적으로 작거나 클 때 스케일 폭주 방지용 클램프
-const NORMALIZED_SCALE_MIN = BASE_MAX_SCALE * 0.3;
-const NORMALIZED_SCALE_MAX = BASE_MAX_SCALE * 2.5;
-
-let referenceLocalHeight = null;
-let referenceHeightPromise = null;
-
-function computeLocalHeightFromShapes(shapes, extrudeSettings) {
-  if (!Array.isArray(shapes) || shapes.length === 0) return null;
-  const box = new THREE.Box3();
-  const temp = new THREE.Box3();
-  let hasAny = false;
-  for (const shape of shapes) {
-    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    geometry.computeBoundingBox();
-    if (geometry.boundingBox) {
-      temp.copy(geometry.boundingBox);
-      box.union(temp);
-      hasAny = true;
-    }
-    geometry.dispose();
-  }
-  if (!hasAny) return null;
-  const h = box.max.y - box.min.y;
-  if (!Number.isFinite(h) || h <= 1e-6) return null;
-  return h;
-}
-
-function ensureReferenceLocalHeight(extrudeSettings) {
-  if (referenceLocalHeight && Number.isFinite(referenceLocalHeight)) return;
-  if (referenceHeightPromise) return;
-  referenceHeightPromise = (async () => {
-    try {
-      let shapes = await loadSVGShapes(REFERENCE_SVG_URL);
-      if (!Array.isArray(shapes) || shapes.length === 0) return;
-      shapes = expandShapesStroke(shapes, 1.3);
-      const h = computeLocalHeightFromShapes(shapes, extrudeSettings);
-      if (h && Number.isFinite(h)) {
-        referenceLocalHeight = h;
-        console.log(
-          `[Stage2] 기준 글씨(reference) 높이 측정 완료: h=${referenceLocalHeight.toFixed(2)}`,
-        );
-      }
-    } catch (e) {
-      // 네트워크/권한/일시 오류 등일 수 있어 조용히 fallback 유지
-      console.warn("[Stage2] 기준 글씨(reference) 로드/측정 실패:", e);
-    }
-  })();
-}
+const LETTER_TARGET_HEIGHT = 2.3;
+const LETTER_HEIGHT_RANDOM_MIN = 0.5;
+const LETTER_HEIGHT_RANDOM_MAX = 1.0;
 
 async function loadInitialHandwritings(
   scene,
@@ -1344,27 +1206,10 @@ async function loadPathsFromTable(sessionId) {
 }
 
 /**
- * 그룹 안 여러 메시의 지오메트리를 한꺼번에 센터링 (합쳐진 중심이 원점이 되도록)
- * - shape마다 따로 센터링하면 전부 (0,0,0)에 겹쳐서 별처럼 보이므로, 전체 중심만 원점으로
- */
-function centerGroupGeometries(meshes) {
-  const box = new THREE.Box3();
-  const tempBox = new THREE.Box3();
-  for (const mesh of meshes) {
-    mesh.geometry.computeBoundingBox();
-    tempBox.copy(mesh.geometry.boundingBox);
-    box.union(tempBox);
-  }
-  const center = new THREE.Vector3();
-  box.getCenter(center);
-  for (const mesh of meshes) {
-    mesh.geometry.translate(-center.x, -center.y, -center.z);
-  }
-}
-
-/**
  * 떨어지는 텍스트 생성 — 위치는 생성 시 한 번만 설정, 이후엔 position.y만 변경
+ * (SVG plane: handwritingSvgPlane.js — 기능 제거 시 해당 모듈·import·호출부 일괄 제거)
  */
+
 async function createFallingText(
   metadata,
   scene,
@@ -1380,61 +1225,24 @@ async function createFallingText(
       : GROUND_Y;
 
   try {
-    let shapes = await loadSVGShapes(metadata.url);
-    if (shapes.length === 0) {
-      console.warn("[Stage2] No shapes found in SVG:", metadata.id);
+    const randomFactor =
+      LETTER_HEIGHT_RANDOM_MIN +
+      Math.random() * (LETTER_HEIGHT_RANDOM_MAX - LETTER_HEIGHT_RANDOM_MIN);
+    const targetH = LETTER_TARGET_HEIGHT * randomFactor;
+
+    const built = await createHandwritingSvgPlaneGroup(metadata.url, {
+      targetWorldHeight: targetH,
+    });
+    if (!built) {
+      console.warn("[Stage2] SVG plane 생성 실패:", metadata.id);
       return;
     }
-    shapes = expandShapesStroke(shapes, 1.3);
 
-    const group = new THREE.Group();
-    // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
-    const extrudeSettings = {
-      depth: 0.05,
-      bevelEnabled: true,
-      bevelThickness: 0.03,
-      bevelSize: 0.02,
-      bevelSegments: 8,
-    };
+    const { group, planeW, planeH } = built;
+    group.updateMatrixWorld(true);
 
-    // reference 기준 높이 측정은 한 번만(비동기) 수행
-    ensureReferenceLocalHeight(extrudeSettings);
-
-    const localHeight = computeLocalHeightFromShapes(shapes, extrudeSettings);
-    const randomFactor =
-      RANDOM_SCALE_MIN + Math.random() * (RANDOM_SCALE_MAX - RANDOM_SCALE_MIN);
-    const normalizedScale =
-      referenceLocalHeight && localHeight
-        ? BASE_MAX_SCALE * (referenceLocalHeight / localHeight) * randomFactor
-        : BASE_MAX_SCALE * randomFactor;
-    const finalScaleRaw = Number.isFinite(normalizedScale)
-      ? normalizedScale
-      : BASE_MAX_SCALE * randomFactor;
-    const finalScale = THREE.MathUtils.clamp(
-      finalScaleRaw,
-      NORMALIZED_SCALE_MIN,
-      NORMALIZED_SCALE_MAX,
-    );
-
-    const meshes = [];
-    shapes.forEach((shape) => {
-      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x2e2e2e,
-        metalness: 0.1,
-        roughness: 0.8,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.scale.set(finalScale, finalScale, 1.45);
-      group.add(mesh);
-      meshes.push(mesh);
-    });
-    centerGroupGeometries(meshes);
-
-    // 글자의 세로 절반(half-height)을 미리 계산해 bottom이 groundY에 정확히 닿도록 한다.
-    // centerGroupGeometries 직후 group은 (0,0,0)에 회전 0이므로 월드 박스 = 스케일 적용된 센터 박스.
+    // 글자의 세로 절반(half-height)을 최종 스케일 적용 후에 계산해
+    // bottom이 groundY에 정확히 닿도록 한다.
     const preBox = new THREE.Box3().setFromObject(group);
     const letterHalfHeight = Math.max(0, (preBox.max.y - preBox.min.y) / 2);
     const landingY = groundY + letterHalfHeight;
@@ -1486,45 +1294,37 @@ async function createFallingText(
     fallingTextsArr.push(fallingText);
 
     // #region agent log
-    {
-      const bb = new THREE.Box3().setFromObject(group);
-      const s = new THREE.Vector3();
-      bb.getSize(s);
-      fetch(
-        "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "dbbf7d",
-          },
-          body: JSON.stringify({
-            sessionId: "dbbf7d",
-            location: "Stage2.js:createFallingText-spawned",
-            message: "letter spawned",
-            data: {
-              id: metadata.id,
-              initial,
-              startX: +startX.toFixed(2),
-              startY: +startY.toFixed(2),
-              startZ: +startZ.toFixed(2),
-              groundY,
-              landingY,
-              letterHalfHeight: +letterHalfHeight.toFixed(3),
-              finalScale: +finalScale.toFixed(4),
-              boxMinY: +bb.min.y.toFixed(3),
-              boxMaxY: +bb.max.y.toFixed(3),
-              sizeY: +s.y.toFixed(3),
-              sizeX: +s.x.toFixed(3),
-              bottomBelowGroundY: +(bb.min.y - groundY).toFixed(3),
-            },
-            runId: "post-fix",
-            hypothesisId: "H-1a",
-            timestamp: Date.now(),
-          }),
+    fetch("http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "dbbf7d",
+      },
+      body: JSON.stringify({
+        sessionId: "dbbf7d",
+        location: "Stage2.js:createFallingText",
+        message: "spawn",
+        hypothesisId: "A,B,D",
+        data: {
+          id: metadata.id,
+          initial,
+          startX,
+          startY,
+          startZ,
+          groundY,
+          landingY,
+          halfH: letterHalfHeight,
+          planeW,
+          planeH,
+          targetH,
+          randomFactor,
+          initialVy,
+          gravity,
+          total: fallingTextsArr.length,
         },
-      ).catch(() => {});
-    }
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
     // #endregion
 
     console.log(
@@ -1546,16 +1346,113 @@ async function createFallingText(
 function updateFallingTexts(delta, camera, fallingTextsArr) {
   if (!fallingTextsArr) return;
 
+  // 탭 비활성화 / rAF 지연으로 delta가 비정상적으로 커지면
+  // 바운스 직후 양(+)의 velocity.y 상태에서 position.y가 수백m 튀어오르는
+  // "승천" 버그 발생. 물리 안정성을 위해 상한을 둔다.
+  const d = Math.min(delta, 0.05);
+
+  // #region agent log
+  if (delta > 0.3) {
+    fetch("http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "dbbf7d",
+      },
+      body: JSON.stringify({
+        sessionId: "dbbf7d",
+        location: "Stage2.js:updateFallingTexts",
+        message: "large delta clamped",
+        hypothesisId: "A",
+        data: { delta, clamped: d, count: fallingTextsArr.length },
+        runId: "post-fix",
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }
+  // #endregion
+
   for (let i = 0; i < fallingTextsArr.length; i++) {
     const ft = fallingTextsArr[i];
     if (ft.landed) continue;
 
     const { group, velocity, gravity, groundY } = ft;
-    const nextY = group.position.y + velocity.y * delta;
+    const nextY = group.position.y + velocity.y * d;
+
+    // #region agent log
+    if (
+      nextY > groundY + 50 ||
+      !Number.isFinite(nextY) ||
+      !Number.isFinite(velocity.y)
+    ) {
+      fetch(
+        "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "dbbf7d",
+          },
+          body: JSON.stringify({
+            sessionId: "dbbf7d",
+            location: "Stage2.js:updateFallingTexts",
+            message: "ASCENSION detected",
+            hypothesisId: "A,B,D",
+            data: {
+              i,
+              posY: group.position.y,
+              nextY,
+              vy: velocity.y,
+              gravity,
+              groundY,
+              bounces: ft.bounces,
+              landed: ft.landed,
+              delta,
+              d,
+            },
+            runId: "post-fix",
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+    }
+    // #endregion
 
     if (nextY <= groundY) {
       // Stage3처럼 첫 충돌 시 한 번만 가볍게 바운스해서 "통통" 무게감 표현
       if ((ft.bounces ?? 0) < LETTER_MAX_BOUNCES && Math.abs(velocity.y) > 2) {
+        // #region agent log
+        fetch(
+          "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "dbbf7d",
+            },
+            body: JSON.stringify({
+              sessionId: "dbbf7d",
+              location: "Stage2.js:updateFallingTexts",
+              message: "bounce",
+              hypothesisId: "A,B",
+              data: {
+                i,
+                posY: group.position.y,
+                nextY,
+                vyBefore: velocity.y,
+                vyUp: -velocity.y * LETTER_BOUNCE_RESTITUTION,
+                gravity,
+                groundY,
+                bouncesBefore: ft.bounces,
+                delta,
+                d,
+              },
+              runId: "post-fix",
+              timestamp: Date.now(),
+            }),
+          },
+        ).catch(() => {});
+        // #endregion
         group.position.y = groundY;
         const vyUp = -velocity.y * LETTER_BOUNCE_RESTITUTION; // 위로 튀는 속도(양수)
         velocity.y = vyUp;
@@ -1578,46 +1475,15 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
       velocity.rotationZ = 0;
       setReadableRotationTowardCamera(group, camera, groundY);
       ft.landed = true;
-      // #region agent log
-      {
-        const bb = new THREE.Box3().setFromObject(group);
-        fetch(
-          "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Debug-Session-Id": "dbbf7d",
-            },
-            body: JSON.stringify({
-              sessionId: "dbbf7d",
-              location: "Stage2.js:letter-landed",
-              message: "letter landed",
-              data: {
-                posY: +group.position.y.toFixed(3),
-                landingY: groundY,
-                rotY: +group.rotation.y.toFixed(3),
-                boxMinY: +bb.min.y.toFixed(3),
-                boxMaxY: +bb.max.y.toFixed(3),
-                bottomAboveTrueGround: +bb.min.y.toFixed(3),
-              },
-              runId: "post-fix",
-              hypothesisId: "H-1a",
-              timestamp: Date.now(),
-            }),
-          },
-        ).catch(() => {});
-      }
-      // #endregion
       continue;
     }
 
-    velocity.y += gravity * delta;
+    velocity.y += gravity * d;
     group.position.y = nextY;
 
-    group.rotation.x += velocity.rotationX * delta;
-    group.rotation.y += velocity.rotationY * delta;
-    group.rotation.z += velocity.rotationZ * delta;
+    group.rotation.x += velocity.rotationX * d;
+    group.rotation.y += velocity.rotationY * d;
+    group.rotation.z += velocity.rotationZ * d;
   }
 }
 
@@ -1680,34 +1546,126 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
 }
 
 /**
- * beam1.glb 메쉬 목록으로 "이 XZ 좌표가 섬 지면 위인가" 검증 함수를 생성한다.
+ * beam1.glb 메쉬로 "이 XZ가 섬 울타리 안 유효 지점인가" 검증 함수를 생성한다.
  * - applyModel에서 child.raycast = () => {} 로 비활성화되어 있으므로
  *   THREE.Mesh.prototype.raycast.call(mesh, ...) 로 직접 호출한다.
- * - 히트 Y가 groundY 이상이면 유효: 섬 지면뿐 아니라 섬 위 오브제(울타리 안 소품 등)
- *   표면도 수용한다. 바다(Y 낮음) / 섬 밖(히트 없음)은 자동으로 걸러진다.
- * @param {THREE.Mesh[]} meshes
+ *
+ * 울타리가 연속된 벽이 아니라 개별 post(fence2, fence17~49) 구조이기 때문에
+ * 수평 레이 기반 point-in-polygon은 post 사이 틈으로 빠져 오판정한다.
+ * 따라서 PiP 대신 다음 3단계로 검증한다:
+ * - (A) 지면 검사: 아래로 레이 쏴서 Y가 groundY 이상이면 섬 지면/오브제 위로 간주.
+ * - (B) AABB inset 검사: outerBounds(=characterMoveBounds)에 방향별 inset을 적용해
+ *   외곽 경계 안에 있는지 확인. 울타리 bbox가 링을 감싸므로 이것만으로도 대부분
+ *   외부 점을 거절 가능. -X/-Z 쪽 inset ↑ (사용자 피드백: 윗쪽/왼쪽 더 보수적).
+ * - (C) 보수적 마진: 8방향 수평 레이로 울타리까지 거리 측정, 방향별 margin 이내에
+ *   울타리가 있으면 거절. 울타리 post에 가깝게 붙는 것을 방지.
+ * @param {THREE.Mesh[]} groundMeshes
+ * @param {THREE.Mesh[]} fenceMeshes
  * @param {number} groundY
+ * @param {{minX:number,maxX:number,minZ:number,maxZ:number}|null} outerBounds
  * @returns {((x: number, z: number) => boolean) | null}
  */
-function buildIslandValidator(meshes, groundY) {
-  if (!meshes || meshes.length === 0) return null;
-  const raycaster = new THREE.Raycaster();
-  const origin = new THREE.Vector3();
-  const dir = new THREE.Vector3(0, -1, 0);
-  // 지면 기준보다 낮으면 바다/외부로 간주 (약간의 여유 허용)
-  const Y_FLOOR = groundY - 1.0;
+function buildIslandValidator(groundMeshes, fenceMeshes, groundY, outerBounds) {
+  if (!groundMeshes || groundMeshes.length === 0) return null;
   const meshRaycast = THREE.Mesh.prototype.raycast;
-  return (x, z) => {
-    origin.set(x, groundY + 100, z);
-    raycaster.set(origin, dir);
-    const intersects = [];
-    for (const mesh of meshes) {
-      meshRaycast.call(mesh, raycaster, intersects);
+  const Y_FLOOR = groundY - 1.0;
+  // 울타리로부터 최소 이격 거리 + AABB inset — 방향별.
+  // 사용자 피드백 1: "윗부분(-Z)이랑 왼쪽(-X) 쪽에 마진 더 필요" → -X/-Z ↑
+  // 사용자 피드백 2: "양옆으로 마진 더 줘야해" → +X/-X 모두 ↑
+  const MARGIN_POS_X = 6.0;
+  const MARGIN_NEG_X = 8.0;
+  const MARGIN_POS_Z = 3.5;
+  const MARGIN_NEG_Z = 6.0;
+  // 8방향 마진 검사 (대각선 포함). 각 방향에 해당 거리 매칭.
+  const S = Math.SQRT1_2;
+  const DIRS8 = [
+    { dir: new THREE.Vector3(1, 0, 0), margin: MARGIN_POS_X },
+    { dir: new THREE.Vector3(-1, 0, 0), margin: MARGIN_NEG_X },
+    { dir: new THREE.Vector3(0, 0, 1), margin: MARGIN_POS_Z },
+    { dir: new THREE.Vector3(0, 0, -1), margin: MARGIN_NEG_Z },
+    {
+      dir: new THREE.Vector3(S, 0, S),
+      margin: Math.max(MARGIN_POS_X, MARGIN_POS_Z),
+    },
+    {
+      dir: new THREE.Vector3(S, 0, -S),
+      margin: Math.max(MARGIN_POS_X, MARGIN_NEG_Z),
+    },
+    {
+      dir: new THREE.Vector3(-S, 0, S),
+      margin: Math.max(MARGIN_NEG_X, MARGIN_POS_Z),
+    },
+    {
+      dir: new THREE.Vector3(-S, 0, -S),
+      margin: Math.max(MARGIN_NEG_X, MARGIN_NEG_Z),
+    },
+  ];
+  const rcDown = new THREE.Raycaster();
+  const rcHoriz = new THREE.Raycaster();
+  const origin = new THREE.Vector3();
+  const down = new THREE.Vector3(0, -1, 0);
+
+  // AABB inset 사전 계산 (outerBounds 있을 때만).
+  let insetMinX = -Infinity,
+    insetMaxX = Infinity,
+    insetMinZ = -Infinity,
+    insetMaxZ = Infinity;
+  if (
+    outerBounds &&
+    Number.isFinite(outerBounds.minX) &&
+    Number.isFinite(outerBounds.maxX) &&
+    Number.isFinite(outerBounds.minZ) &&
+    Number.isFinite(outerBounds.maxZ)
+  ) {
+    insetMinX = outerBounds.minX + MARGIN_NEG_X;
+    insetMaxX = outerBounds.maxX - MARGIN_POS_X;
+    insetMinZ = outerBounds.minZ + MARGIN_NEG_Z;
+    insetMaxZ = outerBounds.maxZ - MARGIN_POS_Z;
+  }
+
+  // 울타리 메쉬의 실제 Y 범위 계산 → 수평 레이 Y는 mid-Y 사용.
+  let fenceMidY = groundY + 1.0;
+  let fenceMinY = Infinity;
+  let fenceMaxY = -Infinity;
+  if (fenceMeshes && fenceMeshes.length > 0) {
+    const bbox = new THREE.Box3();
+    for (const m of fenceMeshes) {
+      bbox.setFromObject(m);
+      if (bbox.min.y < fenceMinY) fenceMinY = bbox.min.y;
+      if (bbox.max.y > fenceMaxY) fenceMaxY = bbox.max.y;
     }
-    if (intersects.length === 0) return false;
-    intersects.sort((a, b) => a.distance - b.distance);
-    // 가장 가까운 히트가 지면 이상이면 유효 (섬 지면 + 섬 위 모든 오브제 포함)
-    return intersects[0].point.y >= Y_FLOOR;
+    if (Number.isFinite(fenceMinY) && Number.isFinite(fenceMaxY)) {
+      fenceMidY = (fenceMinY + fenceMaxY) / 2;
+    }
+  }
+
+  return (x, z) => {
+    // (A) 지면 검사
+    origin.set(x, groundY + 100, z);
+    rcDown.set(origin, down);
+    const dInts = [];
+    for (const m of groundMeshes) meshRaycast.call(m, rcDown, dInts);
+    if (dInts.length === 0) return false;
+    dInts.sort((a, b) => a.distance - b.distance);
+    if (dInts[0].point.y < Y_FLOOR) return false;
+
+    // (B) AABB inset 검사
+    if (x < insetMinX || x > insetMaxX || z < insetMinZ || z > insetMaxZ) {
+      return false;
+    }
+
+    if (!fenceMeshes || fenceMeshes.length === 0) return true;
+
+    // (C) 보수적 마진: 방향별 최단 울타리 거리 >= 해당 방향 margin
+    origin.set(x, fenceMidY, z);
+    for (const entry of DIRS8) {
+      rcHoriz.set(origin, entry.dir);
+      rcHoriz.far = entry.margin;
+      const near = [];
+      for (const m of fenceMeshes) meshRaycast.call(m, rcHoriz, near);
+      if (near.length > 0) return false;
+    }
+    return true;
   };
 }
 
