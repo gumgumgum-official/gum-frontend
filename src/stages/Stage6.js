@@ -84,6 +84,10 @@ export function Stage6() {
   let airplaneCallSignAudio = null;
   /** @type {HTMLAudioElement | null} */
   let airportAnnounceIntroAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let photoboothCurtainAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let atmTicketAudio = null;
   let isAirportChimeVisible = false;
 
   /** Stage3 포탈 전환 직후 안내·자막이 바로 이어지도록 진입 무음 구간 최소화 */
@@ -93,6 +97,15 @@ export function Stage6() {
   const CHIME_INDICATOR_TRIGGER_TIME_SEC = 0.58;
   const AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS = 100;
   const AIRPORT_ANNOUNCE_INTRO_VOLUME = 0.55;
+  /** `INT_Photobooth` 클릭 시 (normalize → `photobooth`) */
+  const PHOTOBOOTH_CURTAIN_SOUND_PATH = "/static/sounds/airport/curtain.mp3";
+  const PHOTOBOOTH_CURTAIN_SOUND_VOLUME = 0.55;
+  /** `OBJ_ATM` 활성화 후 클릭 시 재생 (랜덤 1종) */
+  const ATM_TICKET_SOUND_PATHS = [
+    "/static/sounds/airport/ticket_sound1.mp3",
+    "/static/sounds/airport/ticket_sound2.mp3",
+  ];
+  const ATM_TICKET_SOUND_VOLUME = 0.55;
   let activeSubtitleCueIndex = -1;
   let isAirportSubtitleVisible = false;
 
@@ -191,6 +204,53 @@ export function Stage6() {
     airportAnnounceIntroAudio.play().catch(() => {
       isSceneInteractionLocked = false;
     });
+  }
+
+  function playPhotoboothCurtainSound() {
+    const src = resolvePublicAssetUrl(PHOTOBOOTH_CURTAIN_SOUND_PATH);
+    if (!photoboothCurtainAudio) {
+      photoboothCurtainAudio = new window.Audio();
+      photoboothCurtainAudio.preload = "auto";
+    }
+    photoboothCurtainAudio.volume = PHOTOBOOTH_CURTAIN_SOUND_VOLUME;
+    photoboothCurtainAudio.pause();
+    photoboothCurtainAudio.currentTime = 0;
+    photoboothCurtainAudio.src = src;
+    try {
+      photoboothCurtainAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = photoboothCurtainAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {});
+    }
+  }
+
+  function playRandomAtmTicketSound() {
+    if (ATM_TICKET_SOUND_PATHS.length === 0) return;
+    const path =
+      ATM_TICKET_SOUND_PATHS[
+        Math.floor(Math.random() * ATM_TICKET_SOUND_PATHS.length)
+      ];
+    const src = resolvePublicAssetUrl(path);
+    if (!atmTicketAudio) {
+      atmTicketAudio = new window.Audio();
+      atmTicketAudio.preload = "auto";
+    }
+    atmTicketAudio.volume = ATM_TICKET_SOUND_VOLUME;
+    atmTicketAudio.pause();
+    atmTicketAudio.currentTime = 0;
+    atmTicketAudio.src = src;
+    try {
+      atmTicketAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = atmTicketAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {});
+    }
   }
 
   function playAirplaneCallSignOnce(onStarted) {
@@ -551,6 +611,9 @@ export function Stage6() {
         const hit = getPointerHitTarget(event);
         if (!hit) return;
         console.log(`[Stage6] INT click: ${hit.intName}`);
+        if (hit.target === "photobooth") {
+          playPhotoboothCurtainSound();
+        }
         const isAtmHit = isAtmHitTarget(hit);
         if (isAtmHit) {
           if (!isAtmActivated) {
@@ -561,6 +624,7 @@ export function Stage6() {
               },
             ]);
           } else {
+            playRandomAtmTicketSound();
             window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
           }
         } else {
@@ -718,6 +782,16 @@ export function Stage6() {
     cleanup(scene) {
       isStage6Active = false;
       cancelAirplaneCallSignScheduled();
+      if (photoboothCurtainAudio) {
+        photoboothCurtainAudio.pause();
+        photoboothCurtainAudio.src = "";
+        photoboothCurtainAudio = null;
+      }
+      if (atmTicketAudio) {
+        atmTicketAudio.pause();
+        atmTicketAudio.src = "";
+        atmTicketAudio = null;
+      }
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
