@@ -61,7 +61,7 @@ import {
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
 
-/** Base letter height (Y); scaled by randomFactor like Stage2 (MIN..MAX). */
+/** Base letter height (Y); scaled by randomFactor like Stage2 (MIN..MAX). config.letterTargetHeight로 덮어쓸 수 있음 */
 const STAGE3_LETTER_TARGET_HEIGHT = 0.9;
 const STAGE3_LETTER_HEIGHT_RANDOM_MIN = 0.5;
 const STAGE3_LETTER_HEIGHT_RANDOM_MAX = 1.0;
