@@ -246,7 +246,7 @@ export function initThreeApp(canvasElement, options = {}) {
         renderer.render(scene, camera);
       }
 
-      updateStage6LoadingTransition();
+      updateStage6LoadingTransition(delta);
 
       if (profileEnabled() && stageManager.getCurrentStageNumber?.() === 3) {
         const now = window.performance.now();

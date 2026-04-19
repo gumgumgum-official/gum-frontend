@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>껌딱지 나라 — 로딩 트랜지션</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@300;400;700&family=Noto+Sans+KR:wght@300;400&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#080810; height:100vh; overflow:hidden; font-family:'Barlow Condensed',sans-serif; }
+
+/* ===== 공통 화면 ===== */
+.screen {
+  position:fixed; inset:0;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  transition:opacity 1s ease;
+}
+.screen.hidden { opacity:0; pointer-events:none; }
+
+/* ===== START 화면 ===== */
+#start-screen { background:#080810; z-index:10; }
+
+.star-field { position:absolute; inset:0; overflow:hidden; }
+.star {
+  position:absolute; background:#fff; border-radius:50%;
+  animation:twinkle 3s infinite;
+}
+@keyframes twinkle { 0%,100%{opacity:0.15;} 50%{opacity:1;} }
+
+.streak {
+  position:absolute; width:1px; top:0; bottom:0;
+  background:linear-gradient(180deg,transparent,rgba(140,180,255,0.12),transparent);
+  animation:streakMove 5s linear infinite; opacity:0;
+}
+@keyframes streakMove {
+  0%{opacity:0;transform:translateX(-40px);}
+  15%{opacity:1;} 85%{opacity:1;}
+  100%{opacity:0;transform:translateX(60px);}
+}
+
+.start-title {
+  font-family:'Bebas Neue',sans-serif;
+  font-size:72px; letter-spacing:14px; color:#fff;
+  text-shadow:0 0 60px rgba(180,180,255,0.3);
+  margin-bottom:8px; position:relative; z-index:1;
+}
+.start-sub {
+  font-family:'Noto Sans KR',sans-serif;
+  font-size:13px; font-weight:300;
+  color:rgba(255,255,255,0.35); letter-spacing:4px;
+  margin-bottom:48px; position:relative; z-index:1;
+}
+.start-btn {
+  position:relative; z-index:1;
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.3);
+  color:rgba(255,255,255,0.8);
+  font-family:'Bebas Neue',sans-serif;
+  font-size:18px; letter-spacing:6px;
+  padding:14px 52px; border-radius:3px;
+  cursor:pointer;
+  transition:background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+}
+.start-btn:hover {
+  background:rgba(255,255,255,0.08);
+  border-color:rgba(255,255,255,0.55);
+  color:#fff; transform:translateY(-2px);
+}
+.start-credit {
+  position:absolute; bottom:32px;
+  font-size:10px; letter-spacing:4px;
+  color:rgba(255,255,255,0.15); z-index:1;
+}
+
+/* ===== 공항 씬 ===== */
+#airport-screen {
+  background:linear-gradient(180deg,#87CEEB 0%,#B0E0E6 45%,#d0d0d0 45.5%,#aaa 100%);
+  z-index:9;
+}
+.scene-label {
+  position:absolute; top:32px; left:50%; transform:translateX(-50%);
+  font-size:11px; letter-spacing:5px; color:rgba(30,60,120,0.45); z-index:1;
+}
+.airport-building {
+  position:absolute; bottom:29.5%; left:50%; transform:translateX(-50%);
+  width:55%; height:140px;
+  background:linear-gradient(180deg,#ececec,#d5d5d5);
+  border-radius:6px 6px 0 0; border:1.5px solid #bbb;
+}
+.airport-sign {
+  position:absolute; top:12px; left:50%; transform:translateX(-50%);
+  font-size:12px; font-weight:600; color:#666; letter-spacing:3px; white-space:nowrap;
+}
+.windows { position:absolute; top:44px; left:5%; width:90%; display:flex; gap:8px; justify-content:center; }
+.win { width:32px; height:44px; background:linear-gradient(180deg,#a8d8ea,#7ec8e3); border-radius:2px; border:1.5px solid #999; opacity:0.8; }
+.runway { position:absolute; bottom:0; width:100%; height:29.5%; background:#aaa; }
+.runway-stripe { position:absolute; top:50%; width:100%; height:3px; background:repeating-linear-gradient(90deg,#fff 0,#fff 36px,transparent 36px,transparent 72px); }
+
+.cloud { position:absolute; background:white; border-radius:50px; opacity:0.75; }
+.cloud::before,.cloud::after { content:''; position:absolute; background:white; border-radius:50%; }
+.c1 { width:120px; height:38px; top:55px; left:8%; animation:drift 28s linear infinite; }
+.c1::before { width:50px; height:50px; top:-26px; left:16px; }
+.c1::after  { width:68px; height:54px; top:-30px; left:44px; }
+.c2 { width:88px; height:30px; top:110px; left:60%; animation:drift 32s linear infinite; animation-delay:-12s; }
+.c2::before { width:38px; height:38px; top:-20px; left:12px; }
+.c2::after  { width:52px; height:44px; top:-24px; left:30px; }
+.c3 { width:100px; height:33px; top:36px; left:36%; animation:drift 22s linear infinite; animation-delay:-6s; }
+.c3::before { width:44px; height:44px; top:-22px; left:14px; }
+.c3::after  { width:58px; height:48px; top:-28px; left:38px; }
+@keyframes drift { from{transform:translateX(-250px);} to{transform:translateX(calc(100vw + 250px));} }
+
+.boarding-btn {
+  position:relative; z-index:1;
+  background:rgba(30,60,120,0.85); color:#fff;
+  font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:4px;
+  padding:16px 52px; border:none; border-radius:4px; cursor:pointer;
+  box-shadow:0 8px 32px rgba(0,0,0,0.25);
+  transition:transform 0.15s, box-shadow 0.15s, background 0.2s;
+}
+.boarding-btn:hover { transform:translateY(-2px); box-shadow:0 14px 44px rgba(0,0,0,0.35); background:rgba(30,60,140,0.9); }
+.boarding-btn:active { transform:scale(0.98); }
+
+/* ===== 로딩 화면 ===== */
+#loading-screen { background:#080810; z-index:8; }
+
+#plane-wrap {
+  position:absolute; bottom:-8%; right:-8%;
+  width:240px; height:150px;
+  will-change:transform;
+}
+#plane-wrap.flying {
+  animation:flyDiagonal 2.6s cubic-bezier(0.2,0.05,0.3,1) forwards;
+}
+@keyframes flyDiagonal {
+  0%   { transform:translate(0,0) rotate(-20deg) scale(1); }
+  20%  { transform:translate(-12vw,-15vh) rotate(-23deg) scale(1.04); }
+  60%  { transform:translate(-52vw,-58vh) rotate(-21deg) scale(0.88); }
+  100% { transform:translate(-115vw,-115vh) rotate(-19deg) scale(0.4); }
+}
+.plane-svg { width:100%; height:100%; }
+
+#flame { position:absolute; right:98%; top:61%; transform:translateY(-50%); opacity:0; transition:opacity 0.4s; }
+#flame.on { opacity:1; }
+.fl1 { width:42px; height:13px; background:linear-gradient(90deg,transparent,#ff8800,#ffcc00); border-radius:0 50% 50% 0; animation:fl1a 0.09s infinite alternate; }
+.fl2 { width:26px; height:8px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.6),#ffee88); border-radius:0 50% 50% 0; margin-top:-10px; margin-left:4px; animation:fl2a 0.11s infinite alternate; }
+@keyframes fl1a { 0%{width:42px;} 100%{width:50px;} }
+@keyframes fl2a { 0%{width:26px;} 100%{width:22px;} }
+
+#propeller { transform-origin:50% 50%; }
+#propeller.spinning { animation:propSpin 0.07s linear infinite; }
+@keyframes propSpin { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+
+#loading-text {
+  position:absolute; top:46%; left:50%;
+  transform:translate(-50%,-50%);
+  text-align:center; opacity:0;
+  transition:opacity 1.1s ease 1.4s;
+  z-index:1;
+}
+#loading-screen.text-visible #loading-text { opacity:1; }
+
+.lbl { font-size:10px; letter-spacing:7px; color:rgba(255,255,255,0.25); margin-bottom:14px; }
+.lmain { font-family:'Noto Sans KR',sans-serif; font-size:22px; font-weight:300; color:#fff; letter-spacing:2px; line-height:1.9; }
+.wave-row { display:flex; gap:16px; justify-content:center; margin-top:18px; }
+.wave-char { font-size:24px; animation:waveBob 1.2s ease-in-out infinite; }
+.wave-char:nth-child(1){animation-delay:0s;}
+.wave-char:nth-child(2){animation-delay:0.18s;}
+.wave-char:nth-child(3){animation-delay:0.36s;}
+@keyframes waveBob { 0%,100%{transform:translateY(0) rotate(0deg);} 40%{transform:translateY(-7px) rotate(12deg);} 70%{transform:translateY(-3px) rotate(-7deg);} }
+.lsub { font-family:'Noto Sans KR',sans-serif; font-size:12px; font-weight:300; color:rgba(255,255,255,0.3); letter-spacing:3px; margin-top:20px; }
+
+#prog-wrap {
+  position:absolute; bottom:44px; left:50%; transform:translateX(-50%);
+  width:200px; opacity:0; transition:opacity 1s ease 1.7s; z-index:1;
+}
+#loading-screen.text-visible #prog-wrap { opacity:1; }
+.prog-track { width:100%; height:1px; background:rgba(255,255,255,0.1); overflow:hidden; }
+.prog-fill { height:100%; width:0%; background:linear-gradient(90deg,rgba(180,180,255,0.5),rgba(220,210,255,0.95)); transition:width 0.25s ease; }
+.prog-label { text-align:center; margin-top:8px; font-size:10px; letter-spacing:4px; color:rgba(255,255,255,0.18); }
+
+#countdown {
+  position:absolute; bottom:86px; left:50%; transform:translateX(-50%);
+  font-size:11px; letter-spacing:3px; color:rgba(255,255,255,0.22);
+  opacity:0; transition:opacity 0.6s ease; white-space:nowrap; z-index:1;
+}
+#countdown.visible { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- START 화면 -->
+<div class="screen" id="start-screen">
+  <div class="star-field" id="startStars"></div>
+  <div class="streak" style="left:12%;animation-delay:0s;animation-duration:5.5s;"></div>
+  <div class="streak" style="left:33%;animation-delay:1.4s;animation-duration:4.2s;"></div>
+  <div class="streak" style="left:58%;animation-delay:0.7s;animation-duration:6.1s;"></div>
+  <div class="streak" style="left:80%;animation-delay:2.1s;animation-duration:4.8s;"></div>
+  <div class="start-title">껌딱지 나라</div>
+  <div class="start-sub">GUM STICKER LAND · 2026</div>
+  <button class="start-btn" onclick="goToAirport()">START ✈</button>
+  <div class="start-credit">SOONGSIL UNIV · GLOBAL MEDIA STUDIES · 졸업전시</div>
+</div>
+
+<!-- 공항 씬 -->
+<div class="screen hidden" id="airport-screen">
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
+  <div class="cloud c3"></div>
+  <div class="airport-building">
+    <div class="airport-sign">GGUM WORLD AIRPORT</div>
+    <div class="windows">
+      <div class="win"></div><div class="win"></div><div class="win"></div>
+      <div class="win"></div><div class="win"></div><div class="win"></div>
+      <div class="win"></div><div class="win"></div><div class="win"></div>
+    </div>
+  </div>
+  <div class="runway"><div class="runway-stripe"></div></div>
+  <div class="scene-label">GGUM WORLD AIRPORT · STAGE 6</div>
+  <button class="boarding-btn" onclick="goToLoading()">탑승하기 ✈</button>
+</div>
+
+<!-- 로딩 화면 -->
+<div class="screen hidden" id="loading-screen">
+  <div class="star-field" id="loadStars"></div>
+  <div class="streak" style="left:12%;animation-delay:0s;animation-duration:5.5s;"></div>
+  <div class="streak" style="left:28%;animation-delay:1.4s;animation-duration:4.2s;"></div>
+  <div class="streak" style="left:51%;animation-delay:0.7s;animation-duration:6.1s;"></div>
+  <div class="streak" style="left:73%;animation-delay:2.1s;animation-duration:4.8s;"></div>
+  <div class="streak" style="left:88%;animation-delay:0.3s;animation-duration:5.2s;"></div>
+
+  <div id="plane-wrap">
+    <div id="flame"><div class="fl1"></div><div class="fl2"></div></div>
+    <svg class="plane-svg" viewBox="0 0 240 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="120" cy="78" rx="95" ry="24" fill="#ddeeff"/>
+      <path d="M25 78 Q65 56 120 73 Q175 90 215 78 Q196 93 120 88 Q54 83 25 78Z" fill="#c4d8f0"/>
+      <path d="M215 78 Q232 73 236 78 Q232 83 215 78Z" fill="#eef5fc"/>
+      <ellipse cx="223" cy="76" rx="7" ry="5.5" fill="#7ec8e3" opacity="0.65"/>
+      <path d="M30 75 L18 40 L36 62 L30 75Z" fill="#aac4dc"/>
+      <path d="M30 80 L6 96 L46 86 L30 80Z" fill="#c0d4e8"/>
+      <path d="M30 75 L6 60 L46 68 L30 75Z" fill="#c0d4e8"/>
+      <path d="M108 76 L62 122 L165 90 L108 76Z" fill="#c4d8f0"/>
+      <path d="M108 76 L80 100 L165 88 L108 76Z" fill="#ddeeff" opacity="0.45"/>
+      <path d="M108 76 L62 30 L165 62 L108 76Z" fill="#c4d8f0"/>
+      <ellipse cx="174" cy="73" rx="5.5" ry="4.5" fill="#7ec8e3" opacity="0.55"/>
+      <ellipse cx="161" cy="72" rx="5.5" ry="4.5" fill="#7ec8e3" opacity="0.55"/>
+      <ellipse cx="148" cy="72" rx="5.5" ry="4.5" fill="#7ec8e3" opacity="0.55"/>
+      <ellipse cx="135" cy="72" rx="5.5" ry="4.5" fill="#7ec8e3" opacity="0.5"/>
+      <ellipse cx="122" cy="72" rx="5.5" ry="4.5" fill="#7ec8e3" opacity="0.5"/>
+      <text x="132" y="86" font-family="Barlow Condensed" font-size="8.5" fill="rgba(20,50,110,0.55)" letter-spacing="1.5" text-anchor="middle">GGUM AIRLINES</text>
+      <ellipse cx="132" cy="98" rx="15" ry="7" fill="#a8bcd0"/>
+      <ellipse cx="132" cy="100" rx="12" ry="5" fill="#8aacc4"/>
+      <g id="propeller" style="transform-origin:117px 98px">
+        <circle cx="117" cy="98" r="3.5" fill="#6888a8"/>
+        <rect x="115.5" y="78" width="3" height="20" rx="1.5" fill="#8aacc4"/>
+        <rect x="115.5" y="98" width="3" height="20" rx="1.5" fill="#8aacc4"/>
+        <rect x="97" y="96.5" width="20" height="3" rx="1.5" fill="#8aacc4"/>
+        <rect x="117" y="96.5" width="20" height="3" rx="1.5" fill="#8aacc4"/>
+      </g>
+    </svg>
+  </div>
+
+  <div id="loading-text">
+    <div class="lbl">GGUM AIRLINES · GUM 2026</div>
+    <div class="lmain">껌딱지들이 손을 흔들고 있어요<br>또 놀러 와요!</div>
+    <div class="wave-row">
+      <span class="wave-char">🩷</span>
+      <span class="wave-char">🩷</span>
+      <span class="wave-char">🩷</span>
+    </div>
+    <div class="lsub">일상으로 돌아가는 중...</div>
+  </div>
+
+  <div id="prog-wrap">
+    <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    <div class="prog-label">RETURNING</div>
+  </div>
+
+  <div id="countdown"></div>
+</div>
+
+<script>
+// 별 생성
+function createStars(id, count) {
+  const c = document.getElementById(id);
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const sz = Math.random() * 2.2 + 0.4;
+    s.style.cssText = `width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;animation-delay:${Math.random()*3}s;animation-duration:${2+Math.random()*3}s;opacity:${0.1+Math.random()*0.5};`;
+    c.appendChild(s);
+  }
+}
+createStars('startStars', 140);
+createStars('loadStars', 140);
+
+// START → 공항
+function goToAirport() {
+  const s = document.getElementById('start-screen');
+  const a = document.getElementById('airport-screen');
+  s.classList.add('hidden');
+  setTimeout(() => { a.classList.remove('hidden'); }, 600);
+}
+
+// 공항 → 로딩
+function goToLoading() {
+  const a = document.getElementById('airport-screen');
+  const l = document.getElementById('loading-screen');
+  const planeWrap = document.getElementById('plane-wrap');
+  const prop = document.getElementById('propeller');
+  const flame = document.getElementById('flame');
+  const progFill = document.getElementById('progFill');
+  const countdown = document.getElementById('countdown');
+
+  a.classList.add('hidden');
+
+  setTimeout(() => {
+    l.classList.remove('hidden');
+    prop.classList.add('spinning');
+    flame.classList.add('on');
+
+    setTimeout(() => {
+      planeWrap.classList.add('flying');
+      l.classList.add('text-visible');
+
+      let prog = 0;
+      const iv = setInterval(() => {
+        prog += 1.1;
+        if (prog >= 100) {
+          prog = 100;
+          clearInterval(iv);
+
+          let count = 3;
+          countdown.textContent = `${count}초 후 처음으로 돌아갑니다`;
+          countdown.classList.add('visible');
+
+          const cd = setInterval(() => {
+            count--;
+            if (count <= 0) {
+              clearInterval(cd);
+              returnToStart();
+            } else {
+              countdown.textContent = `${count}초 후 처음으로 돌아갑니다`;
+            }
+          }, 1000);
+        }
+        progFill.style.width = prog + '%';
+      }, 38);
+    }, 500);
+  }, 600);
+}
+
+// 로딩 → START 복귀
+function returnToStart() {
+  const l = document.getElementById('loading-screen');
+  const s = document.getElementById('start-screen');
+  const planeWrap = document.getElementById('plane-wrap');
+  const prop = document.getElementById('propeller');
+  const flame = document.getElementById('flame');
+  const progFill = document.getElementById('progFill');
+  const countdown = document.getElementById('countdown');
+
+  l.classList.add('hidden');
+
+  setTimeout(() => {
+    l.classList.remove('text-visible');
+    planeWrap.classList.remove('flying');
+    prop.classList.remove('spinning');
+    flame.classList.remove('on');
+    progFill.style.width = '0%';
+    countdown.classList.remove('visible');
+    countdown.textContent = '';
+
+    s.classList.remove('hidden');
+  }, 1000);
+}
+</script>
+</body>
+</html>

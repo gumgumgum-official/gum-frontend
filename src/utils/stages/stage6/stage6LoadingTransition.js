@@ -8,6 +8,7 @@ import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
+import { createStage6NightSkyBackground } from "./stage6NightSkyBackground.js";
 
 const START_X = 15;
 const START_Y = -8;
@@ -24,6 +25,9 @@ let airplaneScene = null;
 let airplaneCamera = null;
 /** @type {THREE.Object3D | null} */
 let airplaneModel = null;
+
+/** @type {ReturnType<typeof createStage6NightSkyBackground> | null} */
+let nightSkyBackground = null;
 
 let airplaneProgress = 0;
 let isTransitioning = false;
@@ -62,13 +66,15 @@ function ensureAirplaneScene() {
   });
   airplaneRenderer.setPixelRatio(getPixelRatio());
   airplaneRenderer.outputColorSpace = THREE.SRGBColorSpace;
-  airplaneRenderer.setClearColor(0x000000, 0);
+  airplaneRenderer.setClearColor(0x080810, 1);
 
   const w = window.innerWidth;
   const h = window.innerHeight;
   airplaneRenderer.setSize(w, h, false);
 
   airplaneScene = new THREE.Scene();
+  nightSkyBackground = createStage6NightSkyBackground();
+  airplaneScene.background = nightSkyBackground.texture;
   airplaneCamera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   airplaneCamera.position.set(0, 2, 8);
   airplaneCamera.lookAt(0, 0, 0);
@@ -180,11 +186,14 @@ export function startStage6LoadingTransition(onComplete) {
 
 /**
  * initThreeApp `animate` 루프에서 호출
+ * @param {number} [deltaSec] - 프레임 간격(초). 밤하늘 별/스트릭 애니메이션에 사용
  */
-export function updateStage6LoadingTransition() {
+export function updateStage6LoadingTransition(deltaSec) {
   if (!airplaneRenderer || !airplaneScene || !airplaneCamera) return;
 
   if (isTransitioning) {
+    const d = typeof deltaSec === "number" && deltaSec > 0 ? deltaSec : 1 / 60;
+    nightSkyBackground?.update(d);
     airplaneProgress += PROGRESS_STEP;
     if (airplaneModel) {
       applyPlanePositionFromProgress();
@@ -223,6 +232,12 @@ export function disposeStage6LoadingTransition() {
     airplaneScene.remove(airplaneModel);
   }
   airplaneModel = null;
+
+  if (airplaneScene) {
+    airplaneScene.background = null;
+  }
+  nightSkyBackground?.dispose();
+  nightSkyBackground = null;
 
   try {
     airplaneRenderer?.dispose?.();
