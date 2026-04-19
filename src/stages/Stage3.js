@@ -55,6 +55,10 @@ import {
   playRandomStreetLightClickSound,
   disposeStreetLightSound,
 } from "../utils/common/playStreetLightSound.js";
+import {
+  playRandomPortalTransitionSound,
+  disposePortalTransitionSound,
+} from "../utils/common/playPortalTransitionSound.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -520,6 +524,7 @@ export function Stage3() {
     if (portalTransitionInProgress || !isStage3Active) return;
     ensureWhiteoutOverlay();
     if (!whiteoutOverlayEl) return;
+    playRandomPortalTransitionSound();
     portalTransitionInProgress = true;
     portalTransitionTween?.kill();
     if (portalTransitionHoldTimeoutId != null) {
@@ -2774,6 +2779,7 @@ export function Stage3() {
       gameMachineRef = null;
       disposeNoticePaperAudio();
       disposeStreetLightSound();
+      disposePortalTransitionSound();
       if (gameMachineClickAudio) {
         gameMachineClickAudio.pause();
         gameMachineClickAudio.src = "";

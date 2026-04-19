@@ -171,6 +171,8 @@
  * @property {{x: number, y?: number, z: number}} [normal] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [halfWidth] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [targetStage] - 전환할 Stage 번호
+ * @property {string[]} [portalTransitionSoundPaths] - 포탈 전환 시작 시 재생할 MP3 경로(public 기준)
+ * @property {number} [portalTransitionSoundVolume] - 포탈 전환 효과음 볼륨 (0~1)
  */
 
 /** Stage3 아이스크림 클릭 스폰 설정 (카트 메시는 island GLB 내 INT_icecream) */
