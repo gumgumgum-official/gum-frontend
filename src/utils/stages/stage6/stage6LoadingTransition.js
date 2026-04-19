@@ -144,7 +144,7 @@ export function cancelStage6LoadingTransition() {
 }
 
 /**
- * @param {() => void} [onComplete] — 비행기 이동 종료 후 (예: kiosk-finish)
+ * @param {() => void} [onComplete] - 비행기 이동 종료 후 (예: kiosk-finish)
  */
 export function startStage6LoadingTransition(onComplete) {
   cancelStage6LoadingTransition();

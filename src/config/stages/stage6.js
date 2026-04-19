@@ -1,6 +1,6 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, bench?: import("../../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, boardPosterImage?: string, airplane?: { path: string } }} */
+/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, bench?: import("../../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, boardPosterImage?: string, airplane?: { path: string }, toneMappingExposureDelta?: number }} */
 export const STAGE6_CONFIG = {
   camera: {
     fov: 60,
@@ -10,8 +10,10 @@ export const STAGE6_CONFIG = {
     lookAt: { x: -5.81, y: -1.01, z: -10.53 },
   },
   background: {
-    color: 0xdfe6e9, // 공항 하이앵글
+    color: 0x042d5b, // 어두운 남색 (밖/하늘 영역)
   },
+  /** initThreeApp 기본 노출 대비 Stage6에서만 밝게 (WebGLRenderer.toneMappingExposure 가산) */
+  toneMappingExposureDelta: 0.18,
   model: {
     path: "/models/stage6/airport3_compression.glb",
     position: { x: 0, y: 0, z: 0 },

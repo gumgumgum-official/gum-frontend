@@ -39,7 +39,7 @@ const ATM_EMISSIVE_TWEEN_SPEED = 3.5;
 
 export function Stage6() {
   const objects = [];
-  /** @type {import("../types.js").StageBasicConfig & { model: import("../types.js").Stage2ModelConfig, boardPosterImage?: string, bench?: import("../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, airplane?: { path: string } }} */
+  /** @type {import("../types.js").StageBasicConfig & { model: import("../types.js").Stage2ModelConfig, boardPosterImage?: string, bench?: import("../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, airplane?: { path: string }, toneMappingExposureDelta?: number }} */
   const config = STAGE6_CONFIG;
   const airportSubtitleLeadSec =
     Number(STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC ?? 0.75) || 0;
@@ -89,6 +89,9 @@ export function Stage6() {
   /** @type {HTMLAudioElement | null} */
   let atmClickAudio = null;
   let isAirportChimeVisible = false;
+
+  /** @type {{ toneMappingExposure: number, renderer: THREE.WebGLRenderer } | null} */
+  let stage6ExposureRestore = null;
 
   /** Stage3 포탈 전환 직후 안내·자막이 바로 이어지도록 진입 무음 구간 최소화 */
   const AIRPLANE_CALL_SIGN_DELAY_MS = 420;
@@ -576,6 +579,14 @@ export function Stage6() {
       cameraRef = this.camera;
 
       scene.background = new THREE.Color(config.background.color);
+
+      const exposureDelta = Number(config.toneMappingExposureDelta ?? 0.14);
+      stage6ExposureRestore = {
+        toneMappingExposure: renderer.toneMappingExposure,
+        renderer,
+      };
+      renderer.toneMappingExposure += exposureDelta;
+
       interactedCount = 0;
       interactedTargets.clear();
       isAtmActivated = false;
@@ -839,6 +850,13 @@ export function Stage6() {
         });
       });
       objects.length = 0;
+
+      if (stage6ExposureRestore) {
+        const { renderer: r, toneMappingExposure } = stage6ExposureRestore;
+        r.toneMappingExposure = toneMappingExposure;
+        stage6ExposureRestore = null;
+      }
+
       scene.background = null;
     },
   };
