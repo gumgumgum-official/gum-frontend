@@ -88,6 +88,13 @@ export function Stage6() {
   let atmClickAudio = null;
   let isAirportChimeVisible = false;
 
+  function isLoadingOverlayVisible() {
+    const loadingOverlay = document.getElementById("loading-overlay");
+    if (!loadingOverlay) return false;
+    const style = window.getComputedStyle(loadingOverlay);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }
+
   /** @type {{ toneMappingExposure: number, renderer: THREE.WebGLRenderer } | null} */
   let stage6ExposureRestore = null;
 
@@ -330,6 +337,9 @@ export function Stage6() {
   }
 
   const handleKeyDown = (event) => {
+    if (isSceneInteractionLocked || isLoadingOverlayVisible()) {
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));

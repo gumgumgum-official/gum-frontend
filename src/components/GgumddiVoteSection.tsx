@@ -21,13 +21,13 @@ const INITIAL_VOTES: Record<VoteId, number> = { 1: 0, 2: 0, 3: 0 };
 const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
   {
     id: 1,
-    name: "1. 껌샘물물",
+    name: "1. 껌샘물",
     image: voteImg1,
     dot: "#FF8B33",
   },
   {
     id: 2,
-    name: "2. 껌태닝닝",
+    name: "2. 껌태닝",
     image: voteImg2,
     dot: "#c4a882",
   },

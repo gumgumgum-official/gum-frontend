@@ -322,7 +322,7 @@ export function Stage6BoardingOverlay() {
 
   const boardFlight = () => {
     setIsOverlayOpen(false);
-    window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
     startStage6LoadingTransition(() => {
       window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
     });
