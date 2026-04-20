@@ -6,6 +6,7 @@
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
+import gsap from "gsap";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import {
   loadGltfTemplateCached,
@@ -38,6 +39,7 @@ import {
 import {
   openGumCardsModal,
   dispatchGumCardsModalClose,
+  onGumCardsModalClose,
 } from "../utils/stages/stage3/gumCardsModalLauncher.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
@@ -57,6 +59,11 @@ import {
   playRandomStreetLightClickSound,
   disposeStreetLightSound,
 } from "../utils/common/playStreetLightSound.js";
+import {
+  playRandomPortalTransitionSound,
+  disposePortalTransitionSound,
+} from "../utils/common/playPortalTransitionSound.js";
+import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../events/stage6Events.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -120,6 +127,36 @@ const STAGE3_ENVIRONMENT_INTENSITY_DELTA = 0.12;
 /** REST에서 busy를 한 번도 못 받았을 때만 Supabase fallback (ms) */
 const STAGE3_MONITOR_FALLBACK_TIMEOUT_MS = 5000;
 
+/** Stage6BoardingOverlay `runSubtitleSequence`와 동일: hold + fade(600) + gap(200) × 구간 */
+const STAGE3_ENTRY_SUBTITLE_TOTAL_MS = 2500 + 600 + 200 + 2000 + 600;
+
+/** 포탈 → Stage6: 페이드 인 후 풀 화이트 유지 시간(ms), 그다음 stage:switch */
+const PORTAL_WHITEOUT_FADE_SEC = 1.85;
+const PORTAL_WHITEOUT_HOLD_MS = 500;
+/** 스테이지 전환 후 새 씬이 드러나도록 화이트 페이드 아웃 */
+const PORTAL_WHITEOUT_FADE_OUT_SEC = 1.45;
+/** App.jsx NoticeModalBoard onClose — 게시판 UI가 닫힌 뒤(Stage3 이스터에그 자막용) */
+const NOTICE_MODAL_USER_CLOSED_EVENT = "gum:noticeModalClosed";
+
+const REQUIRED_EGG_COUNT = 3;
+/** 🔨 ENTER 말풍선 표시 거리 — 상호작용보다 넓게 */
+const WORRY_ENTER_HINT_DIST = 7.5;
+const STAGE3_USER_ENTER_BUBBLE_SHOW_SEC = 3.6;
+const STAGE3_USER_ENTER_BUBBLE_GAP_SEC = 4.0;
+const MAIN_EASTER_EGG_CANONICAL = [
+  "INT_notice",
+  "INT_gameMachine",
+  "INT_icecream",
+  "INT_Tent",
+];
+/** @type {Record<string, string>} */
+const RAY_TARGET_TO_EGG_KEY = {
+  notice: "INT_notice",
+  gameMachine: "INT_gameMachine",
+  icecream: "INT_icecream",
+  tent: "INT_Tent",
+};
+
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
@@ -135,6 +172,7 @@ export function Stage3() {
   /** @type {import("three").CanvasTexture | null} */
   let skyBackgroundTexture = null;
   /** `Portal_Vortex` ShaderMaterial — cleanup 시 null */
+  /** @type {import("three").ShaderMaterial | null} */
   let portalVortexMaterial = null;
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
@@ -223,6 +261,34 @@ export function Stage3() {
   const clockWorldPositions = [];
   let wasNearClock = false;
   let lastClockSoundAtMs = 0;
+
+  let easterEggCount = 0;
+  let textDestroyed = false;
+  const discoveredEggs = new Set();
+  let stage3IntroFlowStarted = false;
+  /** 이스터에그 3 + 걱정 텍스트 파괴 후 축하 자막 1회만 */
+  let worryCompletionCelebrationDone = false;
+  /** @type {HTMLDivElement | null} */
+  let stampUiRoot = null;
+  /** @type {HTMLDivElement | null} */
+  let userWorryEnterBubbleEl = null;
+  /** 포탈 → 다음 스테이지 전환용 풀스크린 화이트아웃 */
+  /** @type {HTMLDivElement | null} */
+  let whiteoutOverlayEl = null;
+  let portalTransitionTween = null;
+  /** @type {number | null} */
+  let portalTransitionHoldTimeoutId = null;
+  let portalTransitionInProgress = false;
+  /** @type {'off' | 'show' | 'gap'} */
+  let userWorryEnterBubblePhase = "off";
+  let userWorryEnterBubbleT = 0;
+  let cameraShakeEndTime = 0;
+  const _projWorry = new THREE.Vector3();
+  let stage3EntryStampRevealTimerId = null;
+  /** 모달/미니게임 닫힌 뒤 재생할 이스터에그 발견 자막 (notice / gameMachine / tent) */
+  let pendingEggDiscoverySubtitle = null;
+  /** @type {(() => void) | null} */
+  let unlistenGumCardsForEggSubtitle = null;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -378,7 +444,14 @@ export function Stage3() {
       cameraIntro.active = false;
       cameraIntro.transitioning = false;
       cameraIntro.completed = true;
+      onCameraRotationIntroComplete();
     }
+  }
+
+  /** 상공 회전·줌인 인트로가 끝난 뒤 진입 자막 */
+  function onCameraRotationIntroComplete() {
+    if (!isStage3Active) return;
+    runStage3EntrySubtitlesAndIntro();
   }
 
   const handleStageKeyDown = (event) => {
@@ -419,6 +492,239 @@ export function Stage3() {
       p = p.parent;
     }
     return false;
+  }
+
+  function ensureStage3UiMounted() {
+    if (stampUiRoot) return;
+    const root = document.createElement("div");
+    root.className = "stage3-ui-root";
+    root.innerHTML = `
+      <div class="stage3-stamp-panel stage3-stamp-panel--hidden" aria-label="이스터에그 진행">
+        <div class="stage3-stamp-title">이스터에그 찾기</div>
+        <div class="stage3-stamp-slots">
+          <span class="stage3-stamp-slot" data-idx="0">🔲</span>
+          <span class="stage3-stamp-slot" data-idx="1">🔲</span>
+          <span class="stage3-stamp-slot" data-idx="2">🔲</span>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(root);
+    stampUiRoot = root;
+
+    userWorryEnterBubbleEl = document.createElement("div");
+    userWorryEnterBubbleEl.className =
+      "speech-bubble-stage2 speech-bubble-stage3-user";
+    userWorryEnterBubbleEl.textContent = "🔨 [ ENTER ]";
+    userWorryEnterBubbleEl.setAttribute("aria-hidden", "true");
+    document.body.appendChild(userWorryEnterBubbleEl);
+  }
+
+  function ensureWhiteoutOverlay() {
+    if (whiteoutOverlayEl) return;
+    const el = document.createElement("div");
+    el.className = "stage3-whiteout-overlay";
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    whiteoutOverlayEl = el;
+  }
+
+  /**
+   * 화면을 흰색으로 덮은 뒤 stage:switch 를 보낸다.
+   * @param {number} targetStage
+   */
+  function startPortalTransitionToStage6(targetStage) {
+    if (portalTransitionInProgress || !isStage3Active) return;
+    ensureWhiteoutOverlay();
+    if (!whiteoutOverlayEl) return;
+    playRandomPortalTransitionSound();
+    portalTransitionInProgress = true;
+    portalTransitionTween?.kill();
+    if (portalTransitionHoldTimeoutId != null) {
+      window.clearTimeout(portalTransitionHoldTimeoutId);
+      portalTransitionHoldTimeoutId = null;
+    }
+    gsap.killTweensOf(whiteoutOverlayEl);
+    whiteoutOverlayEl.style.pointerEvents = "auto";
+    gsap.set(whiteoutOverlayEl, { opacity: 0 });
+    portalTransitionTween = gsap.to(whiteoutOverlayEl, {
+      opacity: 1,
+      duration: PORTAL_WHITEOUT_FADE_SEC,
+      ease: "power2.inOut",
+      onComplete: () => {
+        portalTransitionTween = null;
+        portalTransitionHoldTimeoutId = window.setTimeout(() => {
+          portalTransitionHoldTimeoutId = null;
+          window.dispatchEvent(
+            new CustomEvent("stage:switch", {
+              detail: { targetStage },
+            }),
+          );
+        }, PORTAL_WHITEOUT_HOLD_MS);
+      },
+    });
+  }
+
+  function disposeStage3Ui() {
+    portalTransitionTween?.kill();
+    portalTransitionTween = null;
+    if (portalTransitionHoldTimeoutId != null) {
+      window.clearTimeout(portalTransitionHoldTimeoutId);
+      portalTransitionHoldTimeoutId = null;
+    }
+    if (whiteoutOverlayEl) {
+      const el = whiteoutOverlayEl;
+      gsap.killTweensOf(el);
+      el.style.pointerEvents = "none";
+      portalTransitionTween = gsap.to(el, {
+        opacity: 0,
+        duration: PORTAL_WHITEOUT_FADE_OUT_SEC,
+        ease: "power2.inOut",
+        onComplete: () => {
+          portalTransitionTween = null;
+          if (whiteoutOverlayEl === el) {
+            whiteoutOverlayEl = null;
+          }
+          el.remove();
+        },
+      });
+    }
+    portalTransitionInProgress = false;
+    stampUiRoot?.remove();
+    stampUiRoot = null;
+    userWorryEnterBubbleEl?.remove();
+    userWorryEnterBubbleEl = null;
+    userWorryEnterBubblePhase = "off";
+    userWorryEnterBubbleT = 0;
+  }
+
+  function updateStampSlotsFilled(count) {
+    if (!stampUiRoot) return;
+    const slots = stampUiRoot.querySelectorAll(".stage3-stamp-slot");
+    slots.forEach((el, i) => {
+      const filled = i < count;
+      el.textContent = filled ? "🌟" : "🔲";
+      el.classList.toggle("filled", filled);
+    });
+  }
+
+  function pulseStampSlot(index) {
+    if (!stampUiRoot) return;
+    const el = stampUiRoot.querySelector(
+      `.stage3-stamp-slot[data-idx="${index}"]`,
+    );
+    if (!el) return;
+    el.classList.remove("stage3-stamp-pop");
+    void el.getBoundingClientRect();
+    el.classList.add("stage3-stamp-pop");
+    window.setTimeout(() => el.classList.remove("stage3-stamp-pop"), 500);
+  }
+
+  function pulseStampPanelGlow() {
+    if (!stampUiRoot) return;
+    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    if (!panel) return;
+    panel.classList.remove("stage3-stamp-glow");
+    void panel.getBoundingClientRect();
+    panel.classList.add("stage3-stamp-glow");
+    window.setTimeout(() => panel.classList.remove("stage3-stamp-glow"), 900);
+  }
+
+  function revealStage3StampPanelAfterEntrySubtitles() {
+    if (!stampUiRoot || !isStage3Active) return;
+    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    if (panel) panel.classList.remove("stage3-stamp-panel--hidden");
+  }
+
+  function dispatchSubtitleSequence(messages) {
+    window.dispatchEvent(
+      new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
+        detail: { messages },
+      }),
+    );
+  }
+
+  function dispatchSubtitleLine(text, holdMs = 2200) {
+    dispatchSubtitleSequence([{ text, holdMs }]);
+  }
+
+  function flushPendingEggDiscoverySubtitle() {
+    if (!isStage3Active || !pendingEggDiscoverySubtitle) return;
+    const text = pendingEggDiscoverySubtitle;
+    pendingEggDiscoverySubtitle = null;
+    dispatchSubtitleLine(text);
+  }
+
+  function handleNoticeModalClosedForEggSubtitle() {
+    flushPendingEggDiscoverySubtitle();
+  }
+
+  function runStage3EntrySubtitlesAndIntro() {
+    if (stage3IntroFlowStarted) return;
+    stage3IntroFlowStarted = true;
+    if (stage3EntryStampRevealTimerId != null) {
+      window.clearTimeout(stage3EntryStampRevealTimerId);
+      stage3EntryStampRevealTimerId = null;
+    }
+    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    if (panel) panel.classList.add("stage3-stamp-panel--hidden");
+
+    dispatchSubtitleSequence([
+      { text: "어딘가에서 걱정들이 쏟아지고 있어요...", holdMs: 2500 },
+      { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2000 },
+    ]);
+
+    stage3EntryStampRevealTimerId = window.setTimeout(() => {
+      stage3EntryStampRevealTimerId = null;
+      revealStage3StampPanelAfterEntrySubtitles();
+    }, STAGE3_ENTRY_SUBTITLE_TOTAL_MS);
+  }
+
+  /**
+   * @param {"notice"|"gameMachine"|"icecream"|"tent"} target
+   * @returns {{ didDiscover: boolean, stampSubtitle: string | null }}
+   */
+  function tryRegisterEasterEggFromRayTarget(target) {
+    const key = RAY_TARGET_TO_EGG_KEY[target];
+    if (!key || !MAIN_EASTER_EGG_CANONICAL.includes(key)) {
+      return { didDiscover: false, stampSubtitle: null };
+    }
+    if (discoveredEggs.has(key)) {
+      return { didDiscover: false, stampSubtitle: null };
+    }
+    discoveredEggs.add(key);
+    let stampSubtitle = null;
+    if (easterEggCount < REQUIRED_EGG_COUNT) {
+      easterEggCount += 1;
+      updateStampSlotsFilled(easterEggCount);
+      pulseStampSlot(easterEggCount - 1);
+      if (easterEggCount >= REQUIRED_EGG_COUNT) {
+        pulseStampPanelGlow();
+      }
+      if (easterEggCount === 1) {
+        stampSubtitle = "뭔가 발견했어요! 더 찾아볼까요? 👀";
+      } else if (easterEggCount === 2) {
+        stampSubtitle = "하나만 더 찾으면 될 것 같아요!";
+      } else if (easterEggCount === 3) {
+        stampSubtitle = "다 찾았어요. 다음 여정으로 떠날 수 있어요!";
+      }
+    }
+    // 텍스트를 먼저 부순 뒤 3번째 이스터에그를 찾는 경우 — onEnterHit에서는 호출되지 않음
+    tryDispatchWorryCompletionCelebration();
+    return { didDiscover: true, stampSubtitle };
+  }
+
+  function tryDispatchWorryCompletionCelebration() {
+    if (worryCompletionCelebrationDone) return;
+    if (easterEggCount < REQUIRED_EGG_COUNT || !textDestroyed) return;
+    worryCompletionCelebrationDone = true;
+    pendingEggDiscoverySubtitle = null;
+    cameraShakeEndTime = globalThis.performance.now() / 1000 + 0.5;
+    window.setTimeout(() => {
+      if (!isStage3Active) return;
+      dispatchSubtitleSequence([
+        { text: "모든 걱정을 날려버렸어요! 💥", holdMs: 2000 },
+      ]);
+    }, 0);
   }
 
   /** island2 로드 후: INT_* 노드에서 레이캐스트 메시·refs 등록 */
@@ -495,6 +801,7 @@ export function Stage3() {
           camera: cameraRef,
           orbitControls: debugControls?.getOrbitControls?.() ?? null,
         });
+        flushPendingEggDiscoverySubtitle();
       });
     }
 
@@ -735,6 +1042,36 @@ export function Stage3() {
     event.preventDefault();
     event.stopPropagation();
 
+    if (target === "portal") {
+      if (portalTransitionInProgress) return;
+      if (easterEggCount >= REQUIRED_EGG_COUNT && textDestroyed) {
+        const targetStage = config.portal_bright?.targetStage ?? 6;
+        startPortalTransitionToStage6(targetStage);
+        return;
+      }
+      if (easterEggCount >= REQUIRED_EGG_COUNT && !textDestroyed) {
+        dispatchSubtitleLine(
+          "아직 걱정이 남아있어요. 우리 걱정을 부셔볼까요? 💥 ",
+        );
+        return;
+      }
+      if (easterEggCount < REQUIRED_EGG_COUNT) {
+        dispatchSubtitleLine(
+          "아직 열리지 않은 것 같아요. 섬을 더 둘러볼까요? 🗺",
+        );
+        return;
+      }
+      return;
+    }
+
+    /** @type {{ stampSubtitle: string | null } | null} */
+    let eggTap = null;
+    if (RAY_TARGET_TO_EGG_KEY[target]) {
+      eggTap = tryRegisterEasterEggFromRayTarget(
+        /** @type {"notice"|"gameMachine"|"icecream"|"tent"} */ (target),
+      );
+    }
+
     if (target === "icecream") {
       if (!iceCreamCartRef) {
         if (import.meta.env.DEV) {
@@ -753,10 +1090,17 @@ export function Stage3() {
         return;
       }
       spawnIceCreamFromCart();
+      if (eggTap?.stampSubtitle) {
+        dispatchSubtitleLine(eggTap.stampSubtitle);
+      }
       return;
     }
     if (target === "notice") {
       showNoticeModal();
+      if (eggTap?.stampSubtitle) {
+        pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
+      }
+      return;
     }
     if (target === "gameMachine") {
       playGameMachineClickSound();
@@ -765,19 +1109,17 @@ export function Stage3() {
         gameMachineRef,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,
       });
+      if (eggTap?.stampSubtitle) {
+        pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
+      }
+      return;
     }
     // INT_tent → 껌 카드(타로) 모달 (효과음은 openGumCardsModal 내부)
     if (target === "tent") {
       openGumCardsModal();
-      return;
-    }
-    if (target === "portal") {
-      const targetStage = config.portal_bright?.targetStage ?? 6;
-      window.dispatchEvent(
-        new CustomEvent("stage:switch", {
-          detail: { targetStage },
-        }),
-      );
+      if (eggTap?.stampSubtitle) {
+        pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
+      }
       return;
     }
     if (target === "well") {
@@ -1966,6 +2308,8 @@ export function Stage3() {
     const target = getHitTarget();
     if (!target) return;
 
+    character?.playHammerCue?.();
+
     const mat = new THREE.MeshStandardMaterial({
       color: 0x2e2e2e,
       metalness: 0.1,
@@ -2038,6 +2382,8 @@ export function Stage3() {
       sceneRef.remove(group);
       disposeHandwritingSvgPlaneGroup(group);
       letterState = null;
+      textDestroyed = true;
+      tryDispatchWorryCompletionCelebration();
       return;
     }
 
@@ -2139,6 +2485,17 @@ export function Stage3() {
     setup(scene, renderer) {
       isStage3Active = true;
       gumCancelled = false;
+      easterEggCount = 0;
+      textDestroyed = false;
+      discoveredEggs.clear();
+      worryCompletionCelebrationDone = false;
+      stage3IntroFlowStarted = false;
+      cameraShakeEndTime = 0;
+      pendingEggDiscoverySubtitle = null;
+      if (stage3EntryStampRevealTimerId != null) {
+        window.clearTimeout(stage3EntryStampRevealTimerId);
+        stage3EntryStampRevealTimerId = null;
+      }
       stage3LightingRestore = {
         toneMappingExposure: renderer.toneMappingExposure,
         environmentIntensity: scene.environmentIntensity,
@@ -2192,6 +2549,14 @@ export function Stage3() {
       canvas.addEventListener("pointermove", handlePointerMove);
       canvas.addEventListener("pointerleave", handlePointerLeave);
 
+      window.addEventListener(
+        NOTICE_MODAL_USER_CLOSED_EVENT,
+        handleNoticeModalClosedForEggSubtitle,
+      );
+      unlistenGumCardsForEggSubtitle = onGumCardsModalClose(() => {
+        flushPendingEggDiscoverySubtitle();
+      });
+
       debugControls = createStageDebugControls({
         scene,
         camera: this.camera,
@@ -2228,6 +2593,8 @@ export function Stage3() {
         getIsActive: () => isStage3Active,
         onReady: ({ model, center, backgroundMaxY, backgroundBounds }) => {
           backgroundModel = model;
+          ensureStage3UiMounted();
+          updateStampSlotsFilled(0);
           if (isStage3Active) {
             playStage3IntroAudioTwice();
           }
@@ -2340,11 +2707,83 @@ export function Stage3() {
       if (gumFollowers) {
         gumFollowers.update(delta);
       }
+
+      const nowSec = globalThis.performance.now() / 1000;
+      if (cameraRef && nowSec < cameraShakeEndTime) {
+        const w = (cameraShakeEndTime - nowSec) / 0.5;
+        const a = 0.14 * w;
+        cameraRef.position.x += (Math.random() - 0.5) * a;
+        cameraRef.position.y += (Math.random() - 0.5) * a * 0.55;
+        cameraRef.position.z += (Math.random() - 0.5) * a;
+      }
+
+      if (cameraRef && canvasRef) {
+        const charPos = character?.getPosition?.();
+        const nearLetter =
+          Boolean(
+            letterState?.landed &&
+            charPos &&
+            letterState.group.position.distanceTo(charPos) <=
+              WORRY_ENTER_HINT_DIST,
+          ) && !textDestroyed;
+        const gumBubbleAnchorOk = Boolean(
+          gumFollowers?.getPrimaryFollowerBubbleAnchorWorld?.(_projWorry),
+        );
+        if (userWorryEnterBubbleEl) {
+          if (nearLetter && gumBubbleAnchorOk) {
+            if (userWorryEnterBubblePhase === "off") {
+              userWorryEnterBubblePhase = "show";
+              userWorryEnterBubbleT = STAGE3_USER_ENTER_BUBBLE_SHOW_SEC;
+            }
+            userWorryEnterBubbleT -= delta;
+            if (userWorryEnterBubbleT <= 0) {
+              if (userWorryEnterBubblePhase === "show") {
+                userWorryEnterBubblePhase = "gap";
+                userWorryEnterBubbleT = STAGE3_USER_ENTER_BUBBLE_GAP_SEC;
+              } else {
+                userWorryEnterBubblePhase = "show";
+                userWorryEnterBubbleT = STAGE3_USER_ENTER_BUBBLE_SHOW_SEC;
+              }
+            }
+            const bubbleVisible = userWorryEnterBubblePhase === "show";
+            if (bubbleVisible) {
+              cameraRef.updateMatrixWorld(true);
+              _projWorry.project(cameraRef);
+              const rect = canvasRef.getBoundingClientRect();
+              const x = (_projWorry.x * 0.5 + 0.5) * rect.width + rect.left;
+              const y = (-_projWorry.y * 0.5 + 0.5) * rect.height + rect.top;
+              userWorryEnterBubbleEl.style.left = `${x}px`;
+              userWorryEnterBubbleEl.style.top = `${y}px`;
+              userWorryEnterBubbleEl.classList.add("is-visible");
+            } else {
+              userWorryEnterBubbleEl.classList.remove("is-visible");
+            }
+          } else {
+            userWorryEnterBubblePhase = "off";
+            userWorryEnterBubbleT = 0;
+            userWorryEnterBubbleEl.classList.remove("is-visible");
+          }
+        }
+      }
     },
 
     cleanup(scene) {
       isStage3Active = false;
       gumCancelled = true;
+      pendingEggDiscoverySubtitle = null;
+      if (stage3EntryStampRevealTimerId != null) {
+        window.clearTimeout(stage3EntryStampRevealTimerId);
+        stage3EntryStampRevealTimerId = null;
+      }
+      window.removeEventListener(
+        NOTICE_MODAL_USER_CLOSED_EVENT,
+        handleNoticeModalClosedForEggSubtitle,
+      );
+      if (unlistenGumCardsForEggSubtitle) {
+        unlistenGumCardsForEggSubtitle();
+        unlistenGumCardsForEggSubtitle = null;
+      }
+      disposeStage3Ui();
       cameraIntro.active = false;
       cameraIntro.transitioning = false;
       cameraIntro.completed = false;
@@ -2397,6 +2836,7 @@ export function Stage3() {
       gameMachineRef = null;
       disposeNoticePaperAudio();
       disposeStreetLightSound();
+      disposePortalTransitionSound();
       if (gameMachineClickAudio) {
         gameMachineClickAudio.pause();
         gameMachineClickAudio.src = "";

@@ -11,7 +11,14 @@ import { Stage3 } from "../stages/Stage3.js";
 import { Stage6 } from "../stages/Stage6.js";
 import { APP_CONFIG } from "../config/appConfig.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import {
+  disposeStage6LoadingTransition,
+  preloadStage6AirplaneModel,
+  resizeStage6LoadingTransition,
+  updateStage6LoadingTransition,
+} from "../utils/stages/stage6/stage6LoadingTransition.js";
 
 /** Stage 1은 별도 프로젝트(태블릿)에서 구현 */
 const STAGE_FACTORIES = {
@@ -53,6 +60,7 @@ export function initThreeApp(canvasElement, options = {}) {
   }
 
   const perfMode = APP_CONFIG?.renderer?.performanceMode ?? false;
+  const isElectronLike = isElectronLikeUserAgent();
   const antialias = perfMode
     ? false
     : (APP_CONFIG?.renderer?.antialias ?? true);
@@ -60,12 +68,18 @@ export function initThreeApp(canvasElement, options = {}) {
     ? Math.min(1.5, Math.max(1, window.devicePixelRatio || 1))
     : (APP_CONFIG?.renderer?.pixelRatio ??
       Math.min(2, Math.max(1, window.devicePixelRatio || 1)));
+  // Cursor/Electron 웹뷰는 동일 장비에서도 외부 Chrome보다 GPU/합성 성능이 낮은 경우가 많다.
+  // 이 환경에서는 픽셀 수를 제한해 GLB 표시 체감 지연을 줄인다.
+  const finalAntialias = isElectronLike ? false : antialias;
+  const finalPixelRatio = isElectronLike
+    ? Math.min(1.25, pixelRatio)
+    : pixelRatio;
 
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({
       canvas: canvasElement,
-      antialias,
+      antialias: finalAntialias,
     });
   } catch (err) {
     reportError(
@@ -75,8 +89,37 @@ export function initThreeApp(canvasElement, options = {}) {
     return { dispose: noopDispose };
   }
 
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(pixelRatio);
+  let stageManager = null;
+
+  const getViewportSize = () => {
+    const w = Math.max(
+      1,
+      Math.floor(canvasElement.clientWidth || window.innerWidth || 1),
+    );
+    const h = Math.max(
+      1,
+      Math.floor(canvasElement.clientHeight || window.innerHeight || 1),
+    );
+    return { w, h };
+  };
+
+  const applyRendererSize = () => {
+    const { w, h } = getViewportSize();
+    renderer.setSize(w, h, false);
+    const camera = stageManager?.getCurrentCamera?.();
+    if (camera) {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+  };
+
+  applyRendererSize();
+  renderer.setPixelRatio(finalPixelRatio);
+  if (isElectronLike) {
+    console.info(
+      `[initThreeApp] Electron/Cursor 최적화 적용: antialias=${finalAntialias}, pixelRatio=${finalPixelRatio.toFixed(2)}`,
+    );
+  }
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.33;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -131,7 +174,7 @@ export function initThreeApp(canvasElement, options = {}) {
   getGLBLoader().preloadDecoders();
 
   // Stage Manager
-  const stageManager = createStageManager(renderer, scene);
+  stageManager = createStageManager(renderer, scene);
 
   safeAllowedStages.forEach((stageNum) => {
     const factory = STAGE_FACTORIES[stageNum];
@@ -148,6 +191,10 @@ export function initThreeApp(canvasElement, options = {}) {
     safeAllowedStages.includes(initialStage) && typeof initialStage === "number"
       ? initialStage
       : safeAllowedStages[0];
+
+  if (safeAllowedStages.includes(6)) {
+    preloadStage6AirplaneModel();
+  }
 
   if (safeAllowedStages.includes(3)) {
     warmStage3GltfTemplateUrls();
@@ -172,6 +219,7 @@ export function initThreeApp(canvasElement, options = {}) {
 
   // Animation Loop
   const clock = new THREE.Clock();
+  const drawingSizeScratch = new THREE.Vector2();
   let animationId = null;
 
   /** Stage3 성능 프로파일: localStorage.setItem('STAGE3_PROFILE','1') 후 새로고침 */
@@ -184,12 +232,21 @@ export function initThreeApp(canvasElement, options = {}) {
   function animate() {
     animationId = requestAnimationFrame(animate);
     try {
+      // DevTools 열림/닫힘, 패널 리사이즈 등으로 캔버스 실제 크기가 바뀌는 경우를 매 프레임 보정
+      const { w, h } = getViewportSize();
+      renderer.getSize(drawingSizeScratch);
+      if (drawingSizeScratch.x !== w || drawingSizeScratch.y !== h) {
+        applyRendererSize();
+      }
+
       const delta = clock.getDelta();
       stageManager.update(delta);
       const camera = stageManager.getCurrentCamera();
       if (camera) {
         renderer.render(scene, camera);
       }
+
+      updateStage6LoadingTransition(delta);
 
       if (profileEnabled() && stageManager.getCurrentStageNumber?.() === 3) {
         const now = window.performance.now();
@@ -214,12 +271,8 @@ export function initThreeApp(canvasElement, options = {}) {
   // Resize
   function handleResize() {
     try {
-      const camera = stageManager.getCurrentCamera();
-      if (camera) {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-      }
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      applyRendererSize();
+      resizeStage6LoadingTransition();
     } catch (err) {
       console.error("[initThreeApp] resize 오류:", err);
     }
@@ -296,6 +349,14 @@ export function initThreeApp(canvasElement, options = {}) {
         renderer?.dispose?.();
       } catch (err) {
         console.error("[initThreeApp] renderer dispose 오류:", err);
+      }
+      try {
+        disposeStage6LoadingTransition();
+      } catch (err) {
+        console.error(
+          "[initThreeApp] stage6 loading transition dispose 오류:",
+          err,
+        );
       }
     },
   };

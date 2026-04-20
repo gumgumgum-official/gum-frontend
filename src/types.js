@@ -114,6 +114,7 @@
  * @property {number} [turnLerpFactor] - 오프셋 yaw lerp
  * @property {number} [facingLerpFactor] - 바라보기 yaw lerp
  * @property {number} [lookAtHeightOffset] - 유저 바라볼 때 y 오프셋
+ * @property {number} [bubbleOffsetY] - 말풍선 세로 앵커 (AABB 높이 배율, Stage2 기본 0.85)
  * @property {number} [animationSpeed] - 애니메이션 속도(미지정 시 스케일로 보정)
  * @property {number|null} [groundOffset] - 발 높이 보정(null이면 캐릭터 groundOffset)
  * @property {Stage3GumFollowerBreakOffConfig} [breakOff]
@@ -170,6 +171,8 @@
  * @property {{x: number, y?: number, z: number}} [normal] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [halfWidth] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [targetStage] - 전환할 Stage 번호
+ * @property {string[]} [portalTransitionSoundPaths] - 포탈 전환 시작 시 재생할 MP3 경로(public 기준)
+ * @property {number} [portalTransitionSoundVolume] - 포탈 전환 효과음 볼륨 (0~1)
  */
 
 /** Stage3 아이스크림 클릭 스폰 설정 (카트 메시는 island GLB 내 INT_icecream) */

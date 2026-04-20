@@ -137,5 +137,12 @@ export const STAGE3_OBJECTS_CONFIG = {
     normal: { x: 0, y: 0, z: 1 },
     halfWidth: 4,
     targetStage: 6,
+    /** INT_Portal 클릭으로 스테이지 전환이 시작될 때 재생 (랜덤 1종) */
+    portalTransitionSoundPaths: [
+      "/static/sounds/potal/transition1.mp3",
+      "/static/sounds/potal/transition2.mp3",
+      "/static/sounds/potal/transition3.mp3",
+    ],
+    portalTransitionSoundVolume: 0.55,
   },
 };

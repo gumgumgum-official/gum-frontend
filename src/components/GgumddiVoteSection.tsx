@@ -21,30 +21,26 @@ const INITIAL_VOTES: Record<VoteId, number> = { 1: 0, 2: 0, 3: 0 };
 const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
   {
     id: 1,
-    name: "1. 껌뚝지",
+    name: "1. 껌샘물",
     image: voteImg1,
     dot: "#FF8B33",
   },
   {
     id: 2,
-    name: "2. 껌떡지",
+    name: "2. 껌태닝",
     image: voteImg2,
     dot: "#c4a882",
   },
   {
     id: 3,
-    name: "3. 껌뚱지",
+    name: "3. 껌곤듀",
     image: voteImg3,
     dot: "#FF4A89",
   },
 ];
 
 /** 후보 점(dot)과 같은 단색 막대 (그라데이션 없음) */
-const BAR_FILLS = [
-  "bg-[#FF8B33]",
-  "bg-[#c4a882]",
-  "bg-[#FF4A89]",
-] as const;
+const BAR_FILLS = ["bg-[#FF8B33]", "bg-[#c4a882]", "bg-[#FF4A89]"] as const;
 
 function loadPersisted(): {
   votes: Record<VoteId, number>;

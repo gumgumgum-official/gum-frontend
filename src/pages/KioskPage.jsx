@@ -2,9 +2,9 @@ import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
 import { MinigameOverlay } from "../components/MinigameOverlay.jsx";
+import { STAGE6_FINISH_EVENT } from "../events/stage6Events.js";
 import styles from "./Page.module.css";
 
-const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
 const KIOSK_STAGES = [3, 6];
 
 /** Phase 3~6: 키오스크 - 체험 존 (Stage 3→6, 포탈 통과 시) */

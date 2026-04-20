@@ -8,9 +8,6 @@ import * as THREE from "three";
 
 const PREFIXES_UPPER = ["INT_", "OBJ_"];
 
-/** 포탈 메시는 논리 평면 통과와 겹치므로 충돌에서 제외 */
-const PORTAL_NODE_RE = /^INT_Portal$/i;
-
 /**
  * @param {string} name
  * @returns {boolean}
@@ -40,10 +37,11 @@ function isUnderCollidableSubtree(mesh) {
  * @returns {boolean}
  */
 function isUnderPortalRoot(mesh) {
+  const portalNodeRe = /^INT_Portal$/i;
   let p = mesh;
   while (p) {
     const n = typeof p.name === "string" ? p.name.trim() : "";
-    if (PORTAL_NODE_RE.test(n)) return true;
+    if (portalNodeRe.test(n)) return true;
     p = p.parent;
   }
   return false;

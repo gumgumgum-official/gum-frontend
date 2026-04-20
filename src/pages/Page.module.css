@@ -12,6 +12,10 @@
   cursor: pointer;
 }
 
+.startEnterLoading {
+  cursor: wait;
+}
+
 .startOverlay {
   position: absolute;
   inset: 0;

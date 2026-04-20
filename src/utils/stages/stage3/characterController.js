@@ -4,6 +4,7 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import gsap from "gsap";
 import { inspectGLTF } from "../../common/modelInspector.js";
 import {
   loadGltfTemplateCached,
@@ -29,6 +30,7 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *   getPosition: () => import("three").Vector3 | null,
  *   getYaw: () => number | null,
  *   getIsMoving: () => boolean,
+ *   playHammerCue: () => void,
  * }}
  */
 export function createCharacterController({
@@ -51,6 +53,8 @@ export function createCharacterController({
   let collisionRadius = 0.55;
   /** @type {HTMLAudioElement | null} */
   let walkAudio = null;
+  /** @type {import("gsap").core.Timeline | null} */
+  let hammerTween = null;
 
   const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
@@ -376,6 +380,10 @@ export function createCharacterController({
     },
 
     cleanup() {
+      if (hammerTween) {
+        hammerTween.kill();
+        hammerTween = null;
+      }
       if (walkAudio) {
         walkAudio.pause();
         walkAudio.src = "";
@@ -424,6 +432,24 @@ export function createCharacterController({
      */
     getIsMoving() {
       return isMoving;
+    },
+
+    playHammerCue() {
+      if (!characterModel) return;
+      hammerTween?.kill();
+      const m = characterModel;
+      const baseX = m.rotation.x;
+      hammerTween = gsap.timeline();
+      hammerTween.to(m.rotation, {
+        x: baseX - 0.52,
+        duration: 0.12,
+        ease: "power2.out",
+      });
+      hammerTween.to(m.rotation, {
+        x: baseX,
+        duration: 0.2,
+        ease: "power2.inOut",
+      });
     },
   };
 }
