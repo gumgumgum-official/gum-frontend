@@ -2,7 +2,7 @@
  * Stage3: 부셔버리자 (밝은 초원, 스트레스 해소)
  * - gum_server: POST .../start 후 GET .../current 폴링으로 worry(svgUrl) 우선 낙하
  * - 폴링에서 busy 미수신 시 fallback으로 "최신 1개"가 낙하
- * - 엔터키로 타격 시 큰 조각이 깔끔하게 부서짐, 4번 치면 사라짐. 조각은 3초 후 페이드아웃
+ * - 엔터키로 타격 시 큰 조각이 부서짐, 4번 치면 사라짐. 조각은 지연 후 서서히 페이드되며 꽃 GLB가 핌
  * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
@@ -23,7 +23,11 @@ import {
 import { applyPortalVortexToModel } from "../utils/stages/stage3/portalVortexMaterial.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { createGumFollowersController } from "../utils/stages/stage3/gumFollowerController.js";
-import { loadSVGShapes, expandShapesStroke } from "../lib/svg-loader.js";
+import {
+  createHandwritingSvgPlaneGroup,
+  disposeHandwritingSvgPlaneGroup,
+} from "../utils/handwritingSvgPlane.js";
+import { createHandwritingSvgVolumeGroup } from "../utils/stages/stage3/stage3HandwritingSvgVolume.js";
 import * as CANNON from "cannon-es";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import {
@@ -64,31 +68,39 @@ import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../events/stage6Events.js";
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
 
-/** Stage2 대비 4배 크기 (글자 일부도 크게 보이도록) */
-const STAGE3_LETTER_SCALE = 0.006 * 0.75 * 4;
-// Z 방향 입체감은 살짝만 주고 거의 평면에 가깝게
-const STAGE3_LETTER_Z_SCALE = 1.0;
-const STAGE3_LETTER_COLOR = 0x111111;
-// Stage3 전용: 글자 겹침 줄이기 위해 스트로크 확장 값을 과하지 않게 유지
-const STAGE3_STROKE_OUTLINE = 1.6;
-const STAGE3_STROKE_FILL = 1.3;
-// OUTLINE/FILL 레이어 간 Z 오프셋도 최소화해서 볼륨감 과한 느낌을 줄임
-const STAGE3_OUTLINE_Z_OFFSET = 0.004;
-const STAGE3_FILL_Z_OFFSET = 0.008;
+/** Base letter height (Y); scaled by randomFactor like Stage2 (MIN..MAX). */
+const STAGE3_LETTER_TARGET_HEIGHT = 0.9;
+const STAGE3_LETTER_HEIGHT_RANDOM_MIN = 0.5;
+const STAGE3_LETTER_HEIGHT_RANDOM_MAX = 1.0;
 /** 착지면(landingY) 위로 띄우는 높이 — 글자 밑면·지형 오차를 줄이려면 landingY 기준과 함께 키움 */
 const STAGE3_SPAWN_HEIGHT = 8;
 // 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
 const STAGE3_GRAVITY = -35;
 const STAGE3_INITIAL_VY = -12;
 const LETTER_BOUNCE_RESTITUTION = 0.4;
-/** 한 번 타격 시 잘려 나가는 비율 (1/4 → 큰 조각이 깔끔하게 떨어짐) */
-const FRACTION_PER_HIT = 1 / 4;
+const HITS_TO_DESTROY = 4;
+/** 한 번 타격 시 잘려 나가는 로컬 x 구간 비율 (커질수록 덩어리가 큼) */
+const FRACTION_PER_HIT = 0.45;
 const HIT_RANGE = 6; // ilbuni로부터 이 거리 이내만 타격 가능
 const FRAGMENT_GRAVITY_MUL = 2.8; // 조각은 중력 더 강하게
 const FRAGMENT_BOUNCE_RESTITUTION = 0.35;
 const FRAGMENT_GROUND_FRICTION = 0.82;
-const FRAGMENT_FADE_START = 3; // 땅에 떨어진 뒤 3초 뒤부터
+/** 조각 생성 직후 튀는 속도·회전 배율 */
+const FRAGMENT_BURST_IMPULSE_MUL = 1.55;
+const FRAGMENT_FADE_START = 2;
 const FRAGMENT_FADE_END = 5;
+/** 조각 착지 시 스폰되는 꽃의 bloom 시간(초) */
+const FLOWER_BLOOM_DURATION = 3;
+const FLOWER_SCALE = 3;
+const FLOWER_Y_OFFSET = 0.15;
+const FRAGMENT_FLOWER_PATHS = [
+  "/models/common/flowers/pink2.glb",
+  "/models/common/flowers/white2.glb",
+  "/models/common/flowers/red2.glb",
+  "/models/common/flowers/purple2.glb",
+  "/models/common/flowers/pastelpink2.glb",
+  "/models/common/flowers/blue3.glb",
+];
 const STAGE3_ICECREAM_DEBUG_BOX_ONLY = false;
 
 /** 아이스크림이 지면에 처음 닿을 때 재생 (랜덤 1종) */
@@ -127,8 +139,6 @@ const PORTAL_WHITEOUT_FADE_OUT_SEC = 1.45;
 const NOTICE_MODAL_USER_CLOSED_EVENT = "gum:noticeModalClosed";
 
 const REQUIRED_EGG_COUNT = 3;
-/** ENTER로 걱정 텍스트 부수기 — 가까울 때만 */
-const WORRY_INTERACT_DIST = 3;
 /** 🔨 ENTER 말풍선 표시 거리 — 상호작용보다 넓게 */
 const WORRY_ENTER_HINT_DIST = 7.5;
 const STAGE3_USER_ENTER_BUBBLE_SHOW_SEC = 3.6;
@@ -173,6 +183,9 @@ export function Stage3() {
   let letterState = null;
   let letterLoadInProgress = false;
   const fragments = [];
+  /** Enter 타격 시 스폰된 꽃 목록 — bloom 애니메이션 + 자동 제거 */
+  /** @type {{ group: import("three").Object3D, age: number }[]} */
+  const standaloneFlowers = [];
   /** Fragment 풀: { group, velocity, angularVelocity } 재사용 (GC 감소) */
   const fragmentPool = [];
   const FRAGMENT_POOL_MAX = 32;
@@ -712,40 +725,6 @@ export function Stage3() {
         { text: "모든 걱정을 날려버렸어요! 💥", holdMs: 2000 },
       ]);
     }, 0);
-  }
-
-  function shatterWorryLetterCompletely() {
-    if (!letterState?.group || !sceneRef) return;
-    const group = letterState.group;
-    const triangles = collectTrianglesFromGroup(group);
-    if (triangles.length === 0) {
-      sceneRef.remove(group);
-      letterState = null;
-      return;
-    }
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x2e2e2e,
-      metalness: 0.1,
-      roughness: 0.8,
-      transparent: true,
-      opacity: 1,
-    });
-    const bucketCount = 12;
-    /** @type {typeof triangles[]} */
-    const buckets = Array.from({ length: bucketCount }, () => []);
-    for (const tri of triangles) {
-      buckets[Math.floor(Math.random() * bucketCount)].push(tri);
-    }
-    for (const bucket of buckets) {
-      if (bucket.length === 0) continue;
-      createFragmentMeshes([bucket], mat, letterState.groundY);
-    }
-    sceneRef.remove(group);
-    group.traverse((child) => {
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
-    });
-    letterState = null;
   }
 
   /** island2 로드 후: INT_* 노드에서 레이캐스트 메시·refs 등록 */
@@ -1623,21 +1602,6 @@ export function Stage3() {
     return { id: latest.id, url: urlData?.publicUrl ?? "" };
   }
 
-  function centerGroupGeometries(meshes) {
-    const box = new THREE.Box3();
-    const tempBox = new THREE.Box3();
-    for (const mesh of meshes) {
-      mesh.geometry.computeBoundingBox();
-      tempBox.copy(mesh.geometry.boundingBox);
-      box.union(tempBox);
-    }
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    for (const mesh of meshes) {
-      mesh.geometry.translate(-center.x, -center.y, -center.z);
-    }
-  }
-
   function setReadableRotationTowardCamera(group, camera, _groundY) {
     const dir = new THREE.Vector3(
       camera.position.x - group.position.x,
@@ -1660,10 +1624,7 @@ export function Stage3() {
     });
     toRemove.forEach((obj) => {
       scene.remove(obj);
-      obj.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
-      });
+      disposeHandwritingSvgPlaneGroup(obj);
     });
     letterState = null;
   }
@@ -1704,92 +1665,32 @@ export function Stage3() {
         _nextDebugId = null;
 
         try {
-          let shapes = await loadSVGShapes(currentSvgUrl);
-          if (!Array.isArray(shapes) || shapes.length === 0) return;
+          const baseH =
+            config.letterTargetHeight ?? STAGE3_LETTER_TARGET_HEIGHT;
+          const randomFactor =
+            STAGE3_LETTER_HEIGHT_RANDOM_MIN +
+            Math.random() *
+              (STAGE3_LETTER_HEIGHT_RANDOM_MAX -
+                STAGE3_LETTER_HEIGHT_RANDOM_MIN);
+          const targetH = baseH * randomFactor;
 
-          const outlineShapes = expandShapesStroke(
-            shapes,
-            STAGE3_STROKE_OUTLINE,
-          );
-          const fillShapes = expandShapesStroke(shapes, STAGE3_STROKE_FILL);
+          const built =
+            (await createHandwritingSvgVolumeGroup(currentSvgUrl, {
+              targetWorldHeight: targetH,
+            })) ??
+            (await createHandwritingSvgPlaneGroup(currentSvgUrl, {
+              targetWorldHeight: targetH,
+            }));
+          if (!built) return;
 
-          const group = new THREE.Group();
-          group.userData.isStage3Letter = true; // 로드/cleanup 시 식별용
-
-          // 채팅 시작 전 스타일(작은 베벨) + 두께 더 굵게, 수직 유지
-          const extrudeSettings = {
-            depth: 0.18,
-            bevelEnabled: true,
-            bevelThickness: 0.035,
-            bevelSize: 0.025,
-            bevelSegments: 8,
-          };
-
-          const meshes = [];
-          const sharedMaterialOptions = {
-            color: STAGE3_LETTER_COLOR,
-            metalness: 0.1,
-            roughness: 0.8,
-          };
-
-          outlineShapes.forEach((shape, index) => {
-            const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-            const material = new THREE.MeshStandardMaterial(
-              sharedMaterialOptions,
-            );
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            mesh.scale.set(
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_Z_SCALE,
-            );
-            group.add(mesh);
-            meshes.push(mesh);
-
-            const fillShape = fillShapes[index];
-            if (!fillShape) return;
-
-            const fillGeometry = new THREE.ExtrudeGeometry(
-              fillShape,
-              extrudeSettings,
-            );
-            const fillMaterial = new THREE.MeshStandardMaterial(
-              sharedMaterialOptions,
-            );
-            const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
-            fillMesh.castShadow = true;
-            fillMesh.receiveShadow = true;
-            fillMesh.scale.set(
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_SCALE,
-              STAGE3_LETTER_Z_SCALE,
-            );
-            group.add(fillMesh);
-            meshes.push(fillMesh);
-          });
-
-          centerGroupGeometries(meshes);
-          meshes.forEach((mesh) => {
-            if (!mesh.geometry || !mesh.geometry.boundingBox) {
-              mesh.geometry?.computeBoundingBox();
-            }
-          });
-
-          // outline: 먼저 push 된 메쉬, fill: 그 다음 메쉬
-          // meshes 배열에서 짝수 index를 OUTLINE, 홀수 index를 FILL로 간주
-          meshes.forEach((mesh, idx) => {
-            mesh.position.z +=
-              idx % 2 === 0 ? -STAGE3_OUTLINE_Z_OFFSET : STAGE3_FILL_Z_OFFSET;
-          });
+          const { group } = built;
+          group.userData.isStage3Letter = true;
 
           group.updateMatrixWorld(true);
           const box = new THREE.Box3().setFromObject(group);
           const letterBottomOffset = Math.max(0, -box.min.y);
           const landingY = groundY + letterBottomOffset;
 
-          // 그룹 origin은 landingY에 맞춰 두므로, 시작 높이도 landingY 기준(0키 재낙하와 동일). groundY만 쓰면 밑면이 지면 아래로 내려갈 수 있음.
           const startY = landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
           const spawnX = config.letterSpawnXZ?.x ?? 0;
           const spawnZ = config.letterSpawnXZ?.z ?? 0;
@@ -1797,7 +1698,7 @@ export function Stage3() {
           group.rotation.set(0, 0, 0);
           scene.add(group);
 
-          const speedFactor = 0.6 + Math.random() * 0.4; // 0.6~1.0
+          const speedFactor = 0.6 + Math.random() * 0.4;
           const gravity = STAGE3_GRAVITY * speedFactor;
           const initialVy =
             (STAGE3_INITIAL_VY - Math.random() * 0.3) * speedFactor;
@@ -2003,6 +1904,48 @@ export function Stage3() {
     return triangles;
   }
 
+  /** 자음/모음(shape) 단위로 분할 — shape가 2개 이상이면 한 번에 2개까지 묶어 떨어짐 */
+  function partitionTrianglesByShape(triangles) {
+    const byShape = new Map();
+    const _c = new THREE.Vector3();
+    for (const tri of triangles) {
+      const idx = tri.meshIndex ?? 0;
+      if (!byShape.has(idx)) byShape.set(idx, []);
+      byShape.get(idx).push(tri);
+    }
+    const shapeCenters = [];
+    for (const [, list] of byShape) {
+      _c.set(0, 0, 0);
+      for (const t of list) _c.add(t.p0).add(t.p1).add(t.p2);
+      _c.multiplyScalar(1 / (list.length * 3));
+      shapeCenters.push({ list, centroidX: _c.x });
+    }
+    shapeCenters.sort((a, b) => a.centroidX - b.centroidX);
+    const fromLeft = Math.random() < 0.5;
+    const n = shapeCenters.length;
+    const takeTwo = n >= 2;
+    /** @type {number[]} */
+    const takeIndices = [];
+    if (takeTwo) {
+      if (fromLeft) {
+        takeIndices.push(0, 1);
+      } else {
+        takeIndices.push(n - 1, n - 2);
+      }
+    } else {
+      takeIndices.push(fromLeft ? 0 : n - 1);
+    }
+    const takeSet = new Set(takeIndices);
+    const toFly = shapeCenters
+      .filter((_, i) => takeSet.has(i))
+      .flatMap((s) => s.list);
+    const remaining = shapeCenters
+      .filter((_, i) => !takeSet.has(i))
+      .flatMap((s) => s.list);
+    if (toFly.length === 0) return { remaining: triangles, fragments: [] };
+    return { remaining, fragments: [toFly] };
+  }
+
   /** 절단면 위 정점: x를 cutX로 고정, 노멀은 평면 법선(단무지 썬 것처럼 깔끔한 단면) */
   const CUT_NORMAL_LEFT = new THREE.Vector3(1, 0, 0);
   const CUT_NORMAL_RIGHT = new THREE.Vector3(-1, 0, 0);
@@ -2203,7 +2146,19 @@ export function Stage3() {
     ).clone();
     let best = null;
     let bestDist = HIT_RANGE;
+    if (letterState?.landed && letterState.hitCount < HITS_TO_DESTROY) {
+      const d = letterState.group.position.distanceTo(origin);
+      if (d < bestDist) {
+        bestDist = d;
+        best = {
+          type: "letter",
+          group: letterState.group,
+          groundY: letterState.groundY,
+        };
+      }
+    }
     for (let i = 0; i < fragments.length; i++) {
+      if (fragments[i].age >= FRAGMENT_FADE_START) continue;
       const d = fragments[i].group.position.distanceTo(origin);
       if (d < bestDist) {
         bestDist = d;
@@ -2231,9 +2186,70 @@ export function Stage3() {
     };
   }
 
+  function pickRandomFlowerAssetUrl() {
+    const rel =
+      FRAGMENT_FLOWER_PATHS[
+        Math.floor(Math.random() * FRAGMENT_FLOWER_PATHS.length)
+      ];
+    return resolvePublicAssetUrl(rel);
+  }
+
+  function disposeStandaloneFlowerGroup(g) {
+    if (!g) return;
+    if (sceneRef) sceneRef.remove(g);
+    g.traverse((child) => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          const m = child.material;
+          if (Array.isArray(m)) m.forEach((x) => x.dispose());
+          else m.dispose();
+        }
+      }
+    });
+  }
+
+  function updateStandaloneFlowers(delta) {
+    for (let i = standaloneFlowers.length - 1; i >= 0; i--) {
+      const s = standaloneFlowers[i];
+      if (s.age >= FLOWER_BLOOM_DURATION) continue;
+      s.age += delta;
+      if (s.age < FLOWER_BLOOM_DURATION) {
+        const bt = s.age / FLOWER_BLOOM_DURATION;
+        const bloomEase = 1 - (1 - bt) ** 3;
+        s.group.scale.setScalar(bloomEase * FLOWER_SCALE);
+      } else {
+        s.group.scale.setScalar(FLOWER_SCALE);
+      }
+    }
+  }
+
+  function spawnFlowerAt(x, z, groundY) {
+    if (!sceneRef) return;
+    const url = pickRandomFlowerAssetUrl();
+    const gy = groundY ?? stage3GroundY;
+    void loadGltfTemplateCached(url)
+      .then((gltf) => {
+        if (!isStage3Active || !sceneRef) return;
+        const flower = gltf.scene.clone(true);
+        flower.position.set(x, gy + FLOWER_Y_OFFSET, z);
+        flower.rotation.y = Math.random() * Math.PI * 2;
+        flower.traverse((ch) => {
+          if (ch instanceof THREE.Mesh) {
+            ch.castShadow = true;
+            ch.receiveShadow = true;
+          }
+        });
+        flower.scale.setScalar(0);
+        sceneRef.add(flower);
+        standaloneFlowers.push({ group: flower, age: 0 });
+      })
+      .catch(() => {});
+  }
+
   /** fragment 슬롯을 풀에 반환 (geometry/material dispose) */
   function releaseFragment(f) {
-    sceneRef.remove(f.group);
+    sceneRef?.remove(f.group);
     if (f.group.geometry) {
       f.group.geometry.dispose();
       f.group.geometry = null;
@@ -2264,15 +2280,16 @@ export function Stage3() {
         Math.random() * Math.PI,
         Math.random() * Math.PI,
       );
+      const mul = FRAGMENT_BURST_IMPULSE_MUL;
       slot.velocity.set(
-        (Math.random() - 0.5) * 6,
-        Math.random() * 2 + 3,
-        (Math.random() - 0.5) * 6,
+        (Math.random() - 0.5) * 6 * mul,
+        (Math.random() * 2 + 3) * mul,
+        (Math.random() - 0.5) * 6 * mul,
       );
       slot.angularVelocity.set(
-        (Math.random() - 0.5) * 4,
-        (Math.random() - 0.5) * 4,
-        (Math.random() - 0.5) * 4,
+        (Math.random() - 0.5) * 4 * mul,
+        (Math.random() - 0.5) * 4 * mul,
+        (Math.random() - 0.5) * 4 * mul,
       );
       sceneRef.add(slot.group);
       fragments.push({
@@ -2281,30 +2298,17 @@ export function Stage3() {
         angularVelocity: slot.angularVelocity,
         age: 0,
         groundY,
+        flowerSpawned: false,
       });
     }
   }
 
   function onEnterHit() {
     if (!sceneRef) return;
-    const origin = (
-      character?.getPosition?.() ??
-      cameraRef?.position ??
-      new THREE.Vector3(0, 0, 0)
-    ).clone();
-    if (letterState?.landed) {
-      const d = letterState.group.position.distanceTo(origin);
-      if (d <= WORRY_INTERACT_DIST) {
-        character?.playHammerCue?.();
-        shatterWorryLetterCompletely();
-        textDestroyed = true;
-        tryDispatchWorryCompletionCelebration();
-        return;
-      }
-    }
-
     const target = getHitTarget();
     if (!target) return;
+
+    character?.playHammerCue?.();
 
     const mat = new THREE.MeshStandardMaterial({
       color: 0x2e2e2e,
@@ -2334,16 +2338,17 @@ export function Stage3() {
         const geom = trianglesToGeometry(remaining, fragCenter);
         if (geom) {
           const slot = allocFragment(geom, mat);
+          const rmul = FRAGMENT_BURST_IMPULSE_MUL;
           slot.group.position.copy(fragCenter);
           slot.velocity.set(
-            (Math.random() - 0.5) * 5,
-            Math.random() * 1.5 + 2.5,
-            (Math.random() - 0.5) * 5,
+            (Math.random() - 0.5) * 5 * rmul,
+            (Math.random() * 1.5 + 2.5) * rmul,
+            (Math.random() - 0.5) * 5 * rmul,
           );
           slot.angularVelocity.set(
-            (Math.random() - 0.5) * 3,
-            (Math.random() - 0.5) * 3,
-            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 3 * rmul,
+            (Math.random() - 0.5) * 3 * rmul,
+            (Math.random() - 0.5) * 3 * rmul,
           );
           sceneRef.add(slot.group);
           fragments.push({
@@ -2352,11 +2357,83 @@ export function Stage3() {
             angularVelocity: slot.angularVelocity,
             age: 0,
             groundY: target.groundY,
+            flowerSpawned: false,
           });
         }
       }
       return;
     }
+
+    const group = target.group;
+    const triangles = collectTrianglesFromGroup(group);
+    if (triangles.length === 0) return;
+
+    const hasMultipleShapes =
+      new Set(triangles.map((t) => t.meshIndex ?? 0)).size > 1;
+    const { remaining, fragments: fragTriangles } = hasMultipleShapes
+      ? partitionTrianglesByShape(triangles)
+      : partitionTrianglesOneSlice(triangles, group, FRACTION_PER_HIT);
+
+    createFragmentMeshes(fragTriangles, mat, target.groundY);
+
+    const hitCount = ++letterState.hitCount;
+
+    if (remaining.length === 0 || hitCount >= HITS_TO_DESTROY) {
+      sceneRef.remove(group);
+      disposeHandwritingSvgPlaneGroup(group);
+      letterState = null;
+      textDestroyed = true;
+      tryDispatchWorryCompletionCelebration();
+      return;
+    }
+
+    const letterMaterial = group.children.find(
+      (c) => c.isMesh && c.material,
+    )?.material;
+    /** Slice merge is single BufferGeometry — use cap (textured) material only if array. */
+    const remMat = Array.isArray(letterMaterial)
+      ? letterMaterial[0].clone()
+      : letterMaterial
+        ? letterMaterial.clone()
+        : mat.clone();
+    if (!remMat.transparent) {
+      remMat.transparent = true;
+      remMat.opacity = 1;
+    }
+
+    const remainingCenter = new THREE.Vector3(0, 0, 0);
+    for (const tri of remaining) {
+      remainingCenter.add(tri.p0).add(tri.p1).add(tri.p2);
+    }
+    remainingCenter.multiplyScalar(1 / (remaining.length * 3));
+    const invWorld = new THREE.Matrix4().copy(group.matrixWorld).invert();
+    const remainingCenterLocal = remainingCenter.clone().applyMatrix4(invWorld);
+    for (const tri of remaining) {
+      tri.p0.applyMatrix4(invWorld).sub(remainingCenterLocal);
+      tri.p1.applyMatrix4(invWorld).sub(remainingCenterLocal);
+      tri.p2.applyMatrix4(invWorld).sub(remainingCenterLocal);
+      tri.n0 = tri.n0.clone().transformDirection(invWorld);
+      tri.n1 = tri.n1.clone().transformDirection(invWorld);
+      tri.n2 = tri.n2.clone().transformDirection(invWorld);
+    }
+    const remainingGeom = trianglesToGeometry(
+      remaining,
+      new THREE.Vector3(0, 0, 0),
+    );
+    if (!remainingGeom) {
+      letterState = null;
+      return;
+    }
+    const remainingMesh = new THREE.Mesh(remainingGeom, remMat);
+    remainingMesh.castShadow = true;
+    remainingMesh.receiveShadow = true;
+    while (group.children.length > 0) {
+      const old = group.children[0];
+      group.remove(old);
+      disposeHandwritingSvgPlaneGroup(old);
+    }
+    group.add(remainingMesh);
+    group.position.copy(remainingCenter);
   }
 
   function updateFragments(delta) {
@@ -2376,15 +2453,22 @@ export function Stage3() {
         f.angularVelocity.x *= FRAGMENT_GROUND_FRICTION;
         f.angularVelocity.y *= FRAGMENT_GROUND_FRICTION;
         f.angularVelocity.z *= FRAGMENT_GROUND_FRICTION;
+        if (!f.flowerSpawned) {
+          f.flowerSpawned = true;
+          spawnFlowerAt(f.group.position.x, f.group.position.z, groundY);
+        }
       }
       f.group.rotation.x += f.angularVelocity.x * delta;
       f.group.rotation.y += f.angularVelocity.y * delta;
       f.group.rotation.z += f.angularVelocity.z * delta;
       f.age += delta;
       if (f.age >= FRAGMENT_FADE_START) {
-        const t =
-          (f.age - FRAGMENT_FADE_START) /
-          (FRAGMENT_FADE_END - FRAGMENT_FADE_START);
+        const fadeDur = FRAGMENT_FADE_END - FRAGMENT_FADE_START;
+        const t = THREE.MathUtils.clamp(
+          (f.age - FRAGMENT_FADE_START) / fadeDur,
+          0,
+          1,
+        );
         const opacity = Math.max(0, 1 - t);
         if (f.group.material) f.group.material.opacity = opacity;
       }
@@ -2611,6 +2695,7 @@ export function Stage3() {
       updateCameraIntro(delta);
       updateLetter(delta, this.camera);
       updateFragments(delta);
+      updateStandaloneFlowers(delta);
       updateSpawnedIceCreams(delta);
       if (character) {
         character.update(delta, this.camera, {
@@ -2800,6 +2885,8 @@ export function Stage3() {
       }
 
       removeAllLetterGroupsFromScene(scene);
+      standaloneFlowers.forEach((s) => disposeStandaloneFlowerGroup(s.group));
+      standaloneFlowers.length = 0;
       fragments.forEach((f) => releaseFragment(f));
       fragments.length = 0;
       fragmentPool.forEach((slot) => {

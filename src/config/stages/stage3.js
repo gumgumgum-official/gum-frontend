@@ -11,6 +11,8 @@ export const STAGE3_CONFIG = {
    * 낙하 글자 시작 XZ (월드; island GLB 원점 기준).
    */
   letterSpawnXZ: { x: 8.56, z: -33.72 },
+  /** SVG 원본 크기와 무관하게 낙하 글자 그룹이 차지할 목표 월드 높이(Y) */
+  letterTargetHeight: 2.7,
   camera: {
     fov: 42.0,
     near: 0.1,

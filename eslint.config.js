@@ -37,6 +37,8 @@ export default [
         import: "readonly",
         URL: "readonly",
         URLSearchParams: "readonly",
+        Blob: "readonly",
+        Image: "readonly",
         fetch: "readonly",
         localStorage: "readonly",
         CustomEvent: "readonly",

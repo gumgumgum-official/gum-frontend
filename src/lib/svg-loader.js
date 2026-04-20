@@ -45,6 +45,27 @@ export function parseSVGToShapes(svgString) {
 }
 
 /**
+ * SVG → Shapes for ExtrudeGeometry (holes / compound paths via ShapePath.toShapes).
+ * Shapes keep SVGLoader curves (no getPoints polygonization) so extrusion stays smooth;
+ * Stage3 flips Y on the extruded geometry after scaling.
+ * @param {string} svgString
+ * @returns {THREE.Shape[]}
+ */
+export function parseSVGToExtrudeShapes(svgString) {
+  const loader = new SVGLoader();
+  const svgData = loader.parse(svgString);
+  /** @type {THREE.Shape[]} */
+  const out = [];
+  for (const path of svgData.paths) {
+    const pathShapes = path.toShapes(false);
+    for (const sh of pathShapes) {
+      out.push(sh);
+    }
+  }
+  return out;
+}
+
+/**
  * 2D Shape를 중심 기준으로 확대해 획 두께를 키운 새 Shape 배열 반환.
  * SVG에서 얇게 그려진 선도 두껍게 보이게 할 수 있음.
  * @param {THREE.Shape[]} shapes

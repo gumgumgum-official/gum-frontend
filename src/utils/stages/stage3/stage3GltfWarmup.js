@@ -20,10 +20,20 @@ function getStage3PrewarmAbsoluteUrls() {
   urls.push(resolvePublicAssetUrl(charIdlePath));
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
-    "/models/common/gum_walk_dogle.glb";
+    "/models/common/gum_walk_final.glb";
   urls.push(resolvePublicAssetUrl(gumPath));
   for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
     urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
+  }
+  for (const rel of [
+    "/models/common/flowers/pink2.glb",
+    "/models/common/flowers/white2.glb",
+    "/models/common/flowers/red2.glb",
+    "/models/common/flowers/purple2.glb",
+    "/models/common/flowers/pastelpink2.glb",
+    "/models/common/flowers/blue3.glb",
+  ]) {
+    urls.push(resolvePublicAssetUrl(rel));
   }
   return [...new Set(urls)];
 }

@@ -240,6 +240,7 @@
  * @property {Stage3PropConfig} [signs]
  * @property {Stage3PropConfig} [tent]
  * @property {{ x?: number; z?: number }} [letterSpawnXZ] - Stage3 낙하 글자 시작 위치(월드 XZ, 원점 기준)
+ * @property {number} [letterTargetHeight] - SVG 원본 크기와 무관하게 글자 그룹의 목표 월드 높이(Y)
  */
 
 export {};
