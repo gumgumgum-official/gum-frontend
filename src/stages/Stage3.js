@@ -627,9 +627,9 @@ export function Stage3() {
       <div class="stage3-stamp-panel stage3-stamp-panel--hidden" aria-label="이스터에그 진행">
         <div class="stage3-stamp-title">이스터에그 찾기</div>
         <div class="stage3-stamp-slots">
-          <span class="stage3-stamp-slot" data-idx="0">🔲</span>
-          <span class="stage3-stamp-slot" data-idx="1">🔲</span>
-          <span class="stage3-stamp-slot" data-idx="2">🔲</span>
+          <span class="stage3-stamp-slot" data-idx="0">🥚</span>
+          <span class="stage3-stamp-slot" data-idx="1">🥚</span>
+          <span class="stage3-stamp-slot" data-idx="2">🥚</span>
         </div>
       </div>
     `;
@@ -727,7 +727,7 @@ export function Stage3() {
     const slots = stampUiRoot.querySelectorAll(".stage3-stamp-slot");
     slots.forEach((el, i) => {
       const filled = i < count;
-      el.textContent = filled ? "🌟" : "🔲";
+      el.textContent = filled ? "🌟" : "🥚";
       el.classList.toggle("filled", filled);
     });
   }
