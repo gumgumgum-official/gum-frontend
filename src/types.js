@@ -136,6 +136,10 @@
  * @property {number} boundsPadding - 바운드 경계 여유 공간
  * @property {{x: number, y: number, z: number}} cameraOffset - 캐릭터 뒤 카메라 오프셋
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
+ * @property {number} [cameraYawAssistMaxRad] - INT 오브제가 프러스텀 밖일 때 카메라 오프셋 Y축 회전 최대(rad)
+ * @property {number} [cameraYawAssistLerp] - 보조 각 스무딩(대략 60fps 기준 0~1에 가까운 계수; delta에 스케일됨)
+ * @property {number} [cameraYawAssistMaxDistance] - 보조 대상으로 볼 최대 캐릭터–오브제 거리(m)
+ * @property {boolean} [cameraYawAssistOnlyWhenMoving] - true면 실제 이동 중에만 보조(기본 true)
  * @property {number} [walkSoundVolume] - 이동(걷기) 루프 사운드 볼륨 0~1
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
  * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정

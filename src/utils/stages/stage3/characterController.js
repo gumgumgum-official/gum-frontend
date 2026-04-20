@@ -25,7 +25,11 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *     backgroundBounds: import("three").Box3,
  *     staticColliderBoxes?: import("./islandStaticColliders.js").IslandColliderAabb[],
  *   ) => void,
- *   update: (delta: number, camera: import("three").Camera) => void,
+ *   update: (
+ *     delta: number,
+ *     camera: import("three").Camera,
+ *     options?: { skipCameraFollow?: boolean; cameraYawAssistRad?: number },
+ *   ) => void,
  *   cleanup: () => void,
  *   getPosition: () => import("three").Vector3 | null,
  *   getYaw: () => number | null,
@@ -94,6 +98,7 @@ export function createCharacterController({
   const _cameraOffset = new THREE.Vector3();
   const _targetPosition = new THREE.Vector3();
   const _lookAtPosition = new THREE.Vector3();
+  const _worldUp = new THREE.Vector3(0, 1, 0);
   const ANIMATION_CROSS_FADE_SEC = 0.16;
 
   function setAnimationMode(mode) {
@@ -269,7 +274,7 @@ export function createCharacterController({
     /**
      * @param {number} delta
      * @param {THREE.Camera} camera
-     * @param {{ skipCameraFollow?: boolean }} [options] - skipCameraFollow: true면 카메라 추적 생략 (OrbitControls 사용 시)
+     * @param {{ skipCameraFollow?: boolean; cameraYawAssistRad?: number }} [options] - skipCameraFollow: true면 카메라 추적 생략 (OrbitControls 사용 시). cameraYawAssistRad: 캐릭터 기준 Y축으로 cameraOffset 회전(rad)
      */
     update(delta, camera, options = {}) {
       if (!characterModel || !backgroundBounds) return;
@@ -370,6 +375,10 @@ export function createCharacterController({
       // 카메라 추적 (OrbitControls 사용 시에는 스킵)
       if (!options.skipCameraFollow) {
         _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
+        const yawAssist = Number(options.cameraYawAssistRad ?? 0);
+        if (yawAssist !== 0) {
+          _cameraOffset.applyAxisAngle(_worldUp, yawAssist);
+        }
         _targetPosition.copy(characterModel.position).add(_cameraOffset);
         camera.position.lerp(_targetPosition, cameraLerpFactor);
 

@@ -254,6 +254,9 @@ export function Stage3() {
   }
   /** island GLB 안 INT_* 서브트리의 Mesh만 (레이캐스트) */
   const intRaycastMeshes = [];
+  /** 카메라 yaw assist용 INT 월드 바운딩 스피어(섬 정적 가정) */
+  const cameraAssistTargets = [];
+  let smoothedCameraYawAssist = 0;
   /** INT_StreetLight* 월드 좌표 (근접 사운드 트리거용) */
   const streetLightWorldPositions = [];
   let wasNearStreetLight = false;
@@ -337,6 +340,10 @@ export function Stage3() {
   const _iceCartQuat = new THREE.Quaternion();
   const _iceModelCenter = new THREE.Vector3();
   const _iceModelSize = new THREE.Vector3();
+  const _camAssistBox = new THREE.Box3();
+  const _camAssistSphere = new THREE.Sphere();
+  const _camProjView = new THREE.Matrix4();
+  const _camFrustum = new THREE.Frustum();
 
   function getCharacterFollowPose(outPos, outLookAt) {
     if (!character) return false;
@@ -348,6 +355,90 @@ export function Stage3() {
     outLookAt.copy(pos);
     outLookAt.y += lookAtHeight;
     return true;
+  }
+
+  /**
+   * INT 오브제가 카메라 프러스텀 밖이면 기본 cameraOffset 대비 Y축 보조 각 목표를 만든다.
+   * 지형에 가려진 경우는 비-INT 메시 raycast가 꺼져 있어 미처리 — 필요 시 전용 레이어로 확장 가능.
+   * @param {number} delta
+   * @param {THREE.PerspectiveCamera} camera
+   * @param {THREE.Vector3} charPos
+   * @param {boolean} isMoving
+   */
+  function updateStage3CameraYawAssist(delta, camera, charPos, isMoving) {
+    const ch = config.character;
+    const maxRad = ch.cameraYawAssistMaxRad ?? 0.38;
+    const maxDist = ch.cameraYawAssistMaxDistance ?? 42;
+    const lerpK = ch.cameraYawAssistLerp ?? 0.09;
+    const onlyMoving = ch.cameraYawAssistOnlyWhenMoving !== false;
+    const decayT = Math.min(1, lerpK * delta * 60);
+
+    if (!cameraIntro.completed || cameraIntro.active) {
+      smoothedCameraYawAssist = THREE.MathUtils.lerp(
+        smoothedCameraYawAssist,
+        0,
+        Math.min(1, 8 * delta),
+      );
+      return smoothedCameraYawAssist;
+    }
+
+    if (cameraAssistTargets.length === 0) {
+      smoothedCameraYawAssist = THREE.MathUtils.lerp(
+        smoothedCameraYawAssist,
+        0,
+        decayT,
+      );
+      return smoothedCameraYawAssist;
+    }
+
+    let targetAssist = 0;
+    if (onlyMoving && !isMoving) {
+      targetAssist = 0;
+    } else {
+      camera.updateMatrixWorld(true);
+      _camProjView.multiplyMatrices(
+        camera.projectionMatrix,
+        camera.matrixWorldInverse,
+      );
+      _camFrustum.setFromProjectionMatrix(_camProjView);
+
+      const ox = ch.cameraOffset?.x ?? 0;
+      const oz = ch.cameraOffset?.z ?? 8;
+      const defaultAngle = Math.atan2(ox, oz);
+      const maxDistSq = maxDist * maxDist;
+      const steer = 0.42;
+
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < cameraAssistTargets.length; i++) {
+        const sphere = cameraAssistTargets[i].sphere;
+        if (_camFrustum.intersectsSphere(sphere)) continue;
+        const dx = sphere.center.x - charPos.x;
+        const dz = sphere.center.z - charPos.z;
+        const distSq = dx * dx + dz * dz;
+        if (distSq > maxDistSq || distSq < 1e-6) continue;
+        const angleObj = Math.atan2(dx, dz);
+        const diff = Math.atan2(
+          Math.sin(angleObj - defaultAngle),
+          Math.cos(angleObj - defaultAngle),
+        );
+        sum += THREE.MathUtils.clamp(diff * steer, -maxRad, maxRad);
+        n++;
+      }
+      targetAssist = n > 0 ? sum / n : 0;
+    }
+
+    smoothedCameraYawAssist = THREE.MathUtils.lerp(
+      smoothedCameraYawAssist,
+      targetAssist,
+      decayT,
+    );
+    smoothedCameraYawAssist = THREE.MathUtils.clamp(
+      smoothedCameraYawAssist,
+      -maxRad,
+      maxRad,
+    );
+    return smoothedCameraYawAssist;
   }
 
   function startCameraIntro(center, bounds) {
@@ -730,6 +821,8 @@ export function Stage3() {
   /** island2 로드 후: INT_* 노드에서 레이캐스트 메시·refs 등록 */
   function registerIslandInteractions(islandModel) {
     intRaycastMeshes.length = 0;
+    cameraAssistTargets.length = 0;
+    smoothedCameraYawAssist = 0;
     iceCreamCartRef = null;
     gameMachineRef = null;
     if (unlistenMinigameClose) {
@@ -738,6 +831,7 @@ export function Stage3() {
     }
 
     const meshSet = new Set();
+    const assistRootSet = new Set();
     const rootNames = [];
     const nonIntCartCandidates = [];
     islandModel.traverse((obj) => {
@@ -755,6 +849,9 @@ export function Stage3() {
       rootNames.push(obj.name);
       const suffix = obj.name.slice(INT_PREFIX.length);
       const intTarget = intSuffixToTarget(suffix);
+      if (intTarget != null) {
+        assistRootSet.add(obj);
+      }
       if (intTarget === "gameMachine") gameMachineRef = obj;
       if (intTarget === "icecream") iceCreamCartRef = obj;
       if (intTarget === "clock") {
@@ -782,6 +879,16 @@ export function Stage3() {
         );
       }
     }
+    if (iceCreamCartRef) {
+      assistRootSet.add(iceCreamCartRef);
+    }
+    for (const root of assistRootSet) {
+      root.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(root);
+      _camAssistBox.getBoundingSphere(_camAssistSphere);
+      cameraAssistTargets.push({ sphere: _camAssistSphere.clone() });
+    }
+
     intRaycastMeshes.push(...meshSet);
 
     streetLightWorldPositions.length = 0;
@@ -2697,9 +2804,27 @@ export function Stage3() {
       updateFragments(delta);
       updateStandaloneFlowers(delta);
       updateSpawnedIceCreams(delta);
+      let cameraYawAssistRad = 0;
+      if (
+        cameraRef &&
+        character &&
+        cameraIntro.completed &&
+        !cameraIntro.active
+      ) {
+        const charPos = character.getPosition?.();
+        if (charPos) {
+          cameraYawAssistRad = updateStage3CameraYawAssist(
+            delta,
+            cameraRef,
+            charPos,
+            character.getIsMoving?.() ?? false,
+          );
+        }
+      }
       if (character) {
         character.update(delta, this.camera, {
           skipCameraFollow: cameraIntro.active || !cameraIntro.completed,
+          cameraYawAssistRad,
         });
       }
       updateStreetLightProximitySound();
@@ -2788,6 +2913,8 @@ export function Stage3() {
       cameraIntro.transitioning = false;
       cameraIntro.completed = false;
       cameraIntro.introTopViewCommitted = false;
+      smoothedCameraYawAssist = 0;
+      cameraAssistTargets.length = 0;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,
