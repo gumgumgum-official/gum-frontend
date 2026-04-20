@@ -257,6 +257,8 @@ export function Stage3() {
   /** 카메라 yaw assist용 INT 월드 바운딩 스피어(섬 정적 가정) */
   const cameraAssistTargets = [];
   let smoothedCameraYawAssist = 0;
+  /** 프러스텀 on/off에 덜 민감하도록 목표 각을 한 번 더 스무딩 */
+  let smoothedCameraYawAssistDemand = 0;
   /** INT_StreetLight* 월드 좌표 (근접 사운드 트리거용) */
   const streetLightWorldPositions = [];
   let wasNearStreetLight = false;
@@ -369,32 +371,38 @@ export function Stage3() {
     const ch = config.character;
     const maxRad = ch.cameraYawAssistMaxRad ?? 0.38;
     const maxDist = ch.cameraYawAssistMaxDistance ?? 42;
-    const lerpK = ch.cameraYawAssistLerp ?? 0.09;
     const onlyMoving = ch.cameraYawAssistOnlyWhenMoving !== false;
-    const decayT = Math.min(1, lerpK * delta * 60);
+    const lk = Math.max(ch.cameraYawAssistLerp ?? 0.09, 0.02);
+    const demandTau =
+      ch.cameraYawAssistDemandEaseSec ?? Math.max(0.2, 0.11 / lk);
+    const easeTau = ch.cameraYawAssistEaseSec ?? Math.max(0.28, 0.15 / lk);
+    const introDecayTau = 0.22;
+
+    /** @param {number} cur @param {number} tgt @param {number} tauSec */
+    function dampToward(cur, tgt, tauSec) {
+      if (tauSec <= 1e-4) return tgt;
+      const alpha = 1 - Math.exp(-delta / tauSec);
+      return cur + (tgt - cur) * alpha;
+    }
 
     if (!cameraIntro.completed || cameraIntro.active) {
-      smoothedCameraYawAssist = THREE.MathUtils.lerp(
-        smoothedCameraYawAssist,
+      smoothedCameraYawAssistDemand = dampToward(
+        smoothedCameraYawAssistDemand,
         0,
-        Math.min(1, 8 * delta),
+        introDecayTau,
+      );
+      smoothedCameraYawAssist = dampToward(
+        smoothedCameraYawAssist,
+        smoothedCameraYawAssistDemand,
+        introDecayTau * 0.85,
       );
       return smoothedCameraYawAssist;
     }
 
-    if (cameraAssistTargets.length === 0) {
-      smoothedCameraYawAssist = THREE.MathUtils.lerp(
-        smoothedCameraYawAssist,
-        0,
-        decayT,
-      );
-      return smoothedCameraYawAssist;
-    }
+    const returnTau = Math.max(0.14, ch.cameraYawAssistReturnEaseSec ?? 0.52);
 
-    let targetAssist = 0;
-    if (onlyMoving && !isMoving) {
-      targetAssist = 0;
-    } else {
+    let instantTarget = 0;
+    if (cameraAssistTargets.length > 0 && !(onlyMoving && !isMoving)) {
       camera.updateMatrixWorld(true);
       _camProjView.multiplyMatrices(
         camera.projectionMatrix,
@@ -406,7 +414,7 @@ export function Stage3() {
       const oz = ch.cameraOffset?.z ?? 8;
       const defaultAngle = Math.atan2(ox, oz);
       const maxDistSq = maxDist * maxDist;
-      const steer = 0.42;
+      const steer = 0.28;
 
       let sum = 0;
       let n = 0;
@@ -425,13 +433,39 @@ export function Stage3() {
         sum += THREE.MathUtils.clamp(diff * steer, -maxRad, maxRad);
         n++;
       }
-      targetAssist = n > 0 ? sum / n : 0;
+      instantTarget = n > 0 ? sum / n : 0;
     }
 
-    smoothedCameraYawAssist = THREE.MathUtils.lerp(
+    instantTarget = THREE.MathUtils.clamp(instantTarget, -maxRad, maxRad);
+
+    // 복귀: demand를 즉시 0에 맞추고 최종 각만 한 번 감쇠 → 정지 시 이중 지연·느린 풀림 완화
+    if (instantTarget === 0) {
+      smoothedCameraYawAssistDemand = 0;
+      smoothedCameraYawAssist = dampToward(
+        smoothedCameraYawAssist,
+        0,
+        returnTau,
+      );
+      if (Math.abs(smoothedCameraYawAssist) < 0.0018) {
+        smoothedCameraYawAssist = 0;
+      }
+      return smoothedCameraYawAssist;
+    }
+
+    smoothedCameraYawAssistDemand = dampToward(
+      smoothedCameraYawAssistDemand,
+      instantTarget,
+      demandTau,
+    );
+    smoothedCameraYawAssistDemand = THREE.MathUtils.clamp(
+      smoothedCameraYawAssistDemand,
+      -maxRad,
+      maxRad,
+    );
+    smoothedCameraYawAssist = dampToward(
       smoothedCameraYawAssist,
-      targetAssist,
-      decayT,
+      smoothedCameraYawAssistDemand,
+      easeTau,
     );
     smoothedCameraYawAssist = THREE.MathUtils.clamp(
       smoothedCameraYawAssist,
@@ -823,6 +857,7 @@ export function Stage3() {
     intRaycastMeshes.length = 0;
     cameraAssistTargets.length = 0;
     smoothedCameraYawAssist = 0;
+    smoothedCameraYawAssistDemand = 0;
     iceCreamCartRef = null;
     gameMachineRef = null;
     if (unlistenMinigameClose) {
@@ -2914,6 +2949,7 @@ export function Stage3() {
       cameraIntro.completed = false;
       cameraIntro.introTopViewCommitted = false;
       smoothedCameraYawAssist = 0;
+      smoothedCameraYawAssistDemand = 0;
       cameraAssistTargets.length = 0;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
