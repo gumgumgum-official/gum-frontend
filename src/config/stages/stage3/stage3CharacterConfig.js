@@ -14,6 +14,17 @@ export const STAGE3_CHARACTER_CONFIG = {
     boundsPadding: 0.5, // 바운드 경계 여유 공간 (가장자리 미끄러짐 방지)
     cameraOffset: { x: 0, y: 9, z: 25 }, // 캐릭터 뒤쪽 카메라 오프셋 (더 줌아웃)
     cameraLerpFactor: 0.1, // 카메라 부드러운 추적 강도
+    /** INT가 화면 프러스텀 밖이면 cameraOffset을 Y축으로 살짝 회전(지형 가림은 미처리; 레이캐스트 확장 가능) */
+    cameraYawAssistMaxRad: 0.32,
+    cameraYawAssistLerp: 0.09,
+    /** 프러스텀 경계 떨림 완화 — 목표 각 1차 스무딩(초, 지수 보간 time constant) */
+    cameraYawAssistDemandEaseSec: 0.34,
+    /** 카메라에 실제 적용되는 보조 각 2차 스무딩(초) */
+    cameraYawAssistEaseSec: 0.62,
+    /** 정지/시야 복귀 시 기본 각으로(초, 클수록 더 천천히·부드럽게) */
+    cameraYawAssistReturnEaseSec: 0.52,
+    cameraYawAssistMaxDistance: 42,
+    cameraYawAssistOnlyWhenMoving: true,
     walkSoundVolume: 0.04, // 이동 시 걷기 루프 볼륨 (0~1)
     lookAtHeightOffset: 0.9, // lookAt 시 캐릭터 기준점을 낮춰 화면에서 캐릭터를 살짝 위로 배치
     /** XZ 평면 원형 충돌 반경(m). 미설정 시 scale×0.22 (최소 0.2) */
