@@ -20,3 +20,13 @@ export const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
 
 export const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
 export const STAGE6_INTERACTION_UNLOCK_EVENT = "gum:stage6-interaction-unlock";
+
+export const AIRPORT_SUBTITLE_SHOW_EVENT =
+  "gum:airportAnnouncementSubtitle:show";
+export const AIRPORT_SUBTITLE_UPDATE_EVENT =
+  "gum:airportAnnouncementSubtitle:update";
+export const AIRPORT_SUBTITLE_HIDE_EVENT =
+  "gum:airportAnnouncementSubtitle:hide";
+
+export const AIRPORT_CHIME_SHOW_EVENT = "gum:airportAnnouncementChime:show";
+export const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";

@@ -15,6 +15,11 @@ import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC,
 } from "../config/stages/stage6AirportAnnouncement.js";
 import {
+  AIRPORT_CHIME_HIDE_EVENT,
+  AIRPORT_CHIME_SHOW_EVENT,
+  AIRPORT_SUBTITLE_HIDE_EVENT,
+  AIRPORT_SUBTITLE_SHOW_EVENT,
+  AIRPORT_SUBTITLE_UPDATE_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
   STAGE6_FINISH_EVENT,
   STAGE6_INT_CLICK_EVENT,
@@ -26,12 +31,6 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
-
-const AIRPORT_SUBTITLE_SHOW_EVENT = "gum:airportAnnouncementSubtitle:show";
-const AIRPORT_SUBTITLE_UPDATE_EVENT = "gum:airportAnnouncementSubtitle:update";
-const AIRPORT_SUBTITLE_HIDE_EVENT = "gum:airportAnnouncementSubtitle:hide";
-const AIRPORT_CHIME_SHOW_EVENT = "gum:airportAnnouncementChime:show";
-const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";
 const INT_PREFIX = "INT_";
 const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
 const ATM_OBJECT_NAME = "OBJ_ATM";
@@ -269,7 +268,12 @@ export function Stage6() {
     airplaneCallSignAudio.onplay = () => {
       window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_SHOW_EVENT));
       isAirportChimeVisible = true;
-      window.setTimeout(() => {
+      if (airplaneCallSignTimeoutId) {
+        window.clearTimeout(airplaneCallSignTimeoutId);
+        airplaneCallSignTimeoutId = 0;
+      }
+      airplaneCallSignTimeoutId = window.setTimeout(() => {
+        airplaneCallSignTimeoutId = 0;
         onStarted?.();
       }, 1000);
     };
@@ -619,7 +623,9 @@ export function Stage6() {
         if (isSceneInteractionLocked) return;
         const hit = getPointerHitTarget(event);
         if (!hit) return;
-        console.log(`[Stage6] INT click: ${hit.intName}`);
+        if (import.meta.env.DEV) {
+          console.log(`[Stage6] INT click: ${hit.intName}`);
+        }
         if (hit.target === "photobooth") {
           playPhotoboothCurtainSound();
         }

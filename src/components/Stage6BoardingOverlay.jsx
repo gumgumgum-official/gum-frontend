@@ -5,6 +5,9 @@ import {
 } from "../utils/stages/stage6/stage6LoadingTransition.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import {
+  AIRPORT_SUBTITLE_HIDE_EVENT,
+  AIRPORT_SUBTITLE_SHOW_EVENT,
+  AIRPORT_SUBTITLE_UPDATE_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
   STAGE6_FINISH_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
@@ -15,10 +18,6 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
   STAGE6_SUBTITLE_SHOW_EVENT,
 } from "../events/stage6Events.js";
-
-const AIRPORT_SUBTITLE_SHOW_EVENT = "gum:airportAnnouncementSubtitle:show";
-const AIRPORT_SUBTITLE_UPDATE_EVENT = "gum:airportAnnouncementSubtitle:update";
-const AIRPORT_SUBTITLE_HIDE_EVENT = "gum:airportAnnouncementSubtitle:hide";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
 /** '탑승권 발급받기' 클릭 시 재생 (랜덤 1종) */
@@ -156,12 +155,16 @@ export function Stage6BoardingOverlay() {
       }
     };
 
-    const onAirportSubtitleShow = (event) => {
+    const handleSubtitleShowEvent = (event) => {
       const text =
         typeof event?.detail?.text === "string" ? event.detail.text : "";
       if (!text) return;
       cancelSequence();
       showSubtitleNow(text);
+    };
+
+    const onAirportSubtitleShow = (event) => {
+      handleSubtitleShowEvent(event);
     };
 
     const onAirportSubtitleUpdate = (event) => {
@@ -178,11 +181,7 @@ export function Stage6BoardingOverlay() {
     };
 
     const onStage6SubtitleShow = (event) => {
-      const text =
-        typeof event?.detail?.text === "string" ? event.detail.text : "";
-      if (!text) return;
-      cancelSequence();
-      showSubtitleNow(text);
+      handleSubtitleShowEvent(event);
     };
 
     const onStage6SubtitleHide = () => {
@@ -287,6 +286,7 @@ export function Stage6BoardingOverlay() {
       if (event.key === "Escape") {
         setIsNameModalOpen(false);
         setIsOverlayOpen(false);
+        window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
       }
       if (event.key === "Enter" && isNameModalOpen) {
         event.preventDefault();

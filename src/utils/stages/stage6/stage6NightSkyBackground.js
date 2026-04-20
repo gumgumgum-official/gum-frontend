@@ -44,7 +44,17 @@ export function createStage6NightSkyBackground(options = {}) {
   canvas.height = H;
   const ctx = canvas.getContext("2d");
   if (!ctx) {
-    throw new Error("[stage6NightSkyBackground] 2D context unavailable");
+    console.warn("[stage6NightSkyBackground] 2D context unavailable");
+    const fallbackTexture = new THREE.CanvasTexture(canvas);
+    fallbackTexture.colorSpace = THREE.SRGBColorSpace;
+    fallbackTexture.needsUpdate = true;
+    return {
+      texture: fallbackTexture,
+      update: () => {},
+      dispose: () => {
+        fallbackTexture.dispose();
+      },
+    };
   }
 
   const br = (baseColor >> 16) & 255;

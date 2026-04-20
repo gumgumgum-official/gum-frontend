@@ -194,7 +194,7 @@ export function updateStage6LoadingTransition(deltaSec) {
   if (isTransitioning) {
     const d = typeof deltaSec === "number" && deltaSec > 0 ? deltaSec : 1 / 60;
     nightSkyBackground?.update(d);
-    airplaneProgress += PROGRESS_STEP;
+    airplaneProgress += PROGRESS_STEP * d * 60;
     if (airplaneModel) {
       applyPlanePositionFromProgress();
     }

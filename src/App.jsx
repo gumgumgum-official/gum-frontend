@@ -10,6 +10,8 @@ import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
 import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
 import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
 import {
+  AIRPORT_CHIME_HIDE_EVENT,
+  AIRPORT_CHIME_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
@@ -61,18 +63,12 @@ export function App() {
     const showChime = () => setShowAirportChime(true);
     const hideChime = () => setShowAirportChime(false);
 
-    window.addEventListener("gum:airportAnnouncementChime:show", showChime);
-    window.addEventListener("gum:airportAnnouncementChime:hide", hideChime);
+    window.addEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
+    window.addEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
 
     return () => {
-      window.removeEventListener(
-        "gum:airportAnnouncementChime:show",
-        showChime,
-      );
-      window.removeEventListener(
-        "gum:airportAnnouncementChime:hide",
-        hideChime,
-      );
+      window.removeEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
+      window.removeEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
     };
   }, []);
 
