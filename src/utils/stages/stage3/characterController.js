@@ -59,6 +59,12 @@ export function createCharacterController({
   let walkAudio = null;
   /** @type {import("gsap").core.Timeline | null} */
   let hammerTween = null;
+  /**
+   * Hammer 트윈은 rotation.x를 앞으로 기울였다가 원위치로 복귀하는 구조인데
+   * 이전 트윈을 중간에 kill한 시점의 rotation.x를 새 기준으로 삼으면
+   * 연타할수록 기울기가 누적된다. 최초 1회 rest 포즈를 캐싱해 항상 복귀 기준으로 사용.
+   */
+  let hammerRestX = null;
 
   const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
@@ -459,17 +465,18 @@ export function createCharacterController({
 
     playHammerCue() {
       if (!characterModel) return;
-      hammerTween?.kill();
       const m = characterModel;
-      const baseX = m.rotation.x;
+      if (hammerRestX === null) hammerRestX = m.rotation.x;
+      hammerTween?.kill();
+      m.rotation.x = hammerRestX;
       hammerTween = gsap.timeline();
       hammerTween.to(m.rotation, {
-        x: baseX - 0.52,
+        x: hammerRestX - 0.52,
         duration: 0.12,
         ease: "power2.out",
       });
       hammerTween.to(m.rotation, {
-        x: baseX,
+        x: hammerRestX,
         duration: 0.2,
         ease: "power2.inOut",
       });
