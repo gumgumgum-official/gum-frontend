@@ -271,10 +271,10 @@ export function createCharacterController({
       const keys = getKeys();
       _moveVector.set(0, 0, 0);
 
-      if (keys.ArrowUp) _moveVector.z -= 1;
-      if (keys.ArrowDown) _moveVector.z += 1;
-      if (keys.ArrowLeft) _moveVector.x -= 1;
-      if (keys.ArrowRight) _moveVector.x += 1;
+      if (keys.ArrowUp || keys.w || keys.W || keys.KeyW) _moveVector.z -= 1;
+      if (keys.ArrowDown || keys.s || keys.S || keys.KeyS) _moveVector.z += 1;
+      if (keys.ArrowLeft || keys.a || keys.A || keys.KeyA) _moveVector.x -= 1;
+      if (keys.ArrowRight || keys.d || keys.D || keys.KeyD) _moveVector.x += 1;
 
       const movingInput = _moveVector.length() > 0;
       let moved = false;

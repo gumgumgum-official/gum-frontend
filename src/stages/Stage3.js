@@ -304,6 +304,18 @@ export function Stage3() {
     "ArrowDown",
     "ArrowLeft",
     "ArrowRight",
+    "w",
+    "W",
+    "a",
+    "A",
+    "s",
+    "S",
+    "d",
+    "D",
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
   ]);
   let character = null;
   let gumFollowers = null;

@@ -20,12 +20,22 @@ export function createKeyboardInput(keyList) {
     if (event.key in keys) {
       keys[event.key] = true;
       event.preventDefault();
+      return;
+    }
+    if (event.code in keys) {
+      keys[event.code] = true;
+      event.preventDefault();
     }
   };
 
   const handleKeyUp = (event) => {
     if (event.key in keys) {
       keys[event.key] = false;
+      event.preventDefault();
+      return;
+    }
+    if (event.code in keys) {
+      keys[event.code] = false;
       event.preventDefault();
     }
   };
