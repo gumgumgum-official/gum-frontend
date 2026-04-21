@@ -174,6 +174,14 @@ export function Stage3() {
   /** `Portal_Vortex` ShaderMaterial — cleanup 시 null */
   /** @type {import("three").ShaderMaterial | null} */
   let portalVortexMaterial = null;
+  /** ANIM_Gumtoongji 애니메이션 믹서 */
+  /** @type {import("three").AnimationMixer | null} */
+  let gumtoongjiMixer = null;
+  /** 7개 클립 액션 목록 */
+  /** @type {import("three").AnimationAction[]} */
+  let gumtoongjiActions = [];
+  /** ANIM_Gumtoongji 레이캐스트용 메시 목록 */
+  const gumtoongjiRaycastMeshes = [];
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
   /** @type {{ toneMappingExposure: number, environmentIntensity: number, renderer: import("three").WebGLRenderer } | null} */
@@ -852,14 +860,84 @@ export function Stage3() {
     }, 0);
   }
 
+  const GUMTOONGJI_CLIP_NAMES = [
+    "ANIM_GumtoongjiAction",
+    "Eye_default_LAction",
+    "Eye_default_RAction",
+    "modelAction",
+    "Mouth_smileAction",
+    "Paw_LAction.001",
+    "Paw_RAction.001",
+  ];
+
+  function playGumtoongjiAnimation() {
+    for (const action of gumtoongjiActions) action.reset().play();
+  }
+
   /** island2 로드 후: INT_* 노드에서 레이캐스트 메시·refs 등록 */
-  function registerIslandInteractions(islandModel) {
+  function registerIslandInteractions(islandModel, animations = []) {
     intRaycastMeshes.length = 0;
+    gumtoongjiRaycastMeshes.length = 0;
     cameraAssistTargets.length = 0;
     smoothedCameraYawAssist = 0;
     smoothedCameraYawAssistDemand = 0;
     iceCreamCartRef = null;
     gameMachineRef = null;
+
+    // ANIM_Gumtoongji 캐릭터 애니메이션 설정
+    if (gumtoongjiMixer) {
+      gumtoongjiMixer.stopAllAction();
+      gumtoongjiMixer = null;
+    }
+    gumtoongjiActions = [];
+    let gumtoongjiRoot = null;
+    islandModel.traverse((obj) => {
+      if (obj.name === "ANIM_Gumtoongji") gumtoongjiRoot = obj;
+    });
+
+    console.log("[Gumtoongji] root 탐색 결과:", gumtoongjiRoot);
+    console.log(
+      "[Gumtoongji] animations 수:",
+      animations.length,
+      animations.map((a) => a.name),
+    );
+    if (gumtoongjiRoot && animations.length > 0) {
+      gumtoongjiRoot.traverse((obj) => {
+        if (obj.isSkinnedMesh) {
+          obj.frustumCulled = false;
+          // backgroundLoader가 비-INT 메시의 raycast를 비활성화했으므로 복구
+          obj.raycast = THREE.SkinnedMesh.prototype.raycast;
+        }
+        if (obj.isMesh && !obj.isSkinnedMesh) {
+          obj.raycast = THREE.Mesh.prototype.raycast;
+        }
+        if (obj.isMesh || obj.isSkinnedMesh) gumtoongjiRaycastMeshes.push(obj);
+      });
+      console.log(
+        "[Gumtoongji] 레이캐스트 메시 수:",
+        gumtoongjiRaycastMeshes.length,
+      );
+      gumtoongjiMixer = new THREE.AnimationMixer(gumtoongjiRoot);
+      for (const name of GUMTOONGJI_CLIP_NAMES) {
+        const clip = THREE.AnimationClip.findByName(animations, name);
+        if (!clip) {
+          console.warn(`[Gumtoongji] clip 없음: ${name}`);
+          continue;
+        }
+        const action = gumtoongjiMixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        gumtoongjiActions.push(action);
+      }
+      console.log("[Gumtoongji] 액션 등록 수:", gumtoongjiActions.length);
+    } else {
+      console.warn(
+        "[Gumtoongji] 초기화 실패 — root:",
+        gumtoongjiRoot,
+        "/ animations:",
+        animations.length,
+      );
+    }
     if (unlistenMinigameClose) {
       unlistenMinigameClose();
       unlistenMinigameClose = null;
@@ -965,14 +1043,23 @@ export function Stage3() {
     }
   }
 
-  /** 레이캐스트: "icecream" | "notice" | "gameMachine" | "tent" | "portal" | "well" | "clock" | null */
+  /** 레이캐스트: "gumtoongji" | "icecream" | "notice" | "gameMachine" | "tent" | "portal" | "well" | "clock" | null */
   function getPointerHitTarget(clientX, clientY) {
     if (!cameraRef || !canvasRef || !sceneRef) return null;
-    if (intRaycastMeshes.length === 0) return null;
     const rect = canvasRef.getBoundingClientRect();
     _icePointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     _icePointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     _iceRaycaster.setFromCamera(_icePointer, cameraRef);
+
+    if (gumtoongjiRaycastMeshes.length > 0) {
+      const gHits = _iceRaycaster.intersectObjects(
+        gumtoongjiRaycastMeshes,
+        false,
+      );
+      if (gHits.length > 0) return "gumtoongji";
+    }
+
+    if (intRaycastMeshes.length === 0) return null;
     const hits = _iceRaycaster.intersectObjects(intRaycastMeshes, false);
     if (hits.length === 0) return null;
     // 같은 화면 위치에서 가장 앞이 INT_StreetLight 등(매핑 없음)이면 null이 되어 카트 클릭이 무시됨 → 뒤쪽 히트까지 순회
@@ -1183,6 +1270,15 @@ export function Stage3() {
 
     event.preventDefault();
     event.stopPropagation();
+
+    if (target === "gumtoongji") {
+      console.log(
+        "[Gumtoongji] 클릭 → 애니메이션 재생, 액션 수:",
+        gumtoongjiActions.length,
+      );
+      playGumtoongjiAnimation();
+      return;
+    }
 
     if (target === "portal") {
       if (portalTransitionInProgress) return;
@@ -2733,7 +2829,13 @@ export function Stage3() {
         glbLoader,
         config,
         getIsActive: () => isStage3Active,
-        onReady: ({ model, center, backgroundMaxY, backgroundBounds }) => {
+        onReady: ({
+          model,
+          center,
+          backgroundMaxY,
+          backgroundBounds,
+          animations,
+        }) => {
           backgroundModel = model;
           ensureStage3UiMounted();
           updateStampSlotsFilled(0);
@@ -2790,7 +2892,7 @@ export function Stage3() {
             startCameraIntro(center, backgroundBounds);
           }
 
-          registerIslandInteractions(model);
+          registerIslandInteractions(model, animations);
           portalVortexMaterial = applyPortalVortexToModel(model);
 
           gumFollowers = createGumFollowersController({
@@ -2830,6 +2932,7 @@ export function Stage3() {
     },
 
     update(delta) {
+      if (gumtoongjiMixer) gumtoongjiMixer.update(delta);
       if (debugControls) debugControls.update(delta);
       if (portalVortexMaterial) {
         portalVortexMaterial.uniforms.uTime.value += delta;
@@ -3074,6 +3177,13 @@ export function Stage3() {
         });
       });
       objects.length = 0;
+
+      if (gumtoongjiMixer) {
+        gumtoongjiMixer.stopAllAction();
+        gumtoongjiMixer = null;
+      }
+      gumtoongjiActions = [];
+      gumtoongjiRaycastMeshes.length = 0;
 
       if (backgroundModel) {
         scene.remove(backgroundModel);

@@ -146,7 +146,13 @@ export function loadStage3Background({
       scene.add(model);
       inspectModel(model, null, "배경 모델");
 
-      onReady({ model, center, backgroundMaxY, backgroundBounds });
+      onReady({
+        model,
+        center,
+        backgroundMaxY,
+        backgroundBounds,
+        animations: gltf.animations ?? [],
+      });
     })
     .catch((err) =>
       console.error(

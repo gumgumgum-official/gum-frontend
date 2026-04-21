@@ -3,6 +3,7 @@
  * 씬 인스턴스는 `deepCloneSceneForStage3Instance`로 분리한다.
  */
 
+import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
@@ -22,10 +23,13 @@ export function preloadStage3IslandTemplate(modelPathFromConfig) {
  * @param {import("three").Object3D} source
  */
 export function deepCloneSceneForStage3Instance(source) {
-  const root = source.clone(true);
+  // SkeletonUtils.clone()으로 뼈대(skeleton) 바인딩까지 정확히 복제한다.
+  // 일반 clone(true)은 SkinnedMesh의 bone 참조가 원본을 그대로 가리켜
+  // 애니메이션 재생 시 몸체가 움직이지 않는 문제가 생긴다.
+  const root = SkeletonUtils.clone(source);
   root.traverse((obj) => {
     const mesh = /** @type {import("three").Mesh} */ (obj);
-    if (mesh.isMesh) {
+    if (mesh.isMesh || mesh.isSkinnedMesh) {
       if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
       const mat = mesh.material;
       if (Array.isArray(mat)) {
