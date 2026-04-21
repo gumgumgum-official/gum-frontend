@@ -10,6 +10,11 @@
 export function createKeyboardInput(keyList) {
   /** @type {Record<string, boolean>} */
   const keys = Object.fromEntries(keyList.map((k) => [k, false]));
+  const resetKeys = () => {
+    Object.keys(keys).forEach((k) => {
+      keys[k] = false;
+    });
+  };
 
   const handleKeyDown = (event) => {
     if (event.key in keys) {
@@ -24,16 +29,28 @@ export function createKeyboardInput(keyList) {
       event.preventDefault();
     }
   };
+  const handleBlur = () => {
+    // 포커스가 빠질 때 keyup 누락으로 입력이 고정되는 현상 방지
+    resetKeys();
+  };
+  const handleVisibilityChange = () => {
+    if (document.hidden) resetKeys();
+  };
 
   return {
     keys,
     mount() {
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);
+      window.addEventListener("blur", handleBlur);
+      document.addEventListener("visibilitychange", handleVisibilityChange);
     },
     unmount() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      resetKeys();
     },
   };
 }
