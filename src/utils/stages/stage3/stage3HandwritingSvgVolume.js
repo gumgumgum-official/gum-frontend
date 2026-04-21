@@ -1,17 +1,26 @@
 /**
  * Stage3 only: handwriting SVG → single extruded mesh (caps textured, sides matte).
  * Keeps one Mesh so Stage3 slice/shatter logic uses partitionTrianglesOneSlice.
+ *
+ * ExtrudeGeometry는 **닫힌 fill** Shape에만 안정적이다. 태블릿/Edge 손글씨 SVG처럼
+ * `fill="none"` + `stroke` 만 있는 경우에는 볼륨을 만들지 않고 `null`을 반환한다.
+ * Stage3는 그때 `createHandwritingSvgPlaneGroup`으로 폴백해 글자가 깨지지 않게 한다.
  */
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { fetchSVG, parseSVGToExtrudeShapes } from "../../../lib/svg-loader.js";
+import {
+  fetchSVG,
+  parseSVGToExtrudeShapesForVolume,
+} from "../../../lib/svg-loader.js";
 import { rasterizeSvgToTexture } from "../../handwritingSvgPlane.js";
 
 const DEFAULT_DEPTH_RATIO = 0.14;
-const CAP_NORMAL_Z_THRESH = 0.78;
 
 /**
+ * 캡 vs 측면: 면 법선 임계값은 베벨/내부 삼각형에서 자주 깨진다.
+ * Z 범위 기준으로 상·하단 면만 캡으로 본다.
+ *
  * @param {THREE.BufferGeometry} geometry
  * @returns {THREE.BufferGeometry | null}
  */
@@ -19,6 +28,11 @@ function splitCapsAndSidesGeometry(geometry) {
   geometry.computeBoundingBox();
   const box = geometry.boundingBox;
   if (!box) return null;
+  const zMin = box.min.z;
+  const zMax = box.max.z;
+  const zSpan = Math.max(zMax - zMin, 1e-6);
+  const zEps = Math.max(zSpan * 0.028, 1e-4);
+
   const rx = Math.max(box.max.x - box.min.x, 1e-6);
   const ry = Math.max(box.max.y - box.min.y, 1e-6);
 
@@ -37,19 +51,15 @@ function splitCapsAndSidesGeometry(geometry) {
   const p0 = new THREE.Vector3();
   const p1 = new THREE.Vector3();
   const p2 = new THREE.Vector3();
-  const e1 = new THREE.Vector3();
-  const e2 = new THREE.Vector3();
-  const fn = new THREE.Vector3();
 
   for (let i = 0; i < pos.count; i += 3) {
     p0.fromBufferAttribute(pos, i);
     p1.fromBufferAttribute(pos, i + 1);
     p2.fromBufferAttribute(pos, i + 2);
-    e1.subVectors(p1, p0);
-    e2.subVectors(p2, p0);
-    fn.crossVectors(e1, e2).normalize();
+    const minZtri = Math.min(p0.z, p1.z, p2.z);
+    const maxZtri = Math.max(p0.z, p1.z, p2.z);
+    const isCap = maxZtri <= zMin + zEps || minZtri >= zMax - zEps;
 
-    const isCap = Math.abs(fn.z) > CAP_NORMAL_Z_THRESH;
     const dstPos = isCap ? capPos : sidePos;
     const dstNorm = isCap ? capNorm : sideNorm;
     const dstUv = isCap ? capUv : sideUv;
@@ -88,7 +98,7 @@ function splitCapsAndSidesGeometry(geometry) {
   );
   sideGeom.setAttribute("uv", new THREE.Float32BufferAttribute(sideUv, 2));
 
-  const merged = mergeGeometries([capGeom, sideGeom], { useGroups: true });
+  const merged = mergeGeometries([capGeom, sideGeom], true);
   capGeom.dispose();
   sideGeom.dispose();
   return merged ?? null;
@@ -128,22 +138,16 @@ export async function createHandwritingSvgVolumeGroup(svgPublicUrl, options) {
   let mergedGeom = null;
   try {
     const svgText = await fetchSVG(svgPublicUrl);
-    const shapes = parseSVGToExtrudeShapes(svgText);
+    const shapes = parseSVGToExtrudeShapesForVolume(svgText);
     if (shapes.length === 0) return null;
 
     const { height: shapeHeight } = shapesPlaneBounds(shapes);
     const depth = shapeHeight * depthRatio;
-    const bevelThickness = Math.min(depth * 0.25, shapeHeight * 0.04);
-    const bevelSize = Math.min(depth * 0.2, shapeHeight * 0.035);
 
     const extrudeSettings = {
       depth,
-      curveSegments: 32,
-      bevelEnabled: true,
-      bevelThickness,
-      bevelSize,
-      bevelOffset: 0,
-      bevelSegments: 5,
+      curveSegments: 24,
+      bevelEnabled: false,
       steps: 1,
     };
 
@@ -162,20 +166,19 @@ export async function createHandwritingSvgVolumeGroup(svgPublicUrl, options) {
 
     geometry.computeVertexNormals();
 
-    mergedGeom = splitCapsAndSidesGeometry(geometry);
-    geometry.dispose();
-    if (!mergedGeom) return null;
-    mergedGeom.computeVertexNormals();
-
     const raster = await rasterizeSvgToTexture(svgText);
     texture = raster.texture;
     const { widthPx, heightPx } = raster;
     if (widthPx <= 1e-6 || heightPx <= 1e-6) {
       texture.dispose();
-      mergedGeom.dispose();
-      mergedGeom = null;
+      geometry.dispose();
       return null;
     }
+
+    mergedGeom = splitCapsAndSidesGeometry(geometry);
+    geometry.dispose();
+    if (!mergedGeom) return null;
+    mergedGeom.computeVertexNormals();
 
     const capMaterial = new THREE.MeshStandardMaterial({
       map: texture,

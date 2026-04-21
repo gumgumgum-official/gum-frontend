@@ -51,18 +51,54 @@ export function parseSVGToShapes(svgString) {
  * @param {string} svgString
  * @returns {THREE.Shape[]}
  */
-export function parseSVGToExtrudeShapes(svgString) {
+/** @param {object} style */
+function hasRenderableFill(style) {
+  if (!style || style.fill === undefined || style.fill === false) return false;
+  const s = String(style.fill).toLowerCase().trim();
+  return s !== "none" && s !== "";
+}
+
+/**
+ * ExtrudeGeometry용: **fill이 있는 path만** `toShapes`로 Shape를 만든다.
+ * 태블릿 Edge가 `data-handwriting-extrude="true"` 그룹에 3D 전용 닫힌 fill을 넣는 경우,
+ * 그 그룹 안의 path/circle만 Extrude에 사용한다(래스터용 stroke-only와 분리).
+ * 마커가 없는 구 SVG는 기존처럼 fill이 있는 모든 path를 사용한다.
+ *
+ * @param {string} svgString
+ * @returns {THREE.Shape[]}
+ */
+export function parseSVGToExtrudeShapesForVolume(svgString) {
+  const strictExtrude = svgString.includes('data-handwriting-extrude="true"');
   const loader = new SVGLoader();
   const svgData = loader.parse(svgString);
   /** @type {THREE.Shape[]} */
   const out = [];
   for (const path of svgData.paths) {
+    const style = path.userData?.style ?? {};
+    if (!hasRenderableFill(style)) continue;
+    if (strictExtrude) {
+      const node = path.userData?.node;
+      if (
+        !node ||
+        typeof node.closest !== "function" ||
+        !node.closest('[data-handwriting-extrude="true"]')
+      ) {
+        continue;
+      }
+    }
     const pathShapes = path.toShapes(false);
     for (const sh of pathShapes) {
       out.push(sh);
     }
   }
   return out;
+}
+
+/**
+ * @deprecated {@link parseSVGToExtrudeShapesForVolume} 사용 권장.
+ */
+export function parseSVGToExtrudeShapes(svgString) {
+  return parseSVGToExtrudeShapesForVolume(svgString);
 }
 
 /**
