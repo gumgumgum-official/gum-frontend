@@ -34,7 +34,7 @@ export function createGumFollowersController({
   const followLerpFactor = gumBehaviorCfg?.followLerpFactor ?? 8;
   const turnLerpFactor = gumBehaviorCfg?.turnLerpFactor ?? 10;
   const facingLerpFactor = gumBehaviorCfg?.facingLerpFactor ?? 6;
-  const lookAtHeightOffset = gumBehaviorCfg?.lookAtHeightOffset ?? 0.9;
+  const _lookAtHeightOffset = gumBehaviorCfg?.lookAtHeightOffset ?? 0.9;
   const modelScale = gumModelCfg?.scale ?? 1;
 
   // 캐릭터가 작아지면(스케일 다운) 발걸음이 상대적으로 더 빨라 보이도록 애니메이션 속도를 보정
@@ -54,12 +54,17 @@ export function createGumFollowersController({
   const groundOffset =
     groundOffsetOverride ?? config.character?.groundOffset ?? 0;
 
+  /** Stage2 `createStage2GumSpeechBubbles` 기본값과 동일 — AABB 중심에서 위로 높이×비율 */
+  const bubbleOffsetY = gumBehaviorCfg?.bubbleOffsetY ?? 0.85;
+
   /**
    * @type {{ id: "A"|"B", side: -1|1, model: THREE.Group, mixer: THREE.AnimationMixer, walkAction: THREE.AnimationAction|null, idleAction: THREE.AnimationAction|null, offsetYaw: number|null, breakDriftScalar: number }[]}
    */
   const followers = [];
 
   let followerYPosition = 0;
+  /** setFromObject AABB 실패 시 루트 Y + 이 값(로드 시 box.max.y 기준) */
+  let followerBubbleFallbackHeadY = 1.1;
   // user.y 변화에 대응하기 위한 상대 오프셋 (첫 업데이트에서 확정)
   let followerYOffsetFromUserY = null;
   let isReady = false;
@@ -69,6 +74,8 @@ export function createGumFollowersController({
   const _userPos = new THREE.Vector3();
   const _dir = new THREE.Vector3();
   const _look = new THREE.Vector3();
+  const _bubbleBox = new THREE.Box3();
+  const _bubbleSize = new THREE.Vector3();
 
   let isMovingPrev = false;
   let elapsedSec = 0;
@@ -117,7 +124,9 @@ export function createGumFollowersController({
     const box = new THREE.Box3().setFromObject(baseModel);
     const minY = box.min.y;
     followerYPosition = backgroundMaxY - minY + groundOffset;
+    followerBubbleFallbackHeadY = Math.max(0.25, box.max.y + 0.08);
 
+    /** @type {readonly { id: "A" | "B"; side: -1 | 1 }[]} */
     const clones = [
       // A: 좌측 후방(뒤쪽 기준 -45도)
       { id: "A", side: -1 },
@@ -198,6 +207,8 @@ export function createGumFollowersController({
     update(delta) {
       if (!isReady) return;
 
+      elapsedSec += delta;
+
       const userState = getUserState();
       const userPos = userState.position;
       const userYaw = userState.yaw;
@@ -205,7 +216,6 @@ export function createGumFollowersController({
 
       if (!userPos || userYaw == null) return;
 
-      elapsedSec += delta;
       if (breakOffEnabled) {
         if (prevUserYaw != null) {
           const dyaw = Math.abs(angleDiff(prevUserYaw, userYaw));
@@ -305,25 +315,60 @@ export function createGumFollowersController({
         scene.remove(f.model);
         f.mixer.stopAllAction();
         f.model.traverse((child) => {
-          if (child.isMesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
+          if (!(child instanceof THREE.Mesh)) return;
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m.dispose());
+            } else {
+              child.material.dispose();
             }
           }
         });
       });
       followers.length = 0;
       followerYOffsetFromUserY = null;
+      followerBubbleFallbackHeadY = 1.1;
       isReady = false;
       isMovingPrev = false;
       elapsedSec = 0;
       breakOffUntil = 0;
       prevUserYaw = null;
+    },
+
+    /**
+     * 첫 번째 껌딱지(A) 말풍선 앵커 — Stage2 `projectModelToScreen` 과 동일
+     * (`Box3.setFromObject` 월드 AABB → center + size.y × bubbleOffsetY)
+     * @param {THREE.Vector3} target
+     * @returns {boolean}
+     */
+    getPrimaryFollowerBubbleAnchorWorld(target) {
+      if (!isReady || followers.length < 1) return false;
+      const f = followers[0];
+      f.model.updateMatrixWorld(true);
+      _bubbleBox.setFromObject(f.model);
+      let useBox = false;
+      if (!_bubbleBox.isEmpty()) {
+        _bubbleBox.getCenter(target);
+        _bubbleBox.getSize(_bubbleSize);
+        const h = _bubbleSize.y;
+        if (Number.isFinite(h) && h > 1e-6) {
+          target.y += h * bubbleOffsetY;
+          useBox =
+            Number.isFinite(target.x) &&
+            Number.isFinite(target.y) &&
+            Number.isFinite(target.z);
+        }
+      }
+      if (!useBox) {
+        f.model.getWorldPosition(target);
+        target.y += followerBubbleFallbackHeadY;
+      }
+      return (
+        Number.isFinite(target.x) &&
+        Number.isFinite(target.y) &&
+        Number.isFinite(target.z)
+      );
     },
   };
 }

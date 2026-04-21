@@ -10,6 +10,12 @@ import {
   getMonitorDeviceId,
   postMonitorComplete,
 } from "../lib/monitorCurrentApi.js";
+import { resetClientForNextKioskVisitor } from "../utils/common/resetClientForNextKioskVisitor.js";
+import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import {
+  warmStage3GltfTemplateUrls,
+  waitForStage3GltfTemplatesReady,
+} from "../utils/stages/stage3/stage3GltfWarmup.js";
 
 export function StartPage() {
   const navigate = useNavigate();
@@ -17,6 +23,13 @@ export function StartPage() {
   const [toastMessage, setToastMessage] = useState(null);
   const prevToast = useRef(null);
   const toastRef = useRef(null);
+  const startNavigationLockedRef = useRef(false);
+  const [isPreparingKiosk, setIsPreparingKiosk] = useState(false);
+
+  useEffect(() => {
+    getGLBLoader().preloadDecoders();
+    warmStage3GltfTemplateUrls();
+  }, []);
 
   useEffect(() => {
     if (toastMessage && !prevToast.current) {
@@ -106,8 +119,20 @@ export function StartPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const handleStart = useCallback(() => {
-    navigate(`/kiosk${location.search}`);
+  const handleStart = useCallback(async () => {
+    if (startNavigationLockedRef.current) return;
+    startNavigationLockedRef.current = true;
+    setIsPreparingKiosk(true);
+    try {
+      await waitForStage3GltfTemplatesReady();
+      navigate(`/kiosk${location.search}`);
+    } catch (e) {
+      console.warn("[StartPage] Stage3 GLB 프리로드 실패 — 그대로 진행:", e);
+      navigate(`/kiosk${location.search}`);
+    } finally {
+      setIsPreparingKiosk(false);
+      startNavigationLockedRef.current = false;
+    }
   }, [location.search, navigate]);
 
   useEffect(() => {
@@ -120,18 +145,23 @@ export function StartPage() {
         console.warn("[StartPage] monitor complete 요청 실패:", e);
       })
       .finally(() => {
-        setToastMessage(null);
-        params.delete("complete");
-        const nextQuery = params.toString();
-        navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
-          replace: true,
-        });
+        void (async () => {
+          await resetClientForNextKioskVisitor();
+          setToastMessage(null);
+          params.delete("complete");
+          const nextQuery = params.toString();
+          navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
+            replace: true,
+          });
+        })();
       });
   }, [location.search, navigate]);
 
   return (
     <div
-      className={`${styles.page} ${styles.startBackground}`}
+      className={`${styles.page} ${styles.startBackground}${
+        isPreparingKiosk ? ` ${styles.startEnterLoading}` : ""
+      }`}
       onClick={handleStart}
     >
       <div className={styles.startOverlay}>

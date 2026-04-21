@@ -24,13 +24,14 @@ export function preloadStage3IslandTemplate(modelPathFromConfig) {
 export function deepCloneSceneForStage3Instance(source) {
   const root = source.clone(true);
   root.traverse((obj) => {
-    if (obj.isMesh) {
-      if (obj.geometry) obj.geometry = obj.geometry.clone();
-      const mat = obj.material;
+    const mesh = /** @type {import("three").Mesh} */ (obj);
+    if (mesh.isMesh) {
+      if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
+      const mat = mesh.material;
       if (Array.isArray(mat)) {
-        obj.material = mat.map((m) => (m?.clone ? m.clone() : m));
+        mesh.material = mat.map((m) => (m?.clone ? m.clone() : m));
       } else if (mat?.clone) {
-        obj.material = mat.clone();
+        mesh.material = mat.clone();
       }
     }
   });

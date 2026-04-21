@@ -127,6 +127,7 @@
  * @property {number} [turnLerpFactor] - 오프셋 yaw lerp
  * @property {number} [facingLerpFactor] - 바라보기 yaw lerp
  * @property {number} [lookAtHeightOffset] - 유저 바라볼 때 y 오프셋
+ * @property {number} [bubbleOffsetY] - 말풍선 세로 앵커 (AABB 높이 배율, Stage2 기본 0.85)
  * @property {number} [animationSpeed] - 애니메이션 속도(미지정 시 스케일로 보정)
  * @property {number|null} [groundOffset] - 발 높이 보정(null이면 캐릭터 groundOffset)
  * @property {Stage3GumFollowerBreakOffConfig} [breakOff]
@@ -148,6 +149,13 @@
  * @property {number} boundsPadding - 바운드 경계 여유 공간
  * @property {{x: number, y: number, z: number}} cameraOffset - 캐릭터 뒤 카메라 오프셋
  * @property {number} cameraLerpFactor - 카메라 추적 부드러움
+ * @property {number} [cameraYawAssistMaxRad] - INT 오브제가 프러스텀 밖일 때 카메라 오프셋 Y축 회전 최대(rad)
+ * @property {number} [cameraYawAssistLerp] - 레거시: easeSec 미지정 시 스무딩 강도 추정에 사용
+ * @property {number} [cameraYawAssistDemandEaseSec] - 가시성으로부터 나온 목표 각을 따라잡는 시간 상수(초, 클수록 더 둥글게)
+ * @property {number} [cameraYawAssistEaseSec] - 최종 보조 각이 목표를 따라잡는 시간 상수(초)
+ * @property {number} [cameraYawAssistReturnEaseSec] - 멈춤·오브제 다시 보일 때 기본 시점으로 돌아오는 시간 상수(초, 클수록 더 천천히·부드럽게)
+ * @property {number} [cameraYawAssistMaxDistance] - 보조 대상으로 볼 최대 캐릭터–오브제 거리(m)
+ * @property {boolean} [cameraYawAssistOnlyWhenMoving] - true면 실제 이동 중에만 보조(기본 true)
  * @property {number} [walkSoundVolume] - 이동(걷기) 루프 사운드 볼륨 0~1
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
  * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정
@@ -184,6 +192,8 @@
  * @property {{x: number, y?: number, z: number}} [normal] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [halfWidth] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [targetStage] - 전환할 Stage 번호
+ * @property {string[]} [portalTransitionSoundPaths] - 포탈 전환 시작 시 재생할 MP3 경로(public 기준)
+ * @property {number} [portalTransitionSoundVolume] - 포탈 전환 효과음 볼륨 (0~1)
  */
 
 /** Stage3 아이스크림 클릭 스폰 설정 (카트 메시는 island GLB 내 INT_icecream) */
