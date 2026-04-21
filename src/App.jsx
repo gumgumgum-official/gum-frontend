@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { BeamPage } from "./pages/BeamPage.jsx";
 import { KioskPage } from "./pages/KioskPage.jsx";
+import { AirportPage } from "./pages/AirportPage.jsx";
 import { DevPage } from "./pages/DevPage.jsx";
 import { MemoryTestPage } from "./pages/MemoryTestPage.jsx";
 import { StartPage } from "./pages/StartPage.jsx";
@@ -188,6 +189,7 @@ export function App() {
         <Route path="/start" element={<StartPage />} />
         <Route path="/beam" element={<BeamPage />} />
         <Route path="/kiosk" element={<KioskPage />} />
+        <Route path="/airport" element={<AirportPage />} />
         <Route path="/dev" element={<DevPage />} />
         <Route path="/memory-test" element={<MemoryTestPage />} />
         <Route path="/" element={<Navigate to="/start" replace />} />

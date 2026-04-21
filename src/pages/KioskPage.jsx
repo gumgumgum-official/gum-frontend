@@ -4,24 +4,25 @@ import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
 import { MinigameOverlay } from "../components/MinigameOverlay.jsx";
 import styles from "./Page.module.css";
 
-const STAGE6_FINISH_EVENT = "gum:kiosk-finish";
-const KIOSK_STAGES = [3, 6];
+const KIOSK_STAGES = [3];
 
-/** Phase 3~6: 키오스크 - 체험 존 (Stage 3→6, 포탈 통과 시) */
+/** Phase 3: 키오스크 - 체험 존 (Stage 3, 포탈 통과 시 /airport로 이동) */
 export function KioskPage() {
   const allowedStages = useMemo(() => KIOSK_STAGES, []);
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    const onFinish = () => {
-      const params = new URLSearchParams(location.search);
-      params.set("complete", "1");
-      navigate(`/start?${params.toString()}`);
+    const onStageSwitch = (e) => {
+      const { targetStage } = e.detail ?? {};
+      if (targetStage === 6) {
+        const params = new URLSearchParams(location.search);
+        navigate(`/airport?${params.toString()}`);
+      }
     };
-    window.addEventListener(STAGE6_FINISH_EVENT, onFinish);
+    window.addEventListener("stage:switch", onStageSwitch);
     return () => {
-      window.removeEventListener(STAGE6_FINISH_EVENT, onFinish);
+      window.removeEventListener("stage:switch", onStageSwitch);
     };
   }, [location.search, navigate]);
 
