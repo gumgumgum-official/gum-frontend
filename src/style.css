@@ -68,33 +68,34 @@ body {
   max-width: 28rem;
 }
 
-/* Stage6 말풍선 */
+/* Stage6 캐릭터 말풍선 (살구색, 페이드인·아웃) */
 .speech-bubble-stage6 {
   position: fixed;
   left: 0;
   top: 0;
-  transform: translate(-50%, -100%);
-  margin-bottom: 8px;
-  padding: 10px 14px;
-  max-width: 200px;
-  background: #fff;
+  transform: translate(-50%, calc(-100% - 8px)) translateY(6px);
+  padding: 5px 14px;
+  max-width: min(94vw, 280px);
+  white-space: nowrap;
+  background: #ffdec7;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  font-size: 14px;
-  line-height: 1.5;
-  color: #333;
+  box-shadow: 0 4px 14px rgba(120, 60, 40, 0.14);
+  font-family:
+    "GangwonEdu Hyeonok", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 17px;
+  line-height: 1.45;
+  color: #4a3024;
   pointer-events: none;
   opacity: 0;
-  visibility: hidden;
   transition:
-    opacity 0.2s,
-    visibility 0.2s;
-  z-index: 100;
+    opacity 0.35s ease,
+    transform 0.35s ease;
+  z-index: 200;
 }
 
 .speech-bubble-stage6.is-visible {
   opacity: 1;
-  visibility: visible;
+  transform: translate(-50%, calc(-100% - 8px)) translateY(0px);
 }
 
 .speech-bubble-stage6::after {
@@ -105,7 +106,7 @@ body {
   transform: translateX(-50%);
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
-  border-top: 8px solid #fff;
+  border-top: 8px solid #ffdec7;
 }
 
 /* Stage2 껌딱지 말풍선 (살구색) — 폰트: 강원교육현옥샘체, index.html에서 웹폰트 로드 */
