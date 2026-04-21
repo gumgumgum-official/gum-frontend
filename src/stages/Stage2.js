@@ -507,6 +507,7 @@ export function Stage2() {
           },
           characterMoveBounds ?? islandBounds,
           characterWalkGroundY,
+          islandValidator,
         );
         loadInitialHandwritings(
           scene,
@@ -824,6 +825,7 @@ export function Stage2() {
  * @param {(controller: { update: function, cleanup: function } | null, characterModels: import("three").Object3D[]) => void} onControllerReady
  * @param {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} [bounds] - 섬∩울타리 XZ (또는 characterWalkBounds)
  * @param {number} [walkGroundY] - 껌 캐릭터 발 Y (배경 상단 기준)
+ * @param {((x: number, z: number) => boolean) | null} [islandValidator] - 울타리 내부 유효성 검사 함수
  */
 function loadCharacters(
   loader,
@@ -833,6 +835,7 @@ function loadCharacters(
   onControllerReady,
   bounds,
   walkGroundY = GROUND_Y,
+  islandValidator = null,
 ) {
   const characterPath =
     config.characterModelPath ?? "/models/common/gum_walk_final.glb";
@@ -882,6 +885,11 @@ function loadCharacters(
           z: minZ + Math.random() * spanZ,
         };
       }
+      function isInsideFence(x, z) {
+        return typeof islandValidator === "function"
+          ? islandValidator(x, z)
+          : true;
+      }
 
       function tooClose(x, z) {
         if (minSep <= 0 || scatterPlaced.length === 0) return false;
@@ -901,18 +909,29 @@ function loadCharacters(
         let z;
         if (scatter && spanX > 1e-6 && spanZ > 1e-6) {
           let attempts = 0;
+          x = minX + spanX * 0.5;
+          z = minZ + spanZ * 0.5;
           do {
             const p = randomXZ();
             x = p.x;
             z = p.z;
             attempts++;
-          } while (attempts < 100 && tooClose(x, z));
+          } while (attempts < 160 && (!isInsideFence(x, z) || tooClose(x, z)));
+          if (!isInsideFence(x, z)) {
+            // 난수 시도 실패 시 bounds 중앙을 시작점으로 사용하고 경계 검증에 맡긴다.
+            x = minX + spanX * 0.5;
+            z = minZ + spanZ * 0.5;
+          }
           scatterPlaced.push({ x, z });
         } else {
           x = pos.x ?? 0;
           z = pos.z ?? 0;
           x = THREE.MathUtils.clamp(x, minX, maxX);
           z = THREE.MathUtils.clamp(z, minZ, maxZ);
+          if (!isInsideFence(x, z)) {
+            x = minX + spanX * 0.5;
+            z = minZ + spanZ * 0.5;
+          }
         }
         if (pos.y != null && Number.isFinite(pos.y)) {
           model.position.set(x, pos.y, z);
@@ -955,6 +974,10 @@ function loadCharacters(
         idleClip,
         bounds: walkBounds,
         groundY: rootYForWalk,
+        isPositionValid:
+          typeof islandValidator === "function"
+            ? (x, z) => islandValidator(x, z)
+            : null,
         options: { moveSpeed: 0.8, boundsPadding: padding },
       });
       onControllerReady(controller, characterModels);

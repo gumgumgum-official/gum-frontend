@@ -13,6 +13,7 @@ import * as THREE from "three";
  *   idleClip?: import("three").AnimationClip|null,
  *   bounds: { minX: number, maxX: number, minZ: number, maxZ: number },
  *   groundY?: number,
+ *   isPositionValid?: ((x: number, z: number) => boolean) | null,
  *   options?: { moveSpeed?: number, boundsPadding?: number }
  * }} params
  * @returns {{ update: (delta: number) => void, cleanup: () => void }}
@@ -23,6 +24,7 @@ export function createAutonomousCharacters({
   idleClip = null,
   bounds,
   groundY = 0.7,
+  isPositionValid = null,
   options = {},
 }) {
   const { moveSpeed = 0.8, boundsPadding = 0.5 } = options;
@@ -67,6 +69,7 @@ export function createAutonomousCharacters({
     let direction = Math.random() * Math.PI * 2;
     let changeDirTimer = 2 + Math.random() * 4;
     let isWalking = Math.random() > 0.3;
+    let blockedTurnCooldown = 0;
 
     return {
       model,
@@ -77,6 +80,7 @@ export function createAutonomousCharacters({
       direction,
       changeDirTimer,
       isWalking,
+      blockedTurnCooldown,
       minX,
       maxX,
       minZ,
@@ -90,6 +94,7 @@ export function createAutonomousCharacters({
     update(delta) {
       agents.forEach((agent) => {
         agent.changeDirTimer -= delta;
+        agent.blockedTurnCooldown -= delta;
         if (agent.changeDirTimer <= 0) {
           agent.changeDirTimer = 1.5 + Math.random() * 4;
           agent.isWalking = Math.random() > 0.25;
@@ -106,17 +111,28 @@ export function createAutonomousCharacters({
             0,
             Math.cos(agent.direction) * agent.speed * delta,
           );
-          agent.model.position.add(_move);
-          agent.model.position.x = THREE.MathUtils.clamp(
-            agent.model.position.x,
+          const nextX = THREE.MathUtils.clamp(
+            agent.model.position.x + _move.x,
             agent.minX,
             agent.maxX,
           );
-          agent.model.position.z = THREE.MathUtils.clamp(
-            agent.model.position.z,
+          const nextZ = THREE.MathUtils.clamp(
+            agent.model.position.z + _move.z,
             agent.minZ,
             agent.maxZ,
           );
+          const canMove =
+            typeof isPositionValid === "function"
+              ? isPositionValid(nextX, nextZ)
+              : true;
+          if (canMove) {
+            agent.model.position.x = nextX;
+            agent.model.position.z = nextZ;
+          } else if (agent.blockedTurnCooldown <= 0) {
+            agent.direction = Math.random() * Math.PI * 2;
+            agent.changeDirTimer = 0.35 + Math.random() * 0.5;
+            agent.blockedTurnCooldown = 0.15;
+          }
           agent.model.position.y = groundY;
           agent.model.rotation.y = agent.direction;
         } else {
