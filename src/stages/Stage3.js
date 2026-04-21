@@ -2808,6 +2808,7 @@ export function Stage3() {
             .init({
               backgroundMaxY,
               isCancelled: () => !isStage3Active || gumCancelled,
+              staticColliderBoxes: islandStaticColliders,
             })
             .catch((e) => {
               if (import.meta.env.DEV) {

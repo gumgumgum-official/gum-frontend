@@ -10,6 +10,7 @@ import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
+import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 
 /**
  * @param {{
@@ -60,6 +61,7 @@ export function createGumFollowersController({
   const breakOffFollowLerpMultiplier =
     breakOffCfg?.followLerpMultiplier ?? 0.35;
   const breakOffDriftAmplitude = breakOffCfg?.driftAmplitude ?? 0.55;
+  const collisionRadius = gumBehaviorCfg?.collisionRadius ?? 0.48;
 
   const groundOffset =
     groundOffsetOverride ?? config.character?.groundOffset ?? 0;
@@ -91,6 +93,8 @@ export function createGumFollowersController({
   let elapsedSec = 0;
   let breakOffUntil = 0;
   let prevUserYaw = null;
+  /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
+  let staticColliderBoxes = [];
 
   function lerpAngle(from, to, t) {
     // 각도 차이를 [-PI, PI]로 정규화한 뒤 t만큼 이동 (% 는 음수 나머지를 줄 수 있어 euclideanModulo 사용)
@@ -109,13 +113,22 @@ export function createGumFollowersController({
   }
 
   /**
-   * @param {{ backgroundMaxY?: number, isCancelled?: () => boolean }} [opts]
+   * @param {{
+   *   backgroundMaxY?: number,
+   *   isCancelled?: () => boolean,
+   *   staticColliderBoxes?: import("./islandStaticColliders.js").IslandColliderAabb[],
+   * }} [opts]
    */
-  async function init({ backgroundMaxY, isCancelled } = {}) {
+  async function init({
+    backgroundMaxY,
+    isCancelled,
+    staticColliderBoxes: colliderBoxes = [],
+  } = {}) {
     if (isReady) return;
     if (backgroundMaxY == null) {
       throw new Error("[GumFollowers] init requires backgroundMaxY");
     }
+    staticColliderBoxes = Array.isArray(colliderBoxes) ? colliderBoxes : [];
 
     const fullPath = resolvePublicAssetUrl(modelPath);
     const idleFullPath = resolvePublicAssetUrl(idleModelPath);
@@ -339,6 +352,8 @@ export function createGumFollowersController({
           ? followLerpFactor * breakOffFollowLerpMultiplier
           : followLerpFactor;
         const txz = Math.min(1, dynFollow * delta);
+        const prevX = f.model.position.x;
+        const prevZ = f.model.position.z;
         f.model.position.x = THREE.MathUtils.lerp(
           f.model.position.x,
           _target.x,
@@ -349,6 +364,18 @@ export function createGumFollowersController({
           _target.z,
           txz,
         );
+        if (staticColliderBoxes.length > 0) {
+          const slid = slideMoveXZAgainstAABBs(
+            prevX,
+            prevZ,
+            f.model.position.x,
+            f.model.position.z,
+            collisionRadius,
+            staticColliderBoxes,
+          );
+          f.model.position.x = slid.x;
+          f.model.position.z = slid.z;
+        }
         if (f.idleModel) {
           f.idleModel.position.copy(f.model.position);
         }
@@ -358,6 +385,9 @@ export function createGumFollowersController({
           updateFollowerFacingTo(_target, f, delta);
         } else {
           updateFollowerFacingTo(userPos, f, delta);
+        }
+        if (f.idleModel) {
+          f.idleModel.rotation.copy(f.model.rotation);
         }
 
         f.mixer.update(delta);
@@ -403,6 +433,7 @@ export function createGumFollowersController({
       elapsedSec = 0;
       breakOffUntil = 0;
       prevUserYaw = null;
+      staticColliderBoxes = [];
     },
 
     /**
