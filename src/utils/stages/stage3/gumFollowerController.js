@@ -376,7 +376,10 @@ export function createGumFollowersController({
           _target.z,
           txz,
         );
-        if (staticColliderBoxes.length > 0) {
+        const movedXZ =
+          Math.abs(f.model.position.x - prevX) > 1e-6 ||
+          Math.abs(f.model.position.z - prevZ) > 1e-6;
+        if (movedXZ && staticColliderBoxes.length > 0) {
           const slid = slideMoveXZAgainstAABBs(
             prevX,
             prevZ,
@@ -388,7 +391,7 @@ export function createGumFollowersController({
           f.model.position.x = slid.x;
           f.model.position.z = slid.z;
         }
-        if (f.idleModel) {
+        if (!moving && f.idleModel) {
           f.idleModel.position.copy(f.model.position);
         }
 
@@ -398,12 +401,18 @@ export function createGumFollowersController({
         } else {
           updateFollowerFacingTo(userPos, f, delta);
         }
-        if (f.idleModel) {
+        if (!moving && f.idleModel) {
           f.idleModel.rotation.copy(f.model.rotation);
         }
 
-        f.mixer.update(delta);
-        if (f.idleMixer) f.idleMixer.update(delta);
+        if (moving) {
+          f.mixer.update(delta);
+        } else if (f.idleMixer) {
+          f.idleMixer.update(delta);
+        } else {
+          // idle 전용 믹서가 없는 구성에서는 기본 믹서를 계속 구동한다.
+          f.mixer.update(delta);
+        }
       });
     },
     cleanup() {
@@ -412,30 +421,6 @@ export function createGumFollowersController({
         if (f.idleModel) scene.remove(f.idleModel);
         f.mixer.stopAllAction();
         if (f.idleMixer) f.idleMixer.stopAllAction();
-        f.model.traverse((child) => {
-          if (!(child instanceof THREE.Mesh)) return;
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach((m) => m.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
-        if (f.idleModel) {
-          f.idleModel.traverse((child) => {
-            if (!(child instanceof THREE.Mesh)) return;
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
-            }
-          });
-        }
       });
       followers.length = 0;
       followerYOffsetFromUserY = null;

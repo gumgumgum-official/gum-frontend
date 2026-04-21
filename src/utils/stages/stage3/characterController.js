@@ -358,10 +358,10 @@ export function createCharacterController({
         idleCharacterModel.rotation.copy(characterModel.rotation);
       }
 
-      if (characterMixer) {
+      if (characterMixer && (isWalking || !idleCharacterMixer)) {
         characterMixer.update(delta);
       }
-      if (idleCharacterMixer) {
+      if (idleCharacterMixer && !isWalking) {
         idleCharacterMixer.update(delta);
       }
 
@@ -395,34 +395,10 @@ export function createCharacterController({
       }
       if (characterModel) {
         scene.remove(characterModel);
-        characterModel.traverse((child) => {
-          if (child.isMesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
-            }
-          }
-        });
         characterModel = null;
       }
       if (idleCharacterModel) {
         scene.remove(idleCharacterModel);
-        idleCharacterModel.traverse((child) => {
-          if (child.isMesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
-            }
-          }
-        });
         idleCharacterModel = null;
       }
       if (characterMixer) {
