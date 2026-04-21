@@ -6,6 +6,8 @@ import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import { createKeyboardInput } from "../utils/common/keyboardInput.js";
+import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
@@ -22,10 +24,39 @@ const STAGE6_INT_CLICK_EVENT = "gum:stage6-int-click";
 const STAGE6_POSTER_MODAL_SHOW_EVENT = "gum:stage6PosterModal:show";
 const STAGE6_POSTER_MODAL_HIDE_EVENT = "gum:stage6PosterModal:hide";
 const INT_PREFIX = "INT_";
+const _down = new THREE.Vector3(0, -1, 0);
+const _floorRayOrigin = new THREE.Vector3();
+const _escWorld = new THREE.Vector3();
+const _toCam = new THREE.Vector3();
+
+/** @param {THREE.Object3D} root */
+function collectMeshesDeep(root) {
+  /** @type {THREE.Mesh[]} */
+  const meshes = [];
+  root.traverse((o) => {
+    if (o.isMesh) meshes.push(o);
+  });
+  return meshes;
+}
+
+/**
+ * 천장보다 아래에서 쏴야 첫 히트가 바닥이 된다.
+ * @param {THREE.Mesh[]} meshes
+ * @param {number} x
+ * @param {number} z
+ * @param {THREE.Raycaster} rc
+ * @param {number} rayStartY
+ */
+function raycastFloorY(meshes, x, z, rc, rayStartY) {
+  _floorRayOrigin.set(x, rayStartY, z);
+  rc.set(_floorRayOrigin, _down);
+  const hits = rc.intersectObjects(meshes, false);
+  return hits.length > 0 ? hits[0].point.y : null;
+}
 
 export function Stage6() {
   const objects = [];
-  /** @type {import("../types.js").StageBasicConfig & { model: import("../types.js").Stage2ModelConfig, boardPosterImage?: string, bench?: import("../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean } }} */
+  /** @type {import("../types.js").Stage6Config} */
   const config = STAGE6_CONFIG;
   const airportSubtitleLeadSec =
     Number(STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC ?? 0.75) || 0;
@@ -59,6 +90,15 @@ export function Stage6() {
   const AIRPORT_ANNOUNCE_INTRO_VOLUME = 0.55;
   let activeSubtitleCueIndex = -1;
   let isAirportSubtitleVisible = false;
+
+  const keyboard = createKeyboardInput([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+  ]);
+  /** @type {ReturnType<typeof createCharacterController> | null} */
+  let character = null;
 
   function dispatchAirportSubtitleTextByTime(currentSec) {
     const syncedSec = Math.max(0, currentSec + airportSubtitleLeadSec);
@@ -277,6 +317,15 @@ export function Stage6() {
       cameraRef = this.camera;
 
       scene.background = new THREE.Color(config.background.color);
+
+      character = createCharacterController({
+        scene,
+        glbLoader,
+        config,
+        getKeys: () => keyboard.keys,
+      });
+      keyboard.mount();
+
       window.addEventListener("keydown", handleKeyDown, { capture: true });
       onPointerDown = (event) => {
         if (event.button !== 0) return;
@@ -333,6 +382,54 @@ export function Stage6() {
           objects.push(model);
           scene.add(model);
           registerIntInteractions(model);
+
+          const bounds = new THREE.Box3().setFromObject(model);
+          const meshes = collectMeshesDeep(model);
+          const esc =
+            model.getObjectByName("INT_Escalator1") ||
+            model.getObjectByName("INT_Escalator2");
+
+          let spawnX = (bounds.min.x + bounds.max.x) * 0.5;
+          let spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
+          let rayStartY = bounds.min.y + 18;
+
+          if (esc) {
+            esc.updateMatrixWorld(true);
+            esc.getWorldPosition(_escWorld);
+            rayStartY = Math.max(_escWorld.y + 4, bounds.min.y + 2);
+            const camPos = config.camera.position;
+            _toCam.set(camPos.x - _escWorld.x, 0, camPos.z - _escWorld.z);
+            if (_toCam.lengthSq() < 1e-6) {
+              _toCam.set(0, 0, 1);
+            } else {
+              _toCam.normalize();
+            }
+            const frontDist =
+              Number(config.character?.escalatorFrontDistance ?? 1.1) || 1.1;
+            spawnX = _escWorld.x + _toCam.x * frontDist;
+            spawnZ = _escWorld.z + _toCam.z * frontDist;
+          }
+
+          let floorY = raycastFloorY(
+            meshes,
+            spawnX,
+            spawnZ,
+            raycaster,
+            rayStartY,
+          );
+          if (floorY == null) {
+            if (esc) {
+              esc.updateMatrixWorld(true);
+              esc.getWorldPosition(_escWorld);
+              floorY = _escWorld.y;
+            } else {
+              floorY = bounds.min.y + 0.05;
+            }
+          }
+
+          character?.setup(floorY, bounds, [], {
+            worldSpawnXZ: { x: spawnX, z: spawnZ },
+          });
         },
         onError: (err) => console.error("❌ Stage6 배경 로드 에러:", err),
       });
@@ -410,10 +507,19 @@ export function Stage6() {
       scheduleAirplaneCallSign();
     },
 
-    update(_delta) {},
+    update(delta) {
+      if (character) {
+        character.update(delta, this.camera, { skipCameraFollow: true });
+      }
+    },
 
     cleanup(scene) {
       cancelAirplaneCallSignScheduled();
+      keyboard.unmount();
+      if (character) {
+        character.cleanup();
+        character = null;
+      }
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
       if (canvasRef && onPointerDown) {

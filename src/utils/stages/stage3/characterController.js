@@ -154,7 +154,14 @@ export function createCharacterController({
   }
 
   return {
-    setup(backgroundMaxY, bounds, colliderBoxes = []) {
+    /**
+     * @param {number} backgroundMaxY - 캐릭터 발이 놓일 바닥의 월드 Y (지형 상단)
+     * @param {import("three").Box3} bounds
+     * @param {import("./islandStaticColliders.js").IslandColliderAabb[]} [colliderBoxes]
+     * @param {{ worldSpawnXZ?: { x: number, z: number } }} [setupOptions] - worldSpawnXZ가 있으면 XZ 기준은 이 값(bounds 중심 대신), spawnOffset은 여전히 가산
+     */
+    setup(backgroundMaxY, bounds, colliderBoxes = [], setupOptions = {}) {
+      const { worldSpawnXZ } = setupOptions;
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
 
@@ -185,7 +192,14 @@ export function createCharacterController({
 
           let spawnX = 0;
           let spawnZ = 0;
-          if (bounds && !bounds.isEmpty()) {
+          if (
+            worldSpawnXZ &&
+            Number.isFinite(worldSpawnXZ.x) &&
+            Number.isFinite(worldSpawnXZ.z)
+          ) {
+            spawnX = worldSpawnXZ.x;
+            spawnZ = worldSpawnXZ.z;
+          } else if (bounds && !bounds.isEmpty()) {
             spawnX = (bounds.min.x + bounds.max.x) * 0.5;
             spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
           }
