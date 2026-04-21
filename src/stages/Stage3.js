@@ -68,12 +68,12 @@ import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../events/stage6Events.js";
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
 
-/** Base letter height (Y); scaled by randomFactor like Stage2 (MIN..MAX). */
-const STAGE3_LETTER_TARGET_HEIGHT = 0.9;
-const STAGE3_LETTER_HEIGHT_RANDOM_MIN = 0.5;
-const STAGE3_LETTER_HEIGHT_RANDOM_MAX = 1.0;
+/** Stage3 낙하 글자 세로 높이(Y). SVG 종류와 무관하게 고정. config.letterTargetHeight가 우선. */
+const STAGE3_LETTER_TARGET_HEIGHT = 3.24;
 /** 착지면(landingY) 위로 띄우는 높이 — 글자 밑면·지형 오차를 줄이려면 landingY 기준과 함께 키움 */
 const STAGE3_SPAWN_HEIGHT = 8;
+/** 글자 밑면을 지면 위로 살짝 띄우는 offset — 바닥 메시와 겹쳐 파묻혀 보이는 현상 방지 */
+const STAGE3_LETTER_LANDING_LIFT = 0.3;
 // 운석처럼 빠르게 떨어지는 느낌을 위해 중력/초기 속도 강화
 const STAGE3_GRAVITY = -35;
 const STAGE3_INITIAL_VY = -12;
@@ -1903,14 +1903,8 @@ export function Stage3() {
         _nextDebugId = null;
 
         try {
-          const baseH =
+          const targetH =
             config.letterTargetHeight ?? STAGE3_LETTER_TARGET_HEIGHT;
-          const randomFactor =
-            STAGE3_LETTER_HEIGHT_RANDOM_MIN +
-            Math.random() *
-              (STAGE3_LETTER_HEIGHT_RANDOM_MAX -
-                STAGE3_LETTER_HEIGHT_RANDOM_MIN);
-          const targetH = baseH * randomFactor;
 
           const built =
             (await createHandwritingSvgVolumeGroup(currentSvgUrl, {
@@ -1927,7 +1921,8 @@ export function Stage3() {
           group.updateMatrixWorld(true);
           const box = new THREE.Box3().setFromObject(group);
           const letterBottomOffset = Math.max(0, -box.min.y);
-          const landingY = groundY + letterBottomOffset;
+          const landingY =
+            groundY + letterBottomOffset + STAGE3_LETTER_LANDING_LIFT;
 
           const startY = landingY + STAGE3_SPAWN_HEIGHT + Math.random() * 4;
           const spawnX = config.letterSpawnXZ?.x ?? 0;
