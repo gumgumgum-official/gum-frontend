@@ -18,6 +18,8 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *   glbLoader: ReturnType<import("../../common/assetLoaders.js").getGLBLoader>,
  *   config: import("../../../types.js").Stage3Config,
  *   getUserState: () => { position: import("three").Vector3|null, yaw: number|null, moving: boolean },
+ *   renderer?: import("three").WebGLRenderer | null,
+ *   getCamera?: () => import("three").Camera | null,
  * }} params
  */
 export function createGumFollowersController({
@@ -25,6 +27,8 @@ export function createGumFollowersController({
   glbLoader,
   config,
   getUserState,
+  renderer = null,
+  getCamera = null,
 }) {
   void glbLoader;
   const gumCfg = config.character?.gumFollowers ?? null;
@@ -239,6 +243,14 @@ export function createGumFollowersController({
         model.visible = false;
       }
     });
+    const prewarmCamera = getCamera?.();
+    if (renderer && prewarmCamera) {
+      if (typeof renderer.compileAsync === "function") {
+        void renderer.compileAsync(scene, prewarmCamera).catch(() => {});
+      } else {
+        renderer.compile(scene, prewarmCamera);
+      }
+    }
 
     isReady = true;
   }
@@ -293,25 +305,25 @@ export function createGumFollowersController({
         followerYOffsetFromUserY = followerYPosition - userPos.y;
       }
 
-      // 입력 상태를 매 프레임 강제 반영해 idle 누락/고정 방지
-      followers.forEach((f) => {
-        if (moving) {
-          f.model.visible = true;
-          if (f.idleModel) f.idleModel.visible = false;
-          if (f.walkAction) f.walkAction.paused = false;
-          if (f.idleAction) f.idleAction.paused = true;
-        } else {
-          f.model.visible = !f.idleModel;
-          if (f.idleModel) {
-            f.idleModel.visible = true;
-            f.idleModel.position.copy(f.model.position);
-            f.idleModel.rotation.copy(f.model.rotation);
+      // 이동 상태가 바뀔 때만 walk/idle 토글을 수행한다.
+      if (isMovingPrev !== moving) {
+        followers.forEach((f) => {
+          if (moving) {
+            f.model.visible = true;
+            if (f.idleModel) f.idleModel.visible = false;
+            if (f.walkAction) f.walkAction.paused = false;
+            if (f.idleAction) f.idleAction.paused = true;
+          } else {
+            f.model.visible = !f.idleModel;
+            if (f.idleModel) {
+              f.idleModel.visible = true;
+            }
+            if (f.walkAction) f.walkAction.paused = true;
+            if (f.idleAction) f.idleAction.paused = false;
           }
-          if (f.walkAction) f.walkAction.paused = true;
-          if (f.idleAction) f.idleAction.paused = false;
-        }
-      });
-      isMovingPrev = moving;
+        });
+        isMovingPrev = moving;
+      }
 
       _userPos.copy(userPos);
       const tY = Math.min(1, followLerpFactor * delta);

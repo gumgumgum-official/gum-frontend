@@ -200,6 +200,10 @@ export function Stage3() {
   let pendingSvgUrlToLoad = null;
   let pendingSvgUrlDebugId = null;
   let monitorFallbackTimeoutId = null;
+  /** @type {any} */
+  let deferredStage3SetupTaskId = null;
+  /** @type {"idle" | "timeout" | null} */
+  let deferredStage3SetupTaskKind = null;
 
   // 아이스크림 카트 클릭 → 랜덤 아이스크림 스폰 (cannon-es 물리)
   // island2.glb 내 INT_icecream 루트 (클릭 → 스폰, cannon-es)
@@ -1094,6 +1098,45 @@ export function Stage3() {
       window.clearInterval(monitorPollIntervalId);
       monitorPollIntervalId = null;
     }
+  }
+
+  /**
+   * onReady 내 비필수 작업을 메인 스레드 유휴 시점으로 지연한다.
+   * requestIdleCallback 미지원 환경은 setTimeout(0)으로 폴백.
+   * @param {() => void} task
+   */
+  function scheduleDeferredStage3Setup(task) {
+    if (
+      deferredStage3SetupTaskKind === "idle" &&
+      deferredStage3SetupTaskId != null &&
+      "cancelIdleCallback" in globalThis
+    ) {
+      globalThis.cancelIdleCallback(deferredStage3SetupTaskId);
+    } else if (
+      deferredStage3SetupTaskKind === "timeout" &&
+      deferredStage3SetupTaskId != null
+    ) {
+      globalThis.clearTimeout(deferredStage3SetupTaskId);
+    }
+    deferredStage3SetupTaskId = null;
+    deferredStage3SetupTaskKind = null;
+
+    if ("requestIdleCallback" in globalThis) {
+      deferredStage3SetupTaskKind = "idle";
+      deferredStage3SetupTaskId = globalThis.requestIdleCallback(() => {
+        deferredStage3SetupTaskId = null;
+        deferredStage3SetupTaskKind = null;
+        task();
+      });
+      return;
+    }
+
+    deferredStage3SetupTaskKind = "timeout";
+    deferredStage3SetupTaskId = globalThis.setTimeout(() => {
+      deferredStage3SetupTaskId = null;
+      deferredStage3SetupTaskKind = null;
+      task();
+    }, 0);
   }
 
   /** 게시판 모달 생성 및 표시 */
@@ -2655,6 +2698,8 @@ export function Stage3() {
         glbLoader,
         config,
         getKeys: () => keyboard.keys,
+        renderer,
+        getCamera: () => this.camera ?? null,
       });
 
       this.camera = new THREE.PerspectiveCamera(
@@ -2790,8 +2835,11 @@ export function Stage3() {
             startCameraIntro(center, backgroundBounds);
           }
 
-          registerIslandInteractions(model);
-          portalVortexMaterial = applyPortalVortexToModel(model);
+          scheduleDeferredStage3Setup(() => {
+            if (!isStage3Active) return;
+            registerIslandInteractions(model);
+            portalVortexMaterial = applyPortalVortexToModel(model);
+          });
 
           gumFollowers = createGumFollowersController({
             scene,
@@ -2802,6 +2850,8 @@ export function Stage3() {
               yaw: character?.getYaw?.() ?? null,
               moving: character?.getIsMoving?.() ?? false,
             }),
+            renderer,
+            getCamera: () => this.camera ?? null,
           });
 
           void gumFollowers
@@ -2887,9 +2937,11 @@ export function Stage3() {
             letterState.group.position.distanceTo(charPos) <=
               WORRY_ENTER_HINT_DIST,
           ) && !textDestroyed;
-        const gumBubbleAnchorOk = Boolean(
-          gumFollowers?.getPrimaryFollowerBubbleAnchorWorld?.(_projWorry),
-        );
+        const gumBubbleAnchorOk =
+          nearLetter &&
+          Boolean(
+            gumFollowers?.getPrimaryFollowerBubbleAnchorWorld?.(_projWorry),
+          );
         if (userWorryEnterBubbleEl) {
           if (nearLetter && gumBubbleAnchorOk) {
             if (userWorryEnterBubblePhase === "off") {
@@ -3040,6 +3092,20 @@ export function Stage3() {
         window.clearTimeout(monitorFallbackTimeoutId);
         monitorFallbackTimeoutId = null;
       }
+      if (
+        deferredStage3SetupTaskKind === "idle" &&
+        deferredStage3SetupTaskId != null &&
+        "cancelIdleCallback" in globalThis
+      ) {
+        globalThis.cancelIdleCallback(deferredStage3SetupTaskId);
+      } else if (
+        deferredStage3SetupTaskKind === "timeout" &&
+        deferredStage3SetupTaskId != null
+      ) {
+        globalThis.clearTimeout(deferredStage3SetupTaskId);
+      }
+      deferredStage3SetupTaskId = null;
+      deferredStage3SetupTaskKind = null;
 
       stopMonitorPolling();
 
@@ -3079,17 +3145,6 @@ export function Stage3() {
       if (backgroundModel) {
         scene.remove(backgroundModel);
         portalVortexMaterial = null;
-        backgroundModel.traverse((child) => {
-          if (!child.isMesh && !child.isPoints) return;
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach((m) => m.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
         backgroundModel = null;
       }
 

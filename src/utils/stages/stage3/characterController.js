@@ -18,6 +18,8 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *   glbLoader: ReturnType<import("../../common/assetLoaders.js").getGLBLoader>,
  *   config: import("../../../types.js").Stage3Config,
  *   getKeys: () => Record<string, boolean>,
+ *   renderer?: import("three").WebGLRenderer | null,
+ *   getCamera?: () => import("three").Camera | null,
  * }} params
  * @returns {{
  *   setup: (
@@ -42,6 +44,8 @@ export function createCharacterController({
   glbLoader,
   config,
   getKeys,
+  renderer = null,
+  getCamera = null,
 }) {
   void glbLoader;
   let characterModel = null;
@@ -230,6 +234,14 @@ export function createCharacterController({
 
           scene.add(characterModel);
           if (idleCharacterModel) scene.add(idleCharacterModel);
+          const prewarmCamera = getCamera?.();
+          if (renderer && prewarmCamera) {
+            if (typeof renderer.compileAsync === "function") {
+              void renderer.compileAsync(scene, prewarmCamera).catch(() => {});
+            } else {
+              renderer.compile(scene, prewarmCamera);
+            }
+          }
           inspectGLTF(gltf, "캐릭터 모델");
         },
         (err) =>
@@ -321,25 +333,24 @@ export function createCharacterController({
       // 실제 이동 여부는 외부 상태(getIsMoving)와 사운드에 유지
       isMoving = moved;
       if (characterWalkAction) {
-        // 입력 상태를 매 프레임 강제로 반영해 idle 누락을 방지.
-        if (movingInput) {
-          characterModel.visible = true;
-          if (idleCharacterModel) idleCharacterModel.visible = false;
-          characterWalkAction.paused = false;
-          if (idleCharacterAction) idleCharacterAction.paused = true;
-          isWalking = true;
-        } else {
-          if (idleCharacterModel) {
-            characterModel.visible = false;
-            idleCharacterModel.visible = true;
-            idleCharacterModel.position.copy(characterModel.position);
-            idleCharacterModel.rotation.copy(characterModel.rotation);
-          } else {
+        // 이동 상태가 바뀔 때만 walk/idle 토글을 수행한다.
+        if (isWalking !== movingInput) {
+          if (movingInput) {
             characterModel.visible = true;
+            if (idleCharacterModel) idleCharacterModel.visible = false;
+            characterWalkAction.paused = false;
+            if (idleCharacterAction) idleCharacterAction.paused = true;
+          } else {
+            if (idleCharacterModel) {
+              characterModel.visible = false;
+              idleCharacterModel.visible = true;
+            } else {
+              characterModel.visible = true;
+            }
+            characterWalkAction.paused = true;
+            if (idleCharacterAction) idleCharacterAction.paused = false;
           }
-          characterWalkAction.paused = true;
-          if (idleCharacterAction) idleCharacterAction.paused = false;
-          isWalking = false;
+          isWalking = movingInput;
         }
       }
       if (!movingInput && idleCharacterModel && characterModel) {
