@@ -246,6 +246,7 @@
  * @property {Stage3AudioConfig} [audio]
  * @property {string} [characterModelPath] - 캐릭터 GLB 경로
  * @property {string} [characterIdleModelPath] - 캐릭터 idle(서있기) 애니메이션 GLB 경로
+ * @property {string} [characterPunchModelPath] - 캐릭터 punch(망치질) 애니메이션 GLB 경로
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
