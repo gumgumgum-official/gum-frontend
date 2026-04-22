@@ -67,6 +67,7 @@ import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../events/stage6Events.js";
 import {
   playRandomCrackSound,
   playCrackFinalSound,
+  playFlowerMagicSound,
   disposeStage3CrackSound,
 } from "../utils/stages/stage3/playCrackSound.js";
 
@@ -2563,6 +2564,7 @@ export function Stage3() {
         container.scale.setScalar(0);
         sceneRef.add(container);
         standaloneFlowers.push({ group: container, age: 0 });
+        playFlowerMagicSound();
         // 첫 꽃이 실제로 씬에 추가되는 순간 축하 자막 발동(가드로 1회만)
         tryDispatchWorryCompletionCelebration();
       })

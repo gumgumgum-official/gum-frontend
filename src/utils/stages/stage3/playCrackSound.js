@@ -9,8 +9,10 @@ const CRACK_PATHS = [
   "/static/sounds/text_crack/crack2.mp3",
 ];
 const CRACK_FINAL_PATH = "/static/sounds/text_crack/crack_final.mp3";
+const FLOWER_MAGIC_PATH = "/static/sounds/text_crack/flower_magic.mp3";
 const CRACK_VOLUME = 0.55;
 const CRACK_FINAL_VOLUME = 0.8;
+const FLOWER_MAGIC_VOLUME = 0.45;
 
 let lastCrackIdx = -1;
 /** @type {HTMLAudioElement | null} */
@@ -36,6 +38,20 @@ export function playRandomCrackSound() {
   try {
     const a = new window.Audio(resolvePublicAssetUrl(CRACK_PATHS[idx]));
     a.volume = clamp01(CRACK_VOLUME);
+    const p = a.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch {
+    // ignore (SSR, codec, autoplay 차단)
+  }
+}
+
+/**
+ * 꽃이 피어날 때마다 호출. 여러 꽃이 짧은 간격으로 필 수 있어 매번 새로운 Audio로 overlap.
+ */
+export function playFlowerMagicSound() {
+  try {
+    const a = new window.Audio(resolvePublicAssetUrl(FLOWER_MAGIC_PATH));
+    a.volume = clamp01(FLOWER_MAGIC_VOLUME);
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
   } catch {
