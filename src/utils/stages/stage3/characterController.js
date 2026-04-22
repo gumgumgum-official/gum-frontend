@@ -18,6 +18,8 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *   glbLoader: ReturnType<import("../../common/assetLoaders.js").getGLBLoader>,
  *   config: import("../../../types.js").Stage3Config,
  *   getKeys: () => Record<string, boolean>,
+ *   renderer?: import("three").WebGLRenderer | null,
+ *   getCamera?: () => import("three").Camera | null,
  * }} params
  * @returns {{
  *   setup: (
@@ -42,13 +44,17 @@ export function createCharacterController({
   glbLoader,
   config,
   getKeys,
+  renderer = null,
+  getCamera = null,
 }) {
   void glbLoader;
   let characterModel = null;
+  let idleCharacterModel = null;
   let characterYPosition = 0;
   let characterMixer = null;
+  let idleCharacterMixer = null;
   let characterWalkAction = null;
-  let characterIdleAction = null;
+  let idleCharacterAction = null;
   let isWalking = false;
   let isMoving = false;
   let backgroundBounds = null;
@@ -105,68 +111,6 @@ export function createCharacterController({
   const _targetPosition = new THREE.Vector3();
   const _lookAtPosition = new THREE.Vector3();
   const _worldUp = new THREE.Vector3(0, 1, 0);
-  const ANIMATION_CROSS_FADE_SEC = 0.16;
-
-  function setAnimationMode(mode) {
-    if (mode === "walk") {
-      if (characterWalkAction && characterIdleAction) {
-        characterWalkAction.enabled = true;
-        characterWalkAction.paused = false;
-        characterWalkAction.setEffectiveWeight(1);
-        characterWalkAction.crossFadeFrom(
-          characterIdleAction,
-          ANIMATION_CROSS_FADE_SEC,
-          false,
-        );
-        characterIdleAction.paused = false;
-        return;
-      }
-
-      if (characterWalkAction) {
-        characterWalkAction.enabled = true;
-        characterWalkAction.paused = false;
-        characterWalkAction.setEffectiveWeight(1);
-      }
-      if (characterIdleAction) {
-        characterIdleAction.paused = true;
-        characterIdleAction.enabled = false;
-        characterIdleAction.setEffectiveWeight(0);
-      }
-      return;
-    }
-
-    if (mode === "idle") {
-      if (characterWalkAction && characterIdleAction) {
-        characterIdleAction.enabled = true;
-        characterIdleAction.paused = false;
-        characterIdleAction.setEffectiveWeight(1);
-        characterIdleAction.crossFadeFrom(
-          characterWalkAction,
-          ANIMATION_CROSS_FADE_SEC,
-          false,
-        );
-        characterWalkAction.paused = false;
-        return;
-      }
-
-      if (characterWalkAction) {
-        characterWalkAction.paused = true;
-        characterWalkAction.enabled = false;
-        characterWalkAction.setEffectiveWeight(0);
-      }
-      if (characterIdleAction) {
-        characterIdleAction.enabled = true;
-        characterIdleAction.paused = false;
-        characterIdleAction.setEffectiveWeight(1);
-      } else if (characterWalkAction) {
-        // idle 클립이 없으면 walk의 시작 포즈를 idle 대용으로 사용
-        characterWalkAction.enabled = true;
-        characterWalkAction.time = 0;
-        characterWalkAction.paused = true;
-        characterWalkAction.setEffectiveWeight(1);
-      }
-    }
-  }
 
   return {
     /**
@@ -192,10 +136,14 @@ export function createCharacterController({
       ]).then(
         ([gltf, idleGltf]) => {
           characterModel = SkeletonUtils.clone(gltf.scene);
+          idleCharacterModel = idleGltf
+            ? SkeletonUtils.clone(idleGltf.scene)
+            : null;
 
           const scale = config.character?.scale ?? 1;
           const radiusCfg = config.character?.collisionRadius;
           characterModel.scale.setScalar(scale);
+          if (idleCharacterModel) idleCharacterModel.scale.setScalar(scale);
           collisionRadius =
             radiusCfg != null ? radiusCfg : Math.max(0.2, scale * 0.22);
 
@@ -224,6 +172,10 @@ export function createCharacterController({
             spawnZ += off.z ?? 0;
           }
           characterModel.position.set(spawnX, characterYPosition, spawnZ);
+          if (idleCharacterModel) {
+            idleCharacterModel.position.set(spawnX, characterYPosition, spawnZ);
+            idleCharacterModel.visible = false;
+          }
 
           characterModel.traverse((child) => {
             if (child.isMesh) {
@@ -231,6 +183,14 @@ export function createCharacterController({
               child.receiveShadow = true;
             }
           });
+          if (idleCharacterModel) {
+            idleCharacterModel.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+          }
 
           if (gltf.animations && gltf.animations.length > 0) {
             characterMixer = new THREE.AnimationMixer(characterModel);
@@ -248,18 +208,24 @@ export function createCharacterController({
               findIdleClipByName(/idle|stand|wait|pose|breath|rest/i) ??
               idleClips[0] ??
               null;
-            const idleClipFromWalkModel =
-              findClipByName(/idle|stand|wait|pose|breath|rest/i) ??
-              clips.find((clip) => clip !== walkClip) ??
-              null;
-            const idleClip = idleClipFromIdleModel ?? idleClipFromWalkModel;
 
             characterWalkAction = walkClip
               ? characterMixer.clipAction(walkClip)
               : null;
-            characterIdleAction = idleClip
-              ? characterMixer.clipAction(idleClip)
-              : null;
+            if (idleCharacterModel && idleClipFromIdleModel) {
+              idleCharacterMixer = new THREE.AnimationMixer(idleCharacterModel);
+              idleCharacterAction = idleCharacterMixer.clipAction(
+                idleClipFromIdleModel,
+              );
+            } else {
+              const idleClipFromWalkModel =
+                findClipByName(/idle|stand|wait|pose|breath|rest/i) ??
+                clips.find((clip) => clip !== walkClip) ??
+                null;
+              idleCharacterAction = idleClipFromWalkModel
+                ? characterMixer.clipAction(idleClipFromWalkModel)
+                : null;
+            }
 
             if (characterWalkAction) {
               characterWalkAction.loop = THREE.LoopRepeat;
@@ -268,19 +234,34 @@ export function createCharacterController({
               characterWalkAction.enabled = true;
               characterWalkAction.setEffectiveWeight(1);
             }
-            if (characterIdleAction) {
-              characterIdleAction.loop = THREE.LoopRepeat;
-              characterIdleAction.play();
-              characterIdleAction.paused = false;
-              characterIdleAction.enabled = true;
-              characterIdleAction.setEffectiveWeight(1);
+            if (idleCharacterAction) {
+              idleCharacterAction.loop = THREE.LoopRepeat;
+              idleCharacterAction.play();
+              idleCharacterAction.paused = false;
+              idleCharacterAction.enabled = true;
+              idleCharacterAction.setEffectiveWeight(1);
             }
-            setAnimationMode("idle");
+            // 초기 상태는 정지(idle)로 시작.
+            if (idleCharacterModel) {
+              characterModel.visible = false;
+              idleCharacterModel.visible = true;
+            }
+            if (characterWalkAction) characterWalkAction.paused = true;
+            if (idleCharacterAction) idleCharacterAction.paused = false;
           } else {
             console.warn("⚠️ 캐릭터 모델에 애니메이션 클립이 없습니다.");
           }
 
           scene.add(characterModel);
+          if (idleCharacterModel) scene.add(idleCharacterModel);
+          const prewarmCamera = getCamera?.();
+          if (renderer && prewarmCamera) {
+            if (typeof renderer.compileAsync === "function") {
+              void renderer.compileAsync(scene, prewarmCamera).catch(() => {});
+            } else {
+              renderer.compile(scene, prewarmCamera);
+            }
+          }
           inspectGLTF(gltf, "캐릭터 모델");
         },
         (err) =>
@@ -310,10 +291,10 @@ export function createCharacterController({
       const keys = getKeys();
       _moveVector.set(0, 0, 0);
 
-      if (keys.ArrowUp) _moveVector.z -= 1;
-      if (keys.ArrowDown) _moveVector.z += 1;
-      if (keys.ArrowLeft) _moveVector.x -= 1;
-      if (keys.ArrowRight) _moveVector.x += 1;
+      if (keys.ArrowUp || keys.w || keys.W || keys.KeyW) _moveVector.z -= 1;
+      if (keys.ArrowDown || keys.s || keys.S || keys.KeyS) _moveVector.z += 1;
+      if (keys.ArrowLeft || keys.a || keys.A || keys.KeyA) _moveVector.x -= 1;
+      if (keys.ArrowRight || keys.d || keys.D || keys.KeyD) _moveVector.x += 1;
 
       const movingInput = _moveVector.length() > 0;
       let moved = false;
@@ -372,22 +353,36 @@ export function createCharacterController({
       // 실제 이동 여부는 외부 상태(getIsMoving)와 사운드에 유지
       isMoving = moved;
       if (characterWalkAction) {
-        // 요청사항: 키보드 입력이 없을 때는 idle 애니메이션 재생
-        if (movingInput) {
-          if (!isWalking) {
-            setAnimationMode("walk");
-            isWalking = true;
+        // 이동 상태가 바뀔 때만 walk/idle 토글을 수행한다.
+        if (isWalking !== movingInput) {
+          if (movingInput) {
+            characterModel.visible = true;
+            if (idleCharacterModel) idleCharacterModel.visible = false;
+            characterWalkAction.paused = false;
+            if (idleCharacterAction) idleCharacterAction.paused = true;
+          } else {
+            if (idleCharacterModel) {
+              characterModel.visible = false;
+              idleCharacterModel.visible = true;
+            } else {
+              characterModel.visible = true;
+            }
+            characterWalkAction.paused = true;
+            if (idleCharacterAction) idleCharacterAction.paused = false;
           }
-        } else {
-          if (isWalking) {
-            setAnimationMode("idle");
-            isWalking = false;
-          }
+          isWalking = movingInput;
         }
       }
+      if (!movingInput && idleCharacterModel && characterModel) {
+        idleCharacterModel.position.copy(characterModel.position);
+        idleCharacterModel.rotation.copy(characterModel.rotation);
+      }
 
-      if (characterMixer) {
+      if (characterMixer && (isWalking || !idleCharacterMixer)) {
         characterMixer.update(delta);
+      }
+      if (idleCharacterMixer && !isWalking) {
+        idleCharacterMixer.update(delta);
       }
 
       syncWalkSound(moved);
@@ -420,26 +415,22 @@ export function createCharacterController({
       }
       if (characterModel) {
         scene.remove(characterModel);
-        characterModel.traverse((child) => {
-          if (child.isMesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
-            }
-          }
-        });
         characterModel = null;
+      }
+      if (idleCharacterModel) {
+        scene.remove(idleCharacterModel);
+        idleCharacterModel = null;
       }
       if (characterMixer) {
         characterMixer.stopAllAction();
         characterMixer = null;
       }
+      if (idleCharacterMixer) {
+        idleCharacterMixer.stopAllAction();
+        idleCharacterMixer = null;
+      }
       characterWalkAction = null;
-      characterIdleAction = null;
+      idleCharacterAction = null;
       isWalking = false;
       backgroundBounds = null;
       staticColliderBoxes = [];
