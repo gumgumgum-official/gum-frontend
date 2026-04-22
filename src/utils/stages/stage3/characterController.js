@@ -65,6 +65,12 @@ export function createCharacterController({
   let walkAudio = null;
   /** @type {import("gsap").core.Timeline | null} */
   let hammerTween = null;
+  /**
+   * Hammer 트윈은 rotation.x를 앞으로 기울였다가 원위치로 복귀하는 구조인데
+   * 이전 트윈을 중간에 kill한 시점의 rotation.x를 새 기준으로 삼으면
+   * 연타할수록 기울기가 누적된다. 최초 1회 rest 포즈를 캐싱해 항상 복귀 기준으로 사용.
+   */
+  let hammerRestX = null;
 
   const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
@@ -107,7 +113,14 @@ export function createCharacterController({
   const _worldUp = new THREE.Vector3(0, 1, 0);
 
   return {
-    setup(backgroundMaxY, bounds, colliderBoxes = []) {
+    /**
+     * @param {number} backgroundMaxY - 캐릭터 발이 놓일 바닥의 월드 Y (지형 상단)
+     * @param {import("three").Box3} bounds
+     * @param {import("./islandStaticColliders.js").IslandColliderAabb[]} [colliderBoxes]
+     * @param {{ worldSpawnXZ?: { x: number, z: number } }} [setupOptions] - worldSpawnXZ가 있으면 XZ 기준은 이 값(bounds 중심 대신), spawnOffset은 여전히 가산
+     */
+    setup(backgroundMaxY, bounds, colliderBoxes = [], setupOptions = {}) {
+      const { worldSpawnXZ } = setupOptions;
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
 
@@ -142,7 +155,14 @@ export function createCharacterController({
 
           let spawnX = 0;
           let spawnZ = 0;
-          if (bounds && !bounds.isEmpty()) {
+          if (
+            worldSpawnXZ &&
+            Number.isFinite(worldSpawnXZ.x) &&
+            Number.isFinite(worldSpawnXZ.z)
+          ) {
+            spawnX = worldSpawnXZ.x;
+            spawnZ = worldSpawnXZ.z;
+          } else if (bounds && !bounds.isEmpty()) {
             spawnX = (bounds.min.x + bounds.max.x) * 0.5;
             spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
           }
@@ -436,17 +456,18 @@ export function createCharacterController({
 
     playHammerCue() {
       if (!characterModel) return;
-      hammerTween?.kill();
       const m = characterModel;
-      const baseX = m.rotation.x;
+      if (hammerRestX === null) hammerRestX = m.rotation.x;
+      hammerTween?.kill();
+      m.rotation.x = hammerRestX;
       hammerTween = gsap.timeline();
       hammerTween.to(m.rotation, {
-        x: baseX - 0.52,
+        x: hammerRestX - 0.52,
         duration: 0.12,
         ease: "power2.out",
       });
       hammerTween.to(m.rotation, {
-        x: baseX,
+        x: hammerRestX,
         duration: 0.2,
         ease: "power2.inOut",
       });

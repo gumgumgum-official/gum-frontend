@@ -1,6 +1,18 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-/** @type {import("../../types.js").StageBasicConfig & { model: import("../../types.js").Stage2ModelConfig, bench?: import("../../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, boardPosterImage?: string, airplane?: { path: string }, toneMappingExposureDelta?: number }} */
+import { STAGE3_CHARACTER_CONFIG } from "./stage3/stage3CharacterConfig.js";
+
+/**
+ * Stage6 유저 GLB 시각 스케일 (Stage3 `character.scale`에 곱함).
+ * 너무 작게 줄이면 groundOffset까지 함께 줄어 바닥에 묻혀 보일 수 있다.
+ */
+const STAGE6_USER_SCALE_VS_STAGE3 = 0.3;
+/** 배율로 줄인 발 보정의 하한값 */
+const STAGE6_USER_GROUND_OFFSET_MIN = 0.1;
+/** Stage3(5)보다 느리게 — 고정 카메라 실내 이동 속도 */
+const STAGE6_MOVE_SPEED = 1.85;
+
+/** @type {import("../../types.js").Stage6Config} */
 export const STAGE6_CONFIG = {
   camera: {
     fov: 60,
@@ -15,7 +27,7 @@ export const STAGE6_CONFIG = {
   /** initThreeApp 기본 노출 대비 Stage6에서만 밝게 (WebGLRenderer.toneMappingExposure 가산) */
   toneMappingExposureDelta: 0.18,
   model: {
-    path: "/models/stage6/airport3_compression.glb",
+    path: "/models/stage6/airport3_with_characters.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -26,4 +38,23 @@ export const STAGE6_CONFIG = {
     path: "/models/stage6/airplane_compression.glb",
   },
   boardPosterImage: "/assets/poster/stamp_poster.png",
+  characterModelPath: STAGE3_CHARACTER_CONFIG.characterModelPath,
+  characterIdleModelPath: STAGE3_CHARACTER_CONFIG.characterIdleModelPath,
+  character: {
+    ...STAGE3_CHARACTER_CONFIG.character,
+    scale:
+      (STAGE3_CHARACTER_CONFIG.character.scale ?? 0.35) *
+      STAGE6_USER_SCALE_VS_STAGE3,
+    collisionRadius:
+      (STAGE3_CHARACTER_CONFIG.character.collisionRadius ?? 0.65) *
+      STAGE6_USER_SCALE_VS_STAGE3,
+    groundOffset: Math.max(
+      STAGE3_CHARACTER_CONFIG.character.groundOffset *
+        STAGE6_USER_SCALE_VS_STAGE3,
+      STAGE6_USER_GROUND_OFFSET_MIN,
+    ),
+    moveSpeed: STAGE6_MOVE_SPEED,
+    spawnOffset: { x: 0, z: 0 },
+    escalatorFrontDistance: 1.15,
+  },
 };

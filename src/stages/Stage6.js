@@ -5,10 +5,12 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../utils/common/gltfTemplateCache.js";
+import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
@@ -32,16 +34,98 @@ import {
 } from "../events/stage6Events.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 const INT_PREFIX = "INT_";
+const CHAR_ROOT_NAMES = [
+  "INT_Gum_Cry",
+  "INT_Gum_Heart",
+  "INT_Gum_Camera",
+  "INT_Gum_Airplane",
+  "INT_Gum_Lollipop",
+];
+/** 각 캐릭터 클릭 시 말풍선에 표시할 텍스트 */
+const CHAR_SPEECH_MAP = {
+  INT_Gum_Cry: "...",
+  INT_Gum_Heart: "이거 받아요 💕",
+  INT_Gum_Camera: "찰칵! 📸",
+  INT_Gum_Airplane: "날아라~ ✈️",
+  INT_Gum_Lollipop: "같이 먹어요~ 🍭",
+};
+const CHAR_BUBBLE_VISIBLE_SEC = 2.5;
+const CHAR_BUBBLE_OFFSET_Y = 0.45;
+const CHAR_ANIM_MAP = {
+  INT_Gum_Cry: [],
+  INT_Gum_Heart: ["Heart_Offer_Rig", "Heart_Offer_Prop"],
+  INT_Gum_Camera: [
+    "Shutter_EyeDefL",
+    "Shutter_EyeZZL",
+    "Shutter_PropCam",
+    "Shutter_Flash",
+  ],
+  INT_Gum_Airplane: ["Plane_Throw_Rig", "Plane_Throw_Prop"],
+  INT_Gum_Lollipop: ["Lollipop_ArmShake_Rig", "Lollipop_Shake"],
+};
 const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
 const ATM_OBJECT_NAME = "OBJ_ATM";
 const ATM_INTERACTION_REQUIRED_COUNT = 2;
 const ATM_EMISSIVE_DARK_STRENGTH = 0.06;
 const ATM_EMISSIVE_BRIGHT_STRENGTH = 1.25;
 const ATM_EMISSIVE_TWEEN_SPEED = 3.5;
+const _down = new THREE.Vector3(0, -1, 0);
+const _floorRayOrigin = new THREE.Vector3();
+const _escWorld = new THREE.Vector3();
+const _toCam = new THREE.Vector3();
+
+function normalizeAnimToken(name) {
+  return String(name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * GLB 교체 시 clip 명의 구분자/대소문자가 바뀌어도 최대한 안전하게 매칭한다.
+ * @param {THREE.AnimationClip[]} animations
+ * @param {string} clipName
+ */
+function findAnimationClipLoose(animations, clipName) {
+  const exact = THREE.AnimationClip.findByName(animations, clipName);
+  if (exact) return exact;
+  const needle = normalizeAnimToken(clipName);
+  return (
+    animations.find((clip) => normalizeAnimToken(clip?.name) === needle) ??
+    animations.find((clip) =>
+      normalizeAnimToken(clip?.name).includes(needle),
+    ) ??
+    null
+  );
+}
+
+/** @param {THREE.Object3D} root */
+function collectMeshesDeep(root) {
+  /** @type {THREE.Mesh[]} */
+  const meshes = [];
+  root.traverse((o) => {
+    if (o.isMesh) meshes.push(o);
+  });
+  return meshes;
+}
+
+/**
+ * 천장보다 아래에서 쏴야 첫 히트가 바닥이 된다.
+ * @param {THREE.Mesh[]} meshes
+ * @param {number} x
+ * @param {number} z
+ * @param {THREE.Raycaster} rc
+ * @param {number} rayStartY
+ */
+function raycastFloorY(meshes, x, z, rc, rayStartY) {
+  _floorRayOrigin.set(x, rayStartY, z);
+  rc.set(_floorRayOrigin, _down);
+  const hits = rc.intersectObjects(meshes, false);
+  return hits.length > 0 ? hits[0].point.y : null;
+}
 
 export function Stage6() {
   const objects = [];
-  /** @type {import("../types.js").StageBasicConfig & { model: import("../types.js").Stage2ModelConfig, boardPosterImage?: string, bench?: import("../types.js").Stage3PropConfig, curtain?: { path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }, airplane?: { path: string }, toneMappingExposureDelta?: number }} */
+  /** @type {import("../types.js").Stage6Config} */
   const config = STAGE6_CONFIG;
   const airportSubtitleLeadSec =
     Number(STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC ?? 0.75) || 0;
@@ -112,6 +196,30 @@ export function Stage6() {
   const ATM_CLICK_SOUND_VOLUME = 0.5;
   let activeSubtitleCueIndex = -1;
   let isAirportSubtitleVisible = false;
+  const keyboard = createKeyboardInput([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+  ]);
+  /** @type {ReturnType<typeof createCharacterController> | null} */
+  let character = null;
+  /** @type {THREE.AnimationMixer | null} */
+  let charMixer = null;
+  /** @type {Record<string, THREE.AnimationAction[]>} */
+  const charActions = {};
+  /** @type {Record<string, THREE.Object3D | null>} */
+  const charRoots = {};
+  /** THREE.js scene에서 remove만 하고 dispose하지 않을 캐시된 gltf.scene */
+  let gltfSceneRef = null;
+
+  // 말풍선 상태
+  /** @type {HTMLDivElement | null} */
+  let charBubbleEl = null;
+  /** @type {string | null} 현재 말풍선이 표시 중인 캐릭터 이름 */
+  let charBubbleActiveChar = null;
+  let charBubbleRemaining = 0;
+  const _bubblePos = new THREE.Vector3();
 
   function dispatchAirportSubtitleTextByTime(currentSec) {
     const syncedSec = Math.max(0, currentSec + airportSubtitleLeadSec);
@@ -350,6 +458,93 @@ export function Stage6() {
     }
   };
 
+  function createCharBubbleEl() {
+    const el = document.createElement("div");
+    el.className = "speech-bubble-stage6";
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function showCharBubble(charName) {
+    const text = CHAR_SPEECH_MAP[charName];
+    if (!text || !charBubbleEl) return;
+    // 이전 말풍선 즉시 교체
+    charBubbleEl.classList.remove("is-visible");
+    charBubbleEl.textContent = text;
+    // 한 프레임 뒤 is-visible 추가해야 transition이 트리거됨
+    requestAnimationFrame(() => {
+      if (charBubbleEl) charBubbleEl.classList.add("is-visible");
+    });
+    charBubbleActiveChar = charName;
+    charBubbleRemaining = CHAR_BUBBLE_VISIBLE_SEC;
+  }
+
+  function hideCharBubble() {
+    if (!charBubbleEl) return;
+    charBubbleEl.classList.remove("is-visible");
+    charBubbleActiveChar = null;
+    charBubbleRemaining = 0;
+  }
+
+  function updateCharBubblePosition() {
+    if (!charBubbleActiveChar || !charBubbleEl || !cameraRef || !canvasRef)
+      return;
+    const charObj = charRoots[charBubbleActiveChar];
+    if (!charObj) return;
+    charObj.updateWorldMatrix(true, false);
+    charObj.getWorldPosition(_bubblePos);
+    _bubblePos.y += CHAR_BUBBLE_OFFSET_Y;
+    cameraRef.updateMatrixWorld();
+    _bubblePos.project(cameraRef);
+    const rect = canvasRef.getBoundingClientRect();
+    const x = rect.left + (_bubblePos.x * 0.5 + 0.5) * rect.width;
+    const y = rect.top + (-_bubblePos.y * 0.5 + 0.5) * rect.height;
+    charBubbleEl.style.left = `${x}px`;
+    charBubbleEl.style.top = `${y}px`;
+  }
+
+  function playCharacter(charName) {
+    const actions = charActions[charName];
+    if (!actions?.length) {
+      // INT_Gum_Cry: 애니메이션 없음, 말풍선만 표시
+      showCharBubble(charName);
+      return;
+    }
+    for (const a of actions) a.reset().play();
+    showCharBubble(charName);
+  }
+
+  function setupCharAnimations(sceneRoot, animations) {
+    // GLB 안의 실제 INT_ 노드 이름과 애니메이션 클립 이름 덤프
+    const allIntNodes = [];
+    sceneRoot.traverse((o) => {
+      if (o.name?.startsWith("INT_")) allIntNodes.push(o.name);
+    });
+    console.log("[Stage6] INT_ nodes in GLB:", allIntNodes);
+    console.log(
+      "[Stage6] animation clips:",
+      animations.map((a) => a.name),
+    );
+    charMixer = new THREE.AnimationMixer(sceneRoot);
+    for (const charName of CHAR_ROOT_NAMES) {
+      charRoots[charName] = sceneRoot.getObjectByName(charName) ?? null;
+      const clipNames = CHAR_ANIM_MAP[charName] ?? [];
+      charActions[charName] = [];
+      for (const clipName of clipNames) {
+        const clip = findAnimationClipLoose(animations, clipName);
+        if (!clip) {
+          console.warn(`[Stage6] anim clip not found: ${clipName}`);
+          continue;
+        }
+        const action = charMixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        charActions[charName].push(action);
+      }
+    }
+  }
+
   function normalizeIntNameToken(value) {
     return String(value ?? "")
       .toLowerCase()
@@ -540,21 +735,25 @@ export function Stage6() {
     const hits = raycaster.intersectObjects(intRaycastMeshes, false);
     for (const hit of hits) {
       let p = hit.object;
+      let topIntNode = null;
       while (p) {
         if (
           typeof p.name === "string" &&
           (p.name.startsWith(INT_PREFIX) ||
             EXTRA_CLICKABLE_OBJECT_NAMES.has(p.name))
         ) {
-          const suffix = p.name.startsWith(INT_PREFIX)
-            ? p.name.slice(INT_PREFIX.length)
-            : p.name;
-          return {
-            intName: p.name,
-            target: normalizeIntNameToken(suffix),
-          };
+          topIntNode = p;
         }
         p = p.parent;
+      }
+      if (topIntNode) {
+        const suffix = topIntNode.name.startsWith(INT_PREFIX)
+          ? topIntNode.name.slice(INT_PREFIX.length)
+          : topIntNode.name;
+        return {
+          intName: topIntNode.name,
+          target: normalizeIntNameToken(suffix),
+        };
       }
     }
     return null;
@@ -590,6 +789,13 @@ export function Stage6() {
       cameraRef = this.camera;
 
       scene.background = new THREE.Color(config.background.color);
+      character = createCharacterController({
+        scene,
+        glbLoader,
+        config,
+        getKeys: () => keyboard.keys,
+      });
+      keyboard.mount();
 
       const exposureDelta = Number(config.toneMappingExposureDelta ?? 0.14);
       stage6ExposureRestore = {
@@ -619,12 +825,29 @@ export function Stage6() {
       );
       window.addEventListener("keydown", handleKeyDown, { capture: true });
       onPointerDown = (event) => {
-        if (event.button !== 0) return;
-        if (isSceneInteractionLocked) return;
         const hit = getPointerHitTarget(event);
+        console.log(
+          `[Stage6] pointerdown → hit:`,
+          hit,
+          `locked:`,
+          isSceneInteractionLocked,
+        );
         if (!hit) return;
-        if (import.meta.env.DEV) {
-          console.log(`[Stage6] INT click: ${hit.intName}`);
+        const isCharacterHit = CHAR_ROOT_NAMES.includes(hit.intName);
+        console.log(
+          `[Stage6] hit.intName:`,
+          JSON.stringify(hit.intName),
+          `hit.target:`,
+          hit.target,
+          `isCharacterHit:`,
+          isCharacterHit,
+        );
+        // 씬 잠금 중에도 캐릭터 클릭 애니메이션은 허용.
+        if (isSceneInteractionLocked && !isCharacterHit) return;
+        // 캐릭터는 클릭 시마다 재생
+        if (isCharacterHit) {
+          console.log(`[Stage6] playCharacter:`, hit.intName);
+          playCharacter(hit.intName);
         }
         if (hit.target === "photobooth") {
           playPhotoboothCurtainSound();
@@ -673,14 +896,70 @@ export function Stage6() {
       };
       canvas.addEventListener("pointermove", onPointerMove);
 
+      charBubbleEl = createCharBubbleEl();
+
       scheduleAirplaneCallSign();
       isSceneInteractionLocked = true;
 
-      // 배경 GLB 로드: 템플릿 캐시 + 인스턴스 클론
+      // 배경 GLB 로드: 템플릿 캐시 (animated 씬은 gltf.scene 직접 사용)
       void loadGltfTemplateCached(stage6ModelUrl)
         .then((gltf) => {
           if (!isStage6Active) return;
-          const model = cloneStage6ModelInstance(gltf.scene);
+          const model = gltf.scene;
+          gltfSceneRef = model;
+
+          // SkinnedMesh 프러스텀 컬링 해제 (§11.2: 카메라 가장자리 사라짐 방지)
+          model.traverse((o) => {
+            if (/** @type {any} */ (o).isSkinnedMesh) {
+              /** @type {any} */ (o).frustumCulled = false;
+            }
+          });
+
+          // Electron 웹뷰에서만 transmission 소재 fallback
+          if (isElectronLike && !model.userData.stage6ElectronPatched) {
+            model.userData.stage6ElectronPatched = true;
+            model.traverse((child) => {
+              const mesh = /** @type {any} */ (child);
+              if (!mesh.isMesh || !mesh.material) return;
+              const mats = Array.isArray(mesh.material)
+                ? mesh.material
+                : [mesh.material];
+              for (const mat of mats) {
+                if (
+                  !mat ||
+                  !(
+                    typeof mat.transmission === "number" && mat.transmission > 0
+                  )
+                )
+                  continue;
+                mat.transmission = 0;
+                mat.transparent = true;
+                mat.opacity = Math.min(
+                  typeof mat.opacity === "number" ? mat.opacity : 1,
+                  0.42,
+                );
+                if (typeof mat.roughness === "number")
+                  mat.roughness = Math.max(mat.roughness, 0.08);
+                if (typeof mat.metalness === "number")
+                  mat.metalness = Math.min(mat.metalness, 0.05);
+                if (typeof mat.envMapIntensity === "number")
+                  mat.envMapIntensity = Math.max(mat.envMapIntensity, 1.15);
+                if ("depthWrite" in mat) mat.depthWrite = false;
+                mat.needsUpdate = true;
+              }
+            });
+          }
+
+          model.traverse((child) => {
+            const mesh = /** @type {any} */ (child);
+            if (mesh.isMesh) {
+              if (config.model.castShadow !== undefined)
+                mesh.castShadow = config.model.castShadow;
+              if (config.model.receiveShadow !== undefined)
+                mesh.receiveShadow = config.model.receiveShadow;
+            }
+          });
+
           model.position.set(
             config.model.position?.x ?? 0,
             config.model.position?.y ?? 0,
@@ -688,21 +967,66 @@ export function Stage6() {
           );
           model.updateMatrixWorld(true);
 
-          model.traverse((child) => {
-            const mesh = /** @type {any} */ (child);
-            if (mesh.isMesh) {
-              if (config.model.castShadow !== undefined) {
-                mesh.castShadow = config.model.castShadow;
-              }
-              if (config.model.receiveShadow !== undefined) {
-                mesh.receiveShadow = config.model.receiveShadow;
-              }
-            }
-          });
-
           objects.push(model);
           scene.add(model);
+
+          // 애니메이션 시스템 초기화 (§5: mixer 1개, gltf.scene 전체)
+          setupCharAnimations(model, gltf.animations ?? []);
+
           registerIntInteractions(model);
+
+          // BG_Floor만 대상으로 바닥 레이캐스트 (§11.11: 성능 최적화)
+          const bgFloor = model.getObjectByName("BG_Floor");
+          const floorMeshes = bgFloor
+            ? collectMeshesDeep(bgFloor)
+            : collectMeshesDeep(model);
+
+          const bounds = new THREE.Box3().setFromObject(model);
+          const esc =
+            model.getObjectByName("INT_Escalator1") ||
+            model.getObjectByName("INT_Escalator2");
+
+          let spawnX = (bounds.min.x + bounds.max.x) * 0.5;
+          let spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
+          let rayStartY = bounds.max.y + 1;
+
+          if (esc) {
+            esc.updateMatrixWorld(true);
+            esc.getWorldPosition(_escWorld);
+            rayStartY = Math.max(_escWorld.y + 4, bounds.min.y + 2);
+            const camPos = config.camera.position;
+            _toCam.set(camPos.x - _escWorld.x, 0, camPos.z - _escWorld.z);
+            if (_toCam.lengthSq() < 1e-6) {
+              _toCam.set(0, 0, 1);
+            } else {
+              _toCam.normalize();
+            }
+            const frontDist =
+              Number(config.character?.escalatorFrontDistance ?? 1.1) || 1.1;
+            spawnX = _escWorld.x + _toCam.x * frontDist;
+            spawnZ = _escWorld.z + _toCam.z * frontDist;
+          }
+
+          let floorY = raycastFloorY(
+            floorMeshes,
+            spawnX,
+            spawnZ,
+            raycaster,
+            rayStartY,
+          );
+          if (floorY == null) {
+            if (esc) {
+              esc.updateMatrixWorld(true);
+              esc.getWorldPosition(_escWorld);
+              floorY = _escWorld.y;
+            } else {
+              floorY = bounds.min.y + 0.05;
+            }
+          }
+
+          character?.setup(floorY, bounds, [], {
+            worldSpawnXZ: { x: spawnX, z: spawnZ },
+          });
         })
         .catch((err) =>
           console.error(
@@ -792,11 +1116,31 @@ export function Stage6() {
       if (atmEmissiveMaterials.length > 0) {
         applyAtmEmissive(atmEmissiveProgress);
       }
+
+      if (charMixer) charMixer.update(delta);
+
+      if (charBubbleActiveChar) {
+        charBubbleRemaining -= delta;
+        if (charBubbleRemaining <= 0) {
+          hideCharBubble();
+        } else {
+          updateCharBubblePosition();
+        }
+      }
+
+      if (character) {
+        character.update(delta, this.camera, { skipCameraFollow: true });
+      }
     },
 
     cleanup(scene) {
       isStage6Active = false;
       cancelAirplaneCallSignScheduled();
+      keyboard.unmount();
+      if (character) {
+        character.cleanup();
+        character = null;
+      }
       if (photoboothCurtainAudio) {
         photoboothCurtainAudio.pause();
         photoboothCurtainAudio.src = "";
@@ -845,8 +1189,26 @@ export function Stage6() {
       atmEmissiveTarget = 0;
       isSceneInteractionLocked = false;
       intRaycastMeshes.length = 0;
+
+      if (charMixer) {
+        charMixer.stopAllAction();
+        charMixer = null;
+      }
+      for (const k of Object.keys(charActions)) delete charActions[k];
+      for (const k of Object.keys(charRoots)) delete charRoots[k];
+
+      hideCharBubble();
+      if (charBubbleEl?.parentNode)
+        charBubbleEl.parentNode.removeChild(charBubbleEl);
+      charBubbleEl = null;
+
+      // gltf.scene은 캐시에 유지 — remove만, dispose 금지
+      const cachedScene = gltfSceneRef;
+      gltfSceneRef = null;
+
       objects.forEach((obj) => {
         scene.remove(obj);
+        if (obj === cachedScene) return;
         obj.traverse((child) => {
           if (child.isMesh) {
             if (child.geometry) child.geometry.dispose();

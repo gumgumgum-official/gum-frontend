@@ -4,6 +4,28 @@
  */
 import { http, HttpResponse } from "msw";
 
+/** MSW 전용: Stage3 Extrude + 래스터 검증용 (실제 Storage SVG 계약과 동일 마커) */
+const MSW_MOCK_HANDWRITING_SVG = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">
+  <g id="strokes">
+    <path d="M 24 60 Q 100 24 176 60" fill="none" stroke="#1a1a1a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g id="extrude-outlines" data-handwriting-extrude="true" style="display:none" aria-hidden="true">
+    <path d="M 20 55 L 180 55 L 180 65 L 20 65 Z" fill="#1a1a1a" stroke="none"/>
+  </g>
+</svg>`;
+
+function mockHandwritingSvgFetchHandlers() {
+  const respond = () =>
+    HttpResponse.text(MSW_MOCK_HANDWRITING_SVG, {
+      headers: { "Content-Type": "image/svg+xml; charset=utf-8" },
+    });
+  return [
+    http.get("https://example.com/mock-worry.svg", respond),
+    http.get("https://example.com/reserved-mock.svg", respond),
+  ];
+}
+
 const SAMPLE_WORRY = {
   worryId: "99",
   displaySeq: 99,
@@ -128,6 +150,7 @@ export function createHandlers(scenario) {
           return HttpResponse.json({ ok: true, assignedNext: false });
         },
       ),
+      ...mockHandwritingSvgFetchHandlers(),
     ];
   }
 
@@ -165,6 +188,7 @@ export function createHandlers(scenario) {
           return HttpResponse.json({ ok: true, assignedNext: false });
         },
       ),
+      ...mockHandwritingSvgFetchHandlers(),
     ];
   }
 
@@ -212,6 +236,7 @@ export function createHandlers(scenario) {
           return HttpResponse.json({ ok: true, assignedNext: false });
         },
       ),
+      ...mockHandwritingSvgFetchHandlers(),
     ];
   }
 
@@ -260,6 +285,7 @@ export function createHandlers(scenario) {
           return HttpResponse.json({ ok: true, assignedNext: false });
         },
       ),
+      ...mockHandwritingSvgFetchHandlers(),
     ];
   }
 
