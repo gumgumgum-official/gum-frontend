@@ -13,7 +13,7 @@
  * 사용: node scripts/optimize-glb.mjs [--file <path>] [--dry-run]
  */
 import { spawnSync } from "node:child_process";
-import { readdir, stat, unlink, rename } from "node:fs/promises";
+import { readdir, stat, unlink, rename, access } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,6 +29,30 @@ const CHILD_ENV = {
   ...process.env,
   PATH: `${VENDOR_KTX_BIN}:${process.env.PATH || ""}`,
 };
+
+async function ensureKtx() {
+  try {
+    await access(join(VENDOR_KTX_BIN, "ktx"));
+  } catch {
+    console.error(
+      [
+        "❌ KTX 바이너리를 찾을 수 없습니다: scripts/vendor/ktx/bin/ktx",
+        "   KTX-Software 설치 (Darwin arm64 기준):",
+        "",
+        "   curl -sL -o /tmp/KTX-Software.pkg \\",
+        "     https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2/KTX-Software-4.4.2-Darwin-arm64.pkg",
+        "   pkgutil --expand /tmp/KTX-Software.pkg /tmp/ktx-extract",
+        "   mkdir -p scripts/vendor/ktx/bin scripts/vendor/ktx/lib",
+        "   tar -xf /tmp/ktx-extract/KTX-Software-*-tools.pkg/Payload -C /tmp/ktx-out",
+        "   cp /tmp/ktx-out/usr/local/bin/ktx scripts/vendor/ktx/bin/",
+        "   cp /tmp/ktx-out/usr/local/lib/libktx* scripts/vendor/ktx/lib/",
+        "",
+        "   다른 OS는 https://github.com/KhronosGroup/KTX-Software/releases 참고.",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+}
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
@@ -107,6 +131,7 @@ async function optimizeOne(file) {
 }
 
 async function main() {
+  await ensureKtx();
   const files = SINGLE_FILE ? [SINGLE_FILE] : await walk(ROOT);
   console.log(
     `\n🎯 ${files.length} GLB 파일 최적화 시작${DRY_RUN ? " (DRY RUN)" : ""}`,
