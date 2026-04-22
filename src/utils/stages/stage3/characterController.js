@@ -4,7 +4,6 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import gsap from "gsap";
 import { inspectGLTF } from "../../common/modelInspector.js";
 import {
   loadGltfTemplateCached,
@@ -37,6 +36,7 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *   getYaw: () => number | null,
  *   getIsMoving: () => boolean,
  *   playHammerCue: () => void,
+ *   isPunching: () => boolean,
  * }}
  */
 export function createCharacterController({
@@ -63,14 +63,13 @@ export function createCharacterController({
   let collisionRadius = 0.55;
   /** @type {HTMLAudioElement | null} */
   let walkAudio = null;
-  /** @type {import("gsap").core.Timeline | null} */
-  let hammerTween = null;
-  /**
-   * Hammer 트윈은 rotation.x를 앞으로 기울였다가 원위치로 복귀하는 구조인데
-   * 이전 트윈을 중간에 kill한 시점의 rotation.x를 새 기준으로 삼으면
-   * 연타할수록 기울기가 누적된다. 최초 1회 rest 포즈를 캐싱해 항상 복귀 기준으로 사용.
-   */
-  let hammerRestX = null;
+  /** @type {THREE.Object3D | null} */
+  let punchCharacterModel = null;
+  /** @type {THREE.AnimationMixer | null} */
+  let punchMixer = null;
+  /** @type {THREE.AnimationAction | null} */
+  let punchAction = null;
+  let isPunchPlaying = false;
 
   const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
@@ -128,13 +127,17 @@ export function createCharacterController({
         config.characterModelPath ?? "/models/common/user_walk_v2.glb";
       const relIdle =
         config.characterIdleModelPath ?? "/models/common/user_idle.glb";
+      const relPunch =
+        config.characterPunchModelPath ?? "/models/stage3/user_punch.glb";
       const characterUrl = resolvePublicAssetUrl(relChar);
       const idleUrl = resolvePublicAssetUrl(relIdle);
+      const punchUrl = resolvePublicAssetUrl(relPunch);
       Promise.all([
         loadGltfTemplateCached(characterUrl),
         loadGltfTemplateCached(idleUrl).catch(() => null),
+        loadGltfTemplateCached(punchUrl).catch(() => null),
       ]).then(
-        ([gltf, idleGltf]) => {
+        ([gltf, idleGltf, punchGltf]) => {
           characterModel = SkeletonUtils.clone(gltf.scene);
           idleCharacterModel = idleGltf
             ? SkeletonUtils.clone(idleGltf.scene)
@@ -254,6 +257,47 @@ export function createCharacterController({
 
           scene.add(characterModel);
           if (idleCharacterModel) scene.add(idleCharacterModel);
+
+          // Punch 모델: walk/idle과 별도 GLB. 엔터키 타격 시 전체 스왑 재생.
+          if (punchGltf) {
+            punchCharacterModel = SkeletonUtils.clone(punchGltf.scene);
+            punchCharacterModel.scale.setScalar(scale);
+            punchCharacterModel.position.set(
+              spawnX,
+              characterYPosition,
+              spawnZ,
+            );
+            punchCharacterModel.visible = false;
+            punchCharacterModel.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+            if (punchGltf.animations && punchGltf.animations.length > 0) {
+              punchMixer = new THREE.AnimationMixer(punchCharacterModel);
+              const punchClip = punchGltf.animations[0];
+              punchAction = punchMixer.clipAction(punchClip);
+              punchAction.loop = THREE.LoopOnce;
+              punchAction.clampWhenFinished = true;
+              punchMixer.addEventListener("finished", () => {
+                isPunchPlaying = false;
+                if (punchCharacterModel) punchCharacterModel.visible = false;
+                // walk/idle 복귀 — 현재 isWalking 상태에 맞춰 둘 중 하나만 show
+                if (isWalking) {
+                  if (characterModel) characterModel.visible = true;
+                  if (idleCharacterModel) idleCharacterModel.visible = false;
+                } else if (idleCharacterModel) {
+                  if (characterModel) characterModel.visible = false;
+                  idleCharacterModel.visible = true;
+                } else if (characterModel) {
+                  characterModel.visible = true;
+                }
+              });
+            }
+            scene.add(punchCharacterModel);
+          }
+
           const prewarmCamera = getCamera?.();
           if (renderer && prewarmCamera) {
             if (typeof renderer.compileAsync === "function") {
@@ -287,6 +331,25 @@ export function createCharacterController({
         cameraLerpFactor,
         lookAtHeightOffset,
       } = config.character;
+
+      // punch 애니메이션 중: 입력 무시하고 punchMixer만 업데이트. 카메라 추적은 유지.
+      if (isPunchPlaying) {
+        if (punchMixer) punchMixer.update(delta);
+        syncWalkSound(false);
+        if (!options.skipCameraFollow) {
+          _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
+          const yawAssist = Number(options.cameraYawAssistRad ?? 0);
+          if (yawAssist !== 0) {
+            _cameraOffset.applyAxisAngle(_worldUp, yawAssist);
+          }
+          _targetPosition.copy(characterModel.position).add(_cameraOffset);
+          camera.position.lerp(_targetPosition, cameraLerpFactor);
+          _lookAtPosition.copy(characterModel.position);
+          _lookAtPosition.y += lookAtHeightOffset;
+          camera.lookAt(_lookAtPosition);
+        }
+        return;
+      }
 
       const keys = getKeys();
       _moveVector.set(0, 0, 0);
@@ -404,10 +467,16 @@ export function createCharacterController({
     },
 
     cleanup() {
-      if (hammerTween) {
-        hammerTween.kill();
-        hammerTween = null;
+      if (punchMixer) {
+        punchMixer.stopAllAction();
+        punchMixer = null;
       }
+      if (punchCharacterModel) {
+        scene.remove(punchCharacterModel);
+        punchCharacterModel = null;
+      }
+      punchAction = null;
+      isPunchPlaying = false;
       if (walkAudio) {
         walkAudio.pause();
         walkAudio.src = "";
@@ -455,22 +524,28 @@ export function createCharacterController({
     },
 
     playHammerCue() {
-      if (!characterModel) return;
-      const m = characterModel;
-      if (hammerRestX === null) hammerRestX = m.rotation.x;
-      hammerTween?.kill();
-      m.rotation.x = hammerRestX;
-      hammerTween = gsap.timeline();
-      hammerTween.to(m.rotation, {
-        x: hammerRestX - 0.52,
-        duration: 0.12,
-        ease: "power2.out",
-      });
-      hammerTween.to(m.rotation, {
-        x: hammerRestX,
-        duration: 0.2,
-        ease: "power2.inOut",
-      });
+      if (!punchCharacterModel || !punchAction || isPunchPlaying) return;
+      // 현재 보이는 모델(walk 또는 idle)의 포즈를 punch에 복사
+      const src = idleCharacterModel?.visible
+        ? idleCharacterModel
+        : characterModel;
+      if (!src) return;
+      punchCharacterModel.position.copy(src.position);
+      punchCharacterModel.rotation.copy(src.rotation);
+      // walk/idle 숨기고 punch만 보이게
+      if (characterModel) characterModel.visible = false;
+      if (idleCharacterModel) idleCharacterModel.visible = false;
+      punchCharacterModel.visible = true;
+      // 애니메이션 리셋 후 1회 재생
+      punchAction.reset();
+      punchAction.enabled = true;
+      punchAction.paused = false;
+      punchAction.play();
+      isPunchPlaying = true;
+    },
+
+    isPunching() {
+      return isPunchPlaying;
     },
   };
 }

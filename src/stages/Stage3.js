@@ -64,6 +64,11 @@ import {
   disposePortalTransitionSound,
 } from "../utils/common/playPortalTransitionSound.js";
 import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../events/stage6Events.js";
+import {
+  playRandomCrackSound,
+  playCrackFinalSound,
+  disposeStage3CrackSound,
+} from "../utils/stages/stage3/playCrackSound.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -78,9 +83,9 @@ const STAGE3_LETTER_LANDING_LIFT = 0.3;
 const STAGE3_GRAVITY = -35;
 const STAGE3_INITIAL_VY = -12;
 const LETTER_BOUNCE_RESTITUTION = 0.4;
-const HITS_TO_DESTROY = 10;
+const HITS_TO_DESTROY = 20;
 /** 본격 shatter 이전, 글자 표면에 금만 가는 타격 횟수 — 이후 1회 추가 타격으로 최종 파열 */
-const CRACK_HITS_BEFORE_SHATTER = 9;
+const CRACK_HITS_BEFORE_SHATTER = 19;
 /** 최종 shatter 시 글자를 쪼갤 조각 수 — 글자 크기/삼각형 수에 비해 너무 많으면 작게 튀어서 가치 감소 */
 const FINAL_SHATTER_PIECE_COUNT = 8;
 /** 한 번 타격 시 잘려 나가는 로컬 x 구간 비율 (fragment 재타격에서만 사용) */
@@ -91,11 +96,11 @@ const FRAGMENT_BOUNCE_RESTITUTION = 0.35;
 const FRAGMENT_GROUND_FRICTION = 0.82;
 /** 조각 생성 직후 튀는 속도·회전 배율 */
 const FRAGMENT_BURST_IMPULSE_MUL = 1.55;
-const FRAGMENT_FADE_START = 2;
-const FRAGMENT_FADE_END = 5;
+const FRAGMENT_FADE_START = 0.8;
+const FRAGMENT_FADE_END = 2.0;
 /** 조각 착지 시 스폰되는 꽃의 bloom 시간(초) */
 const FLOWER_BLOOM_DURATION = 3;
-const FLOWER_SCALE = 3;
+const FLOWER_SCALE = 2;
 const FLOWER_Y_OFFSET = 0.15;
 const FRAGMENT_FLOWER_PATHS = [
   "/models/common/flowers/pink2.glb",
@@ -610,6 +615,8 @@ export function Stage3() {
   const handleStageKeyDown = (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
+      // punch 애니메이션 실행 중에는 다음 타격을 막는다 (한 번 부수고 애니 끝까지 대기)
+      if (character?.isPunching?.()) return;
       onEnterHit();
     }
     if (event.key === "0" || event.code === "Digit0") {
@@ -861,14 +868,12 @@ export function Stage3() {
         stampSubtitle = "다 찾았어요. 다음 여정으로 떠날 수 있어요!";
       }
     }
-    // 텍스트를 먼저 부순 뒤 3번째 이스터에그를 찾는 경우 — onEnterHit에서는 호출되지 않음
-    tryDispatchWorryCompletionCelebration();
     return { didDiscover: true, stampSubtitle };
   }
 
   function tryDispatchWorryCompletionCelebration() {
     if (worryCompletionCelebrationDone) return;
-    if (easterEggCount < REQUIRED_EGG_COUNT || !textDestroyed) return;
+    if (!textDestroyed) return;
     worryCompletionCelebrationDone = true;
     pendingEggDiscoverySubtitle = null;
     cameraShakeEndTime = globalThis.performance.now() / 1000 + 0.5;
@@ -2537,18 +2542,29 @@ export function Stage3() {
     void loadGltfTemplateCached(url)
       .then((gltf) => {
         if (!isStage3Active || !sceneRef) return;
-        const flower = gltf.scene.clone(true);
-        flower.position.set(x, gy + FLOWER_Y_OFFSET, z);
-        flower.rotation.y = Math.random() * Math.PI * 2;
-        flower.traverse((ch) => {
+        const flowerInner = gltf.scene.clone(true);
+        flowerInner.traverse((ch) => {
           if (ch instanceof THREE.Mesh) {
             ch.castShadow = true;
             ch.receiveShadow = true;
           }
         });
-        flower.scale.setScalar(0);
-        sceneRef.add(flower);
-        standaloneFlowers.push({ group: flower, age: 0 });
+        // GLB 원점이 꽃 중심/위쪽에 있을 수 있어, 기본 offset으로는 뿌리가 바닥 아래에 파묻힌다.
+        // bbox.min.y만큼 inner를 위로 올려 container 원점이 꽃의 실질 바닥에 오도록 맞춤.
+        flowerInner.updateMatrixWorld(true);
+        const innerBox = new THREE.Box3().setFromObject(flowerInner);
+        if (!innerBox.isEmpty()) {
+          flowerInner.position.y -= innerBox.min.y;
+        }
+        const container = new THREE.Group();
+        container.add(flowerInner);
+        container.position.set(x, gy + FLOWER_Y_OFFSET, z);
+        container.rotation.y = Math.random() * Math.PI * 2;
+        container.scale.setScalar(0);
+        sceneRef.add(container);
+        standaloneFlowers.push({ group: container, age: 0 });
+        // 첫 꽃이 실제로 씬에 추가되는 순간 축하 자막 발동(가드로 1회만)
+        tryDispatchWorryCompletionCelebration();
       })
       .catch(() => {});
   }
@@ -2675,28 +2691,18 @@ export function Stage3() {
     return verts;
   }
 
-  /**
-   * 주어진 앵커 근처로 짧은 지그재그 스크래치(한 획) Line을 만들어 group에 추가.
-   * 앵커가 실제 SVG 면 위의 정점이라 스크래치는 글자 면을 벗어나지 않고 보인다.
-   */
-  function addCrackScratch(state, anchor) {
-    const angle = Math.random() * Math.PI * 2;
-    const len = 0.12 + Math.random() * 0.16;
-    const end = new THREE.Vector3(
-      anchor.x + Math.cos(angle) * len,
-      anchor.y + Math.sin(angle) * len,
-      anchor.z,
-    );
-    const dir = end.clone().sub(anchor);
+  /** 지그재그 line 한 획 추가. start→end 사이에 4세그먼트, 측면 퍼턴 랜덤. */
+  function addCrackSegment(state, start, end) {
+    const segs = 4;
+    const dir = end.clone().sub(start);
     const dirLen = Math.max(dir.length(), 1e-6);
     const perp = new THREE.Vector3(-dir.y, dir.x, 0)
       .normalize()
-      .multiplyScalar(dirLen * 0.2);
-    const segs = 4;
+      .multiplyScalar(dirLen * 0.22);
     const positions = [];
     for (let i = 0; i <= segs; i++) {
       const t = i / segs;
-      const base = anchor.clone().lerp(end, t);
+      const base = start.clone().lerp(end, t);
       if (i !== 0 && i !== segs) {
         base.add(perp.clone().multiplyScalar((Math.random() - 0.5) * 2));
       }
@@ -2708,7 +2714,7 @@ export function Stage3() {
       new THREE.Float32BufferAttribute(positions, 3),
     );
     const mat = new THREE.LineBasicMaterial({
-      color: 0xeeeeee,
+      color: 0xffffff,
       transparent: true,
       opacity: 0,
       depthTest: false,
@@ -2717,27 +2723,46 @@ export function Stage3() {
     const line = new THREE.Line(geom, mat);
     line.renderOrder = 10;
     state.group.add(line);
-    gsap.to(mat, { opacity: 0.92, duration: 0.18, ease: "power2.out" });
+    gsap.to(mat, { opacity: 0.95, duration: 0.12, ease: "power2.out" });
     if (!state.crackMeshes) state.crackMeshes = [];
     state.crackMeshes.push(line);
   }
 
   /**
-   * 한 타격당 점점 많은 스크래치를 추가한다. hitCount가 커질수록 개수 증가.
-   * hit 0~1: 1개, hit 2~3: 2개, hit 4~5: 3개, hit 6~7: 4개, hit 8: 5개.
+   * 앵커 위에서 2~3방향으로 퍼지는 "크랙 클러스터"를 만든다.
+   * 한 점에서 갈라져 나가는 별 모양 균열 패턴.
+   */
+  function addCrackCluster(state, anchor) {
+    const branchCount = 2 + Math.floor(Math.random() * 2); // 2~3
+    for (let b = 0; b < branchCount; b++) {
+      const angle = Math.random() * Math.PI * 2;
+      const len = 0.22 + Math.random() * 0.35;
+      const end = new THREE.Vector3(
+        anchor.x + Math.cos(angle) * len,
+        anchor.y + Math.sin(angle) * len,
+        anchor.z,
+      );
+      addCrackSegment(state, anchor, end);
+    }
+  }
+
+  /**
+   * 한 타격당 클러스터 생성. hitCount가 커질수록 완만하게 증가 — 후반에 징그럽지 않게 제동.
+   * hit 0: 1, hit 3: 2, hit 6: 3, hit 9: 4, hit 12: 5, hit 15: 6, hit 18: 7.
+   * 최대 7 클러스터 × 2~3 branch = 14~21 line per hit.
    */
   function addCrackHit(state) {
     if (!state?.group) return;
     const verts = getLetterFrontCapVertices(state);
     if (verts.length === 0) return;
-    const count = Math.floor(state.hitCount / 2) + 1;
-    for (let i = 0; i < count; i++) {
+    const clusterCount = 1 + Math.floor(state.hitCount / 3);
+    for (let i = 0; i < clusterCount; i++) {
       const anchor = verts[Math.floor(Math.random() * verts.length)];
-      addCrackScratch(state, anchor);
+      addCrackCluster(state, anchor);
     }
   }
 
-  /** 글자 그룹을 잠깐 찌그러뜨렸다 복귀. 타격 피드백용. */
+  /** 글자 그룹을 강하게 찌그러뜨렸다 탄성 복귀 + 짧은 카메라 셰이크로 타격감. */
   function pulseLetterScale(state) {
     if (!state?.group) return;
     const g = state.group;
@@ -2746,19 +2771,23 @@ export function Stage3() {
     state.pulseTween = gsap
       .timeline({ onComplete: () => g.scale.set(1, 1, 1) })
       .to(g.scale, {
-        x: 0.94,
-        y: 0.94,
-        z: 0.94,
-        duration: 0.06,
-        ease: "power2.out",
+        x: 0.88,
+        y: 0.88,
+        z: 0.88,
+        duration: 0.05,
+        ease: "power3.out",
       })
       .to(g.scale, {
         x: 1,
         y: 1,
         z: 1,
-        duration: 0.14,
-        ease: "elastic.out(1, 0.5)",
+        duration: 0.28,
+        ease: "elastic.out(1.2, 0.35)",
       });
+    cameraShakeEndTime = Math.max(
+      cameraShakeEndTime,
+      globalThis.performance.now() / 1000 + 0.12,
+    );
   }
 
   function onEnterHit() {
@@ -2827,6 +2856,7 @@ export function Stage3() {
     if (letterState.hitCount < CRACK_HITS_BEFORE_SHATTER) {
       addCrackHit(letterState);
       pulseLetterScale(letterState);
+      playRandomCrackSound();
       letterState.hitCount += 1;
       return;
     }
@@ -2839,12 +2869,13 @@ export function Stage3() {
       FINAL_SHATTER_PIECE_COUNT,
     );
     createFragmentMeshes(shatterPieces, mat, target.groundY);
+    playCrackFinalSound();
     sceneRef.remove(group);
     disposeHandwritingSvgPlaneGroup(group);
     letterState.pulseTween?.kill();
     letterState = null;
     textDestroyed = true;
-    tryDispatchWorryCompletionCelebration();
+    // 축하 자막은 첫 꽃이 피어나는 순간(spawnFlowerAt 성공)에 dispatch.
   }
 
   function updateFragments(delta) {
@@ -3290,6 +3321,7 @@ export function Stage3() {
       disposeNoticePaperAudio();
       disposeStreetLightSound();
       disposePortalTransitionSound();
+      disposeStage3CrackSound();
       if (gameMachineClickAudio) {
         gameMachineClickAudio.pause();
         gameMachineClickAudio.src = "";
