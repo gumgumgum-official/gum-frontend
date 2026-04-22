@@ -3,7 +3,7 @@
  * - OrbitControls: 카메라 회전/줌
  * - TransformControls: 선택 오브제 축으로 이동/회전/크기
  * - DragControls: 오브제 드래그로 이동
- * - C/G/S 키: 콘솔에 config 형식 출력 (복사 후 stageConfig에 붙여넣기)
+ * - C/G/Alt+S 키: 콘솔에 config 형식 출력 (복사 후 stageConfig에 붙여넣기)
  *
  * 책임: 입력/컨트롤만. 로드·배치·config 구조는 스테이지가 담당.
  */
@@ -252,25 +252,13 @@ export function createStageDebugControls(params) {
     );
   }
 
-  const DEBUG_KEYS = [
-    "c",
-    "C",
-    "g",
-    "G",
-    "s",
-    "S",
-    "t",
-    "T",
-    "r",
-    "R",
-    "e",
-    "E",
-  ];
+  const DEBUG_KEYS = ["c", "C", "g", "G", "t", "T", "r", "R", "e", "E"];
   const useCapture = true;
 
   onKeyDown = (e) => {
     const key = e.key;
-    if (!DEBUG_KEYS.includes(key)) return;
+    const isSaveShortcut = (key === "s" || key === "S") && e.altKey;
+    if (!DEBUG_KEYS.includes(key) && !isSaveShortcut) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation?.(); // 다른 리스너 막기
@@ -295,7 +283,7 @@ export function createStageDebugControls(params) {
       }
     }
 
-    if (key === "s" || key === "S") logConfigToConsole();
+    if (isSaveShortcut) logConfigToConsole();
 
     // T=이동, R=회전, E=크기 (1,2,3은 main에서 스테이지 전환용)
     if (transformControls) {
