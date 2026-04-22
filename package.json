@@ -12,11 +12,9 @@
     "lint:fix": "eslint src/**/*.{js,jsx} --fix",
     "format": "prettier --write \"src/**/*.{js,jsx,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,css,html}\"",
-    "optimize:glb": "node scripts/optimize-glb.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
-    "@gltf-transform/cli": "^4.3.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.27",
     "eslint": "^9.39.2",
