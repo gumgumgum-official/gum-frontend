@@ -18,22 +18,11 @@ export function preloadStage3IslandTemplate(modelPathFromConfig) {
 }
 
 /**
- * 템플릿 `gltf.scene`과 독립된 인스턴스 (cleanup 시 geometry/material dispose 안전, 정적 메시 위주)
+ * 템플릿 `gltf.scene`과 독립된 인스턴스.
+ * geometry/material은 공유해 clone 비용을 최소화한다.
+ * (cleanup에서 공유 자원을 dispose하지 않아야 함)
  * @param {import("three").Object3D} source
  */
 export function deepCloneSceneForStage3Instance(source) {
-  const root = source.clone(true);
-  root.traverse((obj) => {
-    const mesh = /** @type {import("three").Mesh} */ (obj);
-    if (mesh.isMesh) {
-      if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
-      const mat = mesh.material;
-      if (Array.isArray(mat)) {
-        mesh.material = mat.map((m) => (m?.clone ? m.clone() : m));
-      } else if (mat?.clone) {
-        mesh.material = mat.clone();
-      }
-    }
-  });
-  return root;
+  return source.clone(true);
 }

@@ -7,6 +7,7 @@ import * as THREE from "three";
 /** @typedef {{ minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number }} IslandColliderAabb */
 
 const PREFIXES_UPPER = ["INT_", "OBJ_"];
+const EXTRA_COLLIDER_PREFIXES_UPPER = ["DECO_FT_ROCK"];
 
 /**
  * @param {string} name
@@ -16,7 +17,10 @@ function hasCollidablePrefix(name) {
   const n = typeof name === "string" ? name.trim() : "";
   if (!n) return false;
   const up = n.toUpperCase();
-  return PREFIXES_UPPER.some((p) => up.startsWith(p));
+  return (
+    PREFIXES_UPPER.some((p) => up.startsWith(p)) ||
+    EXTRA_COLLIDER_PREFIXES_UPPER.some((p) => up.startsWith(p))
+  );
 }
 
 /**

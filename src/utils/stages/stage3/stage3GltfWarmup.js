@@ -22,6 +22,10 @@ function getStage3PrewarmAbsoluteUrls() {
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
     "/models/common/gum_walk_final.glb";
   urls.push(resolvePublicAssetUrl(gumPath));
+  const gumIdlePath =
+    STAGE3_CONFIG.character?.gumFollowers?.models?.idleModelPath ??
+    "/models/common/gum_idle.glb";
+  urls.push(resolvePublicAssetUrl(gumIdlePath));
   for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
     urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
   }

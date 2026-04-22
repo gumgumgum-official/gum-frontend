@@ -6,7 +6,11 @@
  */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { loadGltfTemplateCached } from "../../common/gltfTemplateCache.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../../common/gltfTemplateCache.js";
+import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 
 /**
  * @param {{
@@ -14,6 +18,8 @@ import { loadGltfTemplateCached } from "../../common/gltfTemplateCache.js";
  *   glbLoader: ReturnType<import("../../common/assetLoaders.js").getGLBLoader>,
  *   config: import("../../../types.js").Stage3Config,
  *   getUserState: () => { position: import("three").Vector3|null, yaw: number|null, moving: boolean },
+ *   renderer?: import("three").WebGLRenderer | null,
+ *   getCamera?: () => import("three").Camera | null,
  * }} params
  */
 export function createGumFollowersController({
@@ -21,6 +27,8 @@ export function createGumFollowersController({
   glbLoader,
   config,
   getUserState,
+  renderer = null,
+  getCamera = null,
 }) {
   void glbLoader;
   const gumCfg = config.character?.gumFollowers ?? null;
@@ -29,6 +37,8 @@ export function createGumFollowersController({
 
   const modelPath =
     gumModelCfg?.modelPath ?? "/models/common/gum_walk_final.glb";
+  const idleModelPath =
+    gumModelCfg?.idleModelPath ?? "/models/common/gum_idle.glb";
   const distance = gumBehaviorCfg?.distance ?? 2.2;
   const angleDeg = gumBehaviorCfg?.angleDeg ?? 45;
   const followLerpFactor = gumBehaviorCfg?.followLerpFactor ?? 8;
@@ -37,9 +47,14 @@ export function createGumFollowersController({
   const _lookAtHeightOffset = gumBehaviorCfg?.lookAtHeightOffset ?? 0.9;
   const modelScale = gumModelCfg?.scale ?? 1;
 
-  // 캐릭터가 작아지면(스케일 다운) 발걸음이 상대적으로 더 빨라 보이도록 애니메이션 속도를 보정
+  // 캐릭터가 작아지면(스케일 다운) 보폭 대비 발놀림이 부족해 보이므로,
+  // 유저보다 사이클이 더 자주 돌게 기본 보정 계수를 추가한다.
+  const animationBaseBoost = gumBehaviorCfg?.animationBaseBoost ?? 1.35;
   const animationSpeed =
-    gumBehaviorCfg?.animationSpeed ?? (modelScale !== 0 ? 1 / modelScale : 1);
+    gumBehaviorCfg?.animationSpeed ??
+    (modelScale !== 0
+      ? (animationBaseBoost * 1) / modelScale
+      : animationBaseBoost);
 
   const groundOffsetOverride = gumBehaviorCfg?.groundOffset ?? null;
   const breakOffCfg = gumBehaviorCfg?.breakOff ?? null;
@@ -50,6 +65,7 @@ export function createGumFollowersController({
   const breakOffFollowLerpMultiplier =
     breakOffCfg?.followLerpMultiplier ?? 0.35;
   const breakOffDriftAmplitude = breakOffCfg?.driftAmplitude ?? 0.55;
+  const collisionRadius = gumBehaviorCfg?.collisionRadius ?? 0.48;
 
   const groundOffset =
     groundOffsetOverride ?? config.character?.groundOffset ?? 0;
@@ -58,7 +74,7 @@ export function createGumFollowersController({
   const bubbleOffsetY = gumBehaviorCfg?.bubbleOffsetY ?? 0.85;
 
   /**
-   * @type {{ id: "A"|"B", side: -1|1, model: THREE.Group, mixer: THREE.AnimationMixer, walkAction: THREE.AnimationAction|null, idleAction: THREE.AnimationAction|null, offsetYaw: number|null, breakDriftScalar: number }[]}
+   * @type {{ id: "A"|"B", side: -1|1, model: THREE.Group, idleModel: THREE.Group|null, mixer: THREE.AnimationMixer, idleMixer: THREE.AnimationMixer|null, walkAction: THREE.AnimationAction|null, idleAction: THREE.AnimationAction|null, offsetYaw: number|null, breakDriftScalar: number }[]}
    */
   const followers = [];
 
@@ -81,6 +97,8 @@ export function createGumFollowersController({
   let elapsedSec = 0;
   let breakOffUntil = 0;
   let prevUserYaw = null;
+  /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
+  let staticColliderBoxes = [];
 
   function lerpAngle(from, to, t) {
     // 각도 차이를 [-PI, PI]로 정규화한 뒤 t만큼 이동 (% 는 음수 나머지를 줄 수 있어 euclideanModulo 사용)
@@ -99,25 +117,37 @@ export function createGumFollowersController({
   }
 
   /**
-   * @param {{ backgroundMaxY?: number, isCancelled?: () => boolean }} [opts]
+   * @param {{
+   *   backgroundMaxY?: number,
+   *   isCancelled?: () => boolean,
+   *   staticColliderBoxes?: import("./islandStaticColliders.js").IslandColliderAabb[],
+   * }} [opts]
    */
-  async function init({ backgroundMaxY, isCancelled } = {}) {
+  async function init({
+    backgroundMaxY,
+    isCancelled,
+    staticColliderBoxes: colliderBoxes = [],
+  } = {}) {
     if (isReady) return;
     if (backgroundMaxY == null) {
       throw new Error("[GumFollowers] init requires backgroundMaxY");
     }
+    staticColliderBoxes = Array.isArray(colliderBoxes) ? colliderBoxes : [];
 
-    const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-    const fullPath = modelPath.startsWith("http")
-      ? modelPath
-      : base + modelPath;
-    const gltf = await loadGltfTemplateCached(fullPath);
+    const fullPath = resolvePublicAssetUrl(modelPath);
+    const idleFullPath = resolvePublicAssetUrl(idleModelPath);
+    const [gltf, idleGltf] = await Promise.all([
+      loadGltfTemplateCached(fullPath),
+      loadGltfTemplateCached(idleFullPath).catch(() => null),
+    ]);
     if (isCancelled?.()) return;
     const baseModel = gltf.scene;
+    const baseIdleModel = idleGltf?.scene ?? null;
 
     // 원하는 크기로 먼저 스케일을 적용해야, minY 기반 y 보정도 맞게 계산됩니다.
     if (modelScale !== 1) {
       baseModel.scale.setScalar(modelScale);
+      if (baseIdleModel) baseIdleModel.scale.setScalar(modelScale);
     }
 
     // y position 보정: 모델 바운딩(minY) 기준
@@ -135,23 +165,49 @@ export function createGumFollowersController({
     ];
 
     const clips = gltf.animations ?? [];
+    const idleClips = idleGltf?.animations ?? [];
     const findClipByName = (regex) =>
       clips.find((clip) => regex.test(String(clip?.name ?? ""))) ?? null;
+    const findIdleClipByName = (regex) =>
+      idleClips.find((clip) => regex.test(String(clip?.name ?? ""))) ?? null;
     const walkClip = findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
-    const idleClip = findClipByName(/idle|stand|wait|pose/i) ?? null;
+    const idleClipFromIdleModel =
+      findIdleClipByName(/idle|stand|wait|pose|breath|rest/i) ??
+      idleClips[0] ??
+      null;
+    const idleClipFromWalkModel =
+      findClipByName(/idle|stand|wait|pose/i) ?? null;
 
     clones.forEach(({ id, side }) => {
       const model = SkeletonUtils.clone(baseModel);
+      const idleModel = baseIdleModel
+        ? SkeletonUtils.clone(baseIdleModel)
+        : null;
       model.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
       });
+      if (idleModel) {
+        idleModel.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+      }
 
       const mixer = new THREE.AnimationMixer(model);
       const walkAction = walkClip ? mixer.clipAction(walkClip) : null;
-      const idleAction = idleClip ? mixer.clipAction(idleClip) : null;
+      let idleMixer = null;
+      let idleAction = null;
+      if (idleModel && idleClipFromIdleModel) {
+        idleMixer = new THREE.AnimationMixer(idleModel);
+        idleAction = idleMixer.clipAction(idleClipFromIdleModel);
+      } else if (idleClipFromWalkModel) {
+        idleAction = mixer.clipAction(idleClipFromWalkModel);
+      }
       if (walkAction) {
         walkAction.loop = THREE.LoopRepeat;
         walkAction.timeScale = animationSpeed;
@@ -169,7 +225,9 @@ export function createGumFollowersController({
         id,
         side,
         model,
+        idleModel,
         mixer,
+        idleMixer,
         walkAction,
         idleAction,
         offsetYaw: null,
@@ -177,8 +235,22 @@ export function createGumFollowersController({
       });
 
       scene.add(model);
+      if (idleModel) scene.add(idleModel);
       model.position.y = followerYPosition;
+      if (idleModel) {
+        idleModel.position.y = followerYPosition;
+        idleModel.visible = true;
+        model.visible = false;
+      }
     });
+    const prewarmCamera = getCamera?.();
+    if (renderer && prewarmCamera) {
+      if (typeof renderer.compileAsync === "function") {
+        void renderer.compileAsync(scene, prewarmCamera).catch(() => {});
+      } else {
+        renderer.compile(scene, prewarmCamera);
+      }
+    }
 
     isReady = true;
   }
@@ -233,20 +305,23 @@ export function createGumFollowersController({
         followerYOffsetFromUserY = followerYPosition - userPos.y;
       }
 
-      // 이동 여부가 바뀌는 프레임에서만 애니메이션 paused 처리를 함
-      if (moving !== isMovingPrev) {
-        if (moving) {
-          followers.forEach((f) => {
-            if (!f.walkAction) return;
-            f.walkAction.paused = false;
+      // 이동 상태가 바뀔 때만 walk/idle 토글을 수행한다.
+      if (isMovingPrev !== moving) {
+        followers.forEach((f) => {
+          if (moving) {
+            f.model.visible = true;
+            if (f.idleModel) f.idleModel.visible = false;
+            if (f.walkAction) f.walkAction.paused = false;
             if (f.idleAction) f.idleAction.paused = true;
-          });
-        } else {
-          followers.forEach((f) => {
+          } else {
+            f.model.visible = !f.idleModel;
+            if (f.idleModel) {
+              f.idleModel.visible = true;
+            }
             if (f.walkAction) f.walkAction.paused = true;
             if (f.idleAction) f.idleAction.paused = false;
-          });
-        }
+          }
+        });
         isMovingPrev = moving;
       }
 
@@ -289,6 +364,8 @@ export function createGumFollowersController({
           ? followLerpFactor * breakOffFollowLerpMultiplier
           : followLerpFactor;
         const txz = Math.min(1, dynFollow * delta);
+        const prevX = f.model.position.x;
+        const prevZ = f.model.position.z;
         f.model.position.x = THREE.MathUtils.lerp(
           f.model.position.x,
           _target.x,
@@ -299,6 +376,24 @@ export function createGumFollowersController({
           _target.z,
           txz,
         );
+        const movedXZ =
+          Math.abs(f.model.position.x - prevX) > 1e-6 ||
+          Math.abs(f.model.position.z - prevZ) > 1e-6;
+        if (movedXZ && staticColliderBoxes.length > 0) {
+          const slid = slideMoveXZAgainstAABBs(
+            prevX,
+            prevZ,
+            f.model.position.x,
+            f.model.position.z,
+            collisionRadius,
+            staticColliderBoxes,
+          );
+          f.model.position.x = slid.x;
+          f.model.position.z = slid.z;
+        }
+        if (!moving && f.idleModel) {
+          f.idleModel.position.copy(f.model.position);
+        }
 
         // 걷는 동안은 "이동 앞"을 보고, 멈추면 유저를 바라보도록 전환
         if (moving) {
@@ -306,25 +401,26 @@ export function createGumFollowersController({
         } else {
           updateFollowerFacingTo(userPos, f, delta);
         }
+        if (!moving && f.idleModel) {
+          f.idleModel.rotation.copy(f.model.rotation);
+        }
 
-        f.mixer.update(delta);
+        if (moving) {
+          f.mixer.update(delta);
+        } else if (f.idleMixer) {
+          f.idleMixer.update(delta);
+        } else {
+          // idle 전용 믹서가 없는 구성에서는 기본 믹서를 계속 구동한다.
+          f.mixer.update(delta);
+        }
       });
     },
     cleanup() {
       followers.forEach((f) => {
         scene.remove(f.model);
+        if (f.idleModel) scene.remove(f.idleModel);
         f.mixer.stopAllAction();
-        f.model.traverse((child) => {
-          if (!(child instanceof THREE.Mesh)) return;
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach((m) => m.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        });
+        if (f.idleMixer) f.idleMixer.stopAllAction();
       });
       followers.length = 0;
       followerYOffsetFromUserY = null;
@@ -334,6 +430,7 @@ export function createGumFollowersController({
       elapsedSec = 0;
       breakOffUntil = 0;
       prevUserYaw = null;
+      staticColliderBoxes = [];
     },
 
     /**
