@@ -52,8 +52,8 @@ export const STAGE3_OBJECTS_CONFIG = {
     physicsGroundYOffset: 0.48,
     maxSpawns: 20,
     physicsSubsteps: 2,
-    /** 스폰 아이스크림이 지면에 닿을 때 `static/sounds/icecream` 재생 볼륨 (0~1) */
-    landSoundVolume: 0.55,
+    /** 스폰 아이스크림이 지면에 닿을 때 `static/sounds/icecream` 재생 볼륨 (1 초과 시 Web Audio 증폭) */
+    landSoundVolume: 1.4,
   },
 
   /** 게시판 모달: 사운드 + `NoticeModalBoard` 포스터 이미지(public 기준 경로) */
@@ -62,7 +62,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/paper/PaperMovement_fNAyV_01-2.mp3",
       "/static/sounds/paper/PaperMovement_fNAyV_01-3.mp3",
     ],
-    /** 게시판·포스터 종이 효과음 볼륨 (0~1) */
+    /** 게시판·포스터 종이 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
     paperSoundVolume: 0.98,
     posterImages: {
       party: "/assets/poster/festival_poster.png",
@@ -87,8 +87,8 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/tent/Quick_fabric_rustlin_3-1775835465321.mp3",
       "/static/sounds/tent/Quick_fabric_rustlin_4-1775835465322.mp3",
     ],
-    /** 텐트 클릭 시 효과음 볼륨 (0~1), Stage6 체감 기준과 유사하게 조정 */
-    tentSoundVolume: 0.55,
+    /** 텐트 클릭 시 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
+    tentSoundVolume: 1.4,
   },
 
   /**
@@ -99,7 +99,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/well/A_single_drip_sound__1.mp3",
       "/static/sounds/well/A_single_drip_sound__2.mp3",
     ],
-    wellSoundVolume: 0.55,
+    wellSoundVolume: 1.4,
   },
 
   /**
@@ -112,7 +112,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/clock/Gentle_digital_beep-_3.mp3",
       "/static/sounds/clock/Gentle_digital_beep-_4.mp3",
     ],
-    clockSoundVolume: 0.55,
+    clockSoundVolume: 1.4,
   },
 
   /**
@@ -125,7 +125,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/light/the_sound_of_a_light_2.mp3",
       "/static/sounds/light/the_sound_of_a_light_3.mp3",
     ],
-    streetLightSoundVolume: 0.55,
+    streetLightSoundVolume: 1.4,
   },
 
   /**

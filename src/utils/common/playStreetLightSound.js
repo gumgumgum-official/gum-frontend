@@ -1,5 +1,6 @@
 import { resolvePublicAssetUrl } from "./gltfTemplateCache.js";
 import { STAGE3_OBJECTS_CONFIG } from "../../config/stages/stage3/stage3ObjectsConfig.js";
+import { applyExtendedAudioVolume } from "./audioGain.js";
 
 /** @type {HTMLAudioElement | null} */
 let streetLightAudio = null;
@@ -45,7 +46,7 @@ export function playRandomStreetLightClickSound() {
     streetLightAudio = new window.Audio();
     streetLightAudio.preload = "auto";
   }
-  streetLightAudio.volume = Math.min(1, Math.max(0, v));
+  applyExtendedAudioVolume(streetLightAudio, v);
   streetLightAudio.pause();
   streetLightAudio.currentTime = 0;
   streetLightAudio.src = src;

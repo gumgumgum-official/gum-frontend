@@ -172,13 +172,13 @@
  * @property {{x?: number, y?: number, z?: number}} [rotation]
  * @property {number} [scale]
  * @property {string[]} [paperSoundPaths] - 게시판 등 클릭 시 재생할 사운드 경로
- * @property {number} [paperSoundVolume] - 종이 효과음 볼륨 0~1
+ * @property {number} [paperSoundVolume] - 종이 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  * @property {string[]} [tentSoundPaths] - 텐트(INT_tent) 클릭 시 재생할 사운드 경로
- * @property {number} [tentSoundVolume] - 텐트 클릭 효과음 볼륨 0~1
+ * @property {number} [tentSoundVolume] - 텐트 클릭 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  * @property {string[]} [wellSoundPaths] - 우물(INT_Well) 클릭 시 재생할 사운드 경로
- * @property {number} [wellSoundVolume] - 우물 클릭 효과음 볼륨 0~1
+ * @property {number} [wellSoundVolume] - 우물 클릭 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  * @property {string[]} [clockSoundPaths] - 시계(INT_Clock) 클릭 시 재생할 사운드 경로
- * @property {number} [clockSoundVolume] - 시계 클릭 효과음 볼륨 0~1
+ * @property {number} [clockSoundVolume] - 시계 클릭 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  */
 
 /**
@@ -193,7 +193,7 @@
  * @property {number} [halfWidth] - 레거시(평면 통과 시 사용, 현재 미사용)
  * @property {number} [targetStage] - 전환할 Stage 번호
  * @property {string[]} [portalTransitionSoundPaths] - 포탈 전환 시작 시 재생할 MP3 경로(public 기준)
- * @property {number} [portalTransitionSoundVolume] - 포탈 전환 효과음 볼륨 (0~1)
+ * @property {number} [portalTransitionSoundVolume] - 포탈 전환 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  */
 
 /** Stage3 아이스크림 클릭 스폰 설정 (카트 메시는 island GLB 내 INT_icecream) */
@@ -219,7 +219,7 @@
  * @property {number} [physicsGroundYOffset] - 아이스크림 Cannon 지면 Y 보정(m)
  * @property {number} [maxSpawns] - 스폰 최대 개수
  * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
- * @property {number} [landSoundVolume] - 착지 시 icecream 효과음 볼륨 0~1
+ * @property {number} [landSoundVolume] - 착지 시 icecream 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  */
 
 /**

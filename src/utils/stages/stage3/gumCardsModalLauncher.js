@@ -5,6 +5,7 @@
 
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
 import { STAGE3_OBJECTS_CONFIG } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
+import { applyExtendedAudioVolume } from "../../common/audioGain.js";
 
 const EVENT_OPEN = "gum-cards-modal:open";
 const EVENT_CLOSE = "gum-cards-modal:close";
@@ -49,7 +50,7 @@ function playRandomTentModalSound() {
   const src = resolvePublicAssetUrl(rel);
   const audio = new window.Audio();
   const v = Number(STAGE3_OBJECTS_CONFIG.tent?.tentSoundVolume ?? 0.28);
-  audio.volume = Math.min(1, Math.max(0, v));
+  applyExtendedAudioVolume(audio, v);
   audio.preload = "auto";
   audio.src = src;
   const p = audio.play();
