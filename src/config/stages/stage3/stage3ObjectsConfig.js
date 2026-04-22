@@ -53,7 +53,7 @@ export const STAGE3_OBJECTS_CONFIG = {
     maxSpawns: 20,
     physicsSubsteps: 2,
     /** 스폰 아이스크림이 지면에 닿을 때 `static/sounds/icecream` 재생 볼륨 (0~1) */
-    landSoundVolume: 0.02,
+    landSoundVolume: 0.55,
   },
 
   /** 게시판 모달: 사운드 + `NoticeModalBoard` 포스터 이미지(public 기준 경로) */
@@ -87,8 +87,8 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/tent/Quick_fabric_rustlin_3-1775835465321.mp3",
       "/static/sounds/tent/Quick_fabric_rustlin_4-1775835465322.mp3",
     ],
-    /** 텐트 클릭 시 효과음 볼륨 (0~1), 기존 0.75 대비 작게 */
-    tentSoundVolume: 0.07,
+    /** 텐트 클릭 시 효과음 볼륨 (0~1), Stage6 체감 기준과 유사하게 조정 */
+    tentSoundVolume: 0.55,
   },
 
   /**
@@ -99,7 +99,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/well/A_single_drip_sound__1.mp3",
       "/static/sounds/well/A_single_drip_sound__2.mp3",
     ],
-    wellSoundVolume: 0.07,
+    wellSoundVolume: 0.55,
   },
 
   /**
@@ -112,7 +112,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/clock/Gentle_digital_beep-_3.mp3",
       "/static/sounds/clock/Gentle_digital_beep-_4.mp3",
     ],
-    clockSoundVolume: 0.4,
+    clockSoundVolume: 0.55,
   },
 
   /**
@@ -125,7 +125,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/light/the_sound_of_a_light_2.mp3",
       "/static/sounds/light/the_sound_of_a_light_3.mp3",
     ],
-    streetLightSoundVolume: 0.5,
+    streetLightSoundVolume: 0.55,
   },
 
   /**
