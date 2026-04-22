@@ -1,5 +1,8 @@
 /**
- * Stage3 only: handwriting SVG → single extruded mesh with solid matte material.
+ * Stage3 only: handwriting SVG → group of extruded meshes (one per SVG shape) with solid matte material.
+ *
+ * Shape별 Mesh로 분리해 두면 collectTrianglesFromGroup이 meshIndex를 shape별로 할당하므로,
+ * 후속 로직이 자음/모음(획) 단위로 구분된 정보를 필요로 할 때 활용할 수 있다.
  *
  * ExtrudeGeometry는 **닫힌 fill** Shape에만 안정적이다. 태블릿/Edge 손글씨 SVG처럼
  * `fill="none"` + `stroke` 만 있는 경우에는 볼륨을 만들지 않고 `null`을 반환한다.
@@ -48,8 +51,8 @@ export async function createHandwritingSvgVolumeGroup(svgPublicUrl, options) {
   if (!Number.isFinite(targetWorldHeight) || targetWorldHeight <= 0)
     return null;
 
-  /** @type {THREE.BufferGeometry | null} */
-  let geometry = null;
+  /** @type {THREE.BufferGeometry[]} */
+  const geoms = [];
   try {
     const svgText = await fetchSVG(svgPublicUrl);
     const shapes = parseSVGToExtrudeShapesForVolume(svgText);
@@ -58,26 +61,35 @@ export async function createHandwritingSvgVolumeGroup(svgPublicUrl, options) {
     const { width: shapeWidth, height: shapeHeight } =
       shapesPlaneBounds(shapes);
     const depth = shapeHeight * depthRatio;
+    const scale = targetWorldHeight / shapeHeight;
 
-    geometry = new THREE.ExtrudeGeometry(shapes, {
+    const extrudeSettings = {
       depth,
       curveSegments: 24,
       bevelEnabled: false,
       steps: 1,
-    });
-    const scale = targetWorldHeight / shapeHeight;
-    geometry.scale(scale, scale, scale);
-    geometry.scale(1, -1, 1);
+    };
 
-    geometry.computeBoundingBox();
-    const bb = geometry.boundingBox;
-    if (bb) {
-      const cx = (bb.min.x + bb.max.x) * 0.5;
-      const cz = (bb.min.z + bb.max.z) * 0.5;
-      geometry.translate(-cx, -bb.min.y, -cz);
+    for (const shape of shapes) {
+      const g = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      g.scale(scale, scale, scale);
+      g.scale(1, -1, 1);
+      geoms.push(g);
     }
 
-    geometry.computeVertexNormals();
+    // 모든 shape 공통 변환: union bbox 기준으로 중앙/바닥 정렬
+    const unionBox = new THREE.Box3();
+    for (const g of geoms) {
+      g.computeBoundingBox();
+      if (g.boundingBox) unionBox.union(g.boundingBox);
+    }
+    const cx = (unionBox.min.x + unionBox.max.x) * 0.5;
+    const cz = (unionBox.min.z + unionBox.max.z) * 0.5;
+    const ty = -unionBox.min.y;
+    for (const g of geoms) {
+      g.translate(-cx, ty, -cz);
+      g.computeVertexNormals();
+    }
 
     const material = new THREE.MeshStandardMaterial({
       color: LETTER_COLOR,
@@ -86,23 +98,29 @@ export async function createHandwritingSvgVolumeGroup(svgPublicUrl, options) {
       side: THREE.DoubleSide,
     });
 
-    const mesh = new THREE.Mesh(geometry, material);
-    geometry = null;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
     const group = new THREE.Group();
-    group.add(mesh);
+    for (const g of geoms) {
+      const mesh = new THREE.Mesh(g, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    geoms.length = 0;
     group.userData.isHandwritingSvgPlane = true;
     group.userData.isHandwritingSvgVolume = true;
 
-    const aspect = shapeWidth / shapeHeight;
+    const unionWidth = Math.max(unionBox.max.x - unionBox.min.x, 1e-6);
+    const unionHeight = Math.max(unionBox.max.y - unionBox.min.y, 1e-6);
+    const aspect =
+      unionWidth > 1e-6 && unionHeight > 1e-6
+        ? unionWidth / unionHeight
+        : shapeWidth / shapeHeight;
     const planeH = targetWorldHeight;
     const planeW = targetWorldHeight * aspect;
 
     return { group, planeW, planeH };
   } catch {
-    if (geometry) geometry.dispose();
+    for (const g of geoms) g.dispose();
     return null;
   }
 }

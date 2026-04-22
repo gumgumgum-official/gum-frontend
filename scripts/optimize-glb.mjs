@@ -2,21 +2,33 @@
 /**
  * GLB 일괄 최적화 스크립트
  *
- * 파이프라인 (텍스처 → KTX2, 지오메트리 → Meshopt):
- *   1. resize   : 텍스처 최대 1024x1024
- *   2. etc1s    : 모든 텍스처 KTX2(ETC1S) 압축 — 용량/VRAM 최소화
- *   3. meshopt  : 지오메트리 Meshopt 압축 (애니메이션/skinned mesh 안전)
- *   4. dedup    : 중복 accessor/texture 제거
+ * 파이프라인 (순서 중요):
+ *   1. resize : 텍스처 최대 1024x1024 (Draco가 있으면 여기서 디코드됨)
+ *   2. etc1s  : 모든 텍스처 KTX2(ETC1S) 압축 — 용량/VRAM 최소화
+ *   3. draco  : 지오메트리 Draco 재압축 (반드시 마지막)
+ *
+ * 주의: `dedup`/`prune` 은 Draco 뒤에 두면 디코드해버려 파일이 팽창한다.
+ * 앞에 두더라도 어떤 모델에서는 draco 재인코드 효율을 떨어뜨려 일단 제외.
  *
  * 사용: node scripts/optimize-glb.mjs [--file <path>] [--dry-run]
  */
 import { spawnSync } from "node:child_process";
-import { readdir, stat, unlink, rename, copyFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { readdir, stat, unlink, rename } from "node:fs/promises";
+import { join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOT = "public/models";
 const MAX_TEXTURE = 1024;
-const MESHOPT_LEVEL = "medium";
+
+// gltf-transform etc1s/uastc 커맨드는 PATH의 `ktx` 바이너리를 사용한다.
+// 로컬 벤더된 KTX-Software를 우선 사용하도록 PATH를 prepend.
+const VENDOR_KTX_BIN = resolve(
+  fileURLToPath(new URL("./vendor/ktx/bin", import.meta.url)),
+);
+const CHILD_ENV = {
+  ...process.env,
+  PATH: `${VENDOR_KTX_BIN}:${process.env.PATH || ""}`,
+};
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
@@ -37,7 +49,10 @@ async function walk(dir) {
 }
 
 function run(cmd, args) {
-  const r = spawnSync(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+  const r = spawnSync(cmd, args, {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: CHILD_ENV,
+  });
   if (r.status !== 0) {
     const err = r.stderr?.toString() || r.stdout?.toString() || "";
     throw new Error(
@@ -55,7 +70,6 @@ async function optimizeOne(file) {
   const before = (await stat(file)).size;
   const tmp1 = `${file}.tmp1.glb`;
   const tmp2 = `${file}.tmp2.glb`;
-  const tmp3 = `${file}.tmp3.glb`;
   const finalTmp = `${file}.new.glb`;
 
   try {
@@ -74,20 +88,9 @@ async function optimizeOne(file) {
     // 2. KTX2(ETC1S) — 모든 텍스처 압축
     run("npx", ["@gltf-transform/cli", "etc1s", tmp1, tmp2]);
 
-    // 3. Meshopt 지오메트리 압축 (애니메이션 안전)
-    run("npx", [
-      "@gltf-transform/cli",
-      "meshopt",
-      tmp2,
-      tmp3,
-      "--level",
-      MESHOPT_LEVEL,
-    ]);
+    // 3. Draco 지오메트리 (재)압축 — 반드시 마지막.
+    run("npx", ["@gltf-transform/cli", "draco", tmp2, finalTmp]);
 
-    // 4. dedup — 중복 제거 (prune은 skinned mesh 의존 데이터 지울 수 있어 제외)
-    run("npx", ["@gltf-transform/cli", "dedup", tmp3, finalTmp]);
-
-    // 원자적 교체
     if (!DRY_RUN) {
       await rename(finalTmp, file);
     }
@@ -97,8 +100,7 @@ async function optimizeOne(file) {
 
     return { before, after };
   } finally {
-    // tmp 정리
-    for (const t of [tmp1, tmp2, tmp3]) {
+    for (const t of [tmp1, tmp2]) {
       await unlink(t).catch(() => {});
     }
   }
@@ -110,7 +112,7 @@ async function main() {
     `\n🎯 ${files.length} GLB 파일 최적화 시작${DRY_RUN ? " (DRY RUN)" : ""}`,
   );
   console.log(
-    `   texture: ${MAX_TEXTURE}px max, ETC1S · geometry: Meshopt ${MESHOPT_LEVEL}\n`,
+    `   texture: ${MAX_TEXTURE}px max ETC1S (KTX2) · geometry: Draco\n`,
   );
 
   let totalBefore = 0;

@@ -27,3 +27,6 @@ dist-ssr
 reference
 .env
 public/models/stage3/island9.glb
+
+# Locally vendored binaries (ktx for GLB optimization)
+scripts/vendor/

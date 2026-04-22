@@ -171,7 +171,7 @@ export function initThreeApp(canvasElement, options = {}) {
   );
   scene.add(sunLight);
 
-  getGLBLoader().preloadDecoders();
+  getGLBLoader().attachRenderer(renderer).preloadDecoders();
 
   // Stage Manager
   stageManager = createStageManager(renderer, scene);
