@@ -3,20 +3,28 @@
  * 크랙: crack1/crack2 중 랜덤(직전과 다르게). 마지막 파열: crack_final 1종.
  */
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
+import { STAGE3_AUDIO_CONFIG } from "../../../config/stages/stage3/stage3AudioConfig.js";
 
 const CRACK_PATHS = [
   "/static/sounds/text_crack/crack1.mp3",
   "/static/sounds/text_crack/crack2.mp3",
 ];
 const CRACK_FINAL_PATH = "/static/sounds/text_crack/crack_final.mp3";
-const FLOWER_MAGIC_PATH = "/static/sounds/text_crack/flower_magic.mp3";
+const FLOWER_MAGIC_PATHS = [
+  "/static/sounds/text_crack/flower_magic.mp3",
+  "/static/sounds/text_crack/flower_magic2.mp3",
+];
 const CRACK_VOLUME = 0.55;
 const CRACK_FINAL_VOLUME = 0.8;
-const FLOWER_MAGIC_VOLUME = 0.45;
+/** 배경 루프 음량과 동일하게 재생 — config.audio.backgroundAmbientVolume 기준 */
+const getFlowerMagicVolume = () =>
+  Number(STAGE3_AUDIO_CONFIG.backgroundAmbientVolume ?? 0.03);
 
 let lastCrackIdx = -1;
 /** @type {HTMLAudioElement | null} */
 let crackFinalAudio = null;
+/** @type {HTMLAudioElement[]} */
+let flowerMagicAudios = [];
 
 function clamp01(v) {
   const n = Number(v);
@@ -46,16 +54,25 @@ export function playRandomCrackSound() {
 }
 
 /**
- * 꽃이 피어날 때마다 호출. 여러 꽃이 짧은 간격으로 필 수 있어 매번 새로운 Audio로 overlap.
+ * 첫 꽃이 피어나는 순간 1회만 재생(호출부에서 가드). flower_magic과 flower_magic2를
+ * 동시에 겹쳐 재생. 공유 Audio 인스턴스 재사용으로 이중 호출 시 처음부터 다시 재생.
  */
 export function playFlowerMagicSound() {
-  try {
-    const a = new window.Audio(resolvePublicAssetUrl(FLOWER_MAGIC_PATH));
-    a.volume = clamp01(FLOWER_MAGIC_VOLUME);
+  if (flowerMagicAudios.length === 0) {
+    flowerMagicAudios = FLOWER_MAGIC_PATHS.map((path) => {
+      const a = new window.Audio();
+      a.preload = "auto";
+      a.src = resolvePublicAssetUrl(path);
+      return a;
+    });
+  }
+  const vol = clamp01(getFlowerMagicVolume());
+  for (const a of flowerMagicAudios) {
+    a.volume = vol;
+    a.pause();
+    a.currentTime = 0;
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
-  } catch {
-    // ignore (SSR, codec, autoplay 차단)
   }
 }
 
@@ -79,5 +96,10 @@ export function disposeStage3CrackSound() {
     crackFinalAudio.src = "";
     crackFinalAudio = null;
   }
+  for (const a of flowerMagicAudios) {
+    a.pause();
+    a.src = "";
+  }
+  flowerMagicAudios = [];
   lastCrackIdx = -1;
 }
