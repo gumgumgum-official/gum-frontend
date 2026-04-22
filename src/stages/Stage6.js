@@ -468,6 +468,9 @@ export function Stage6() {
 
   function showCharBubble(charName) {
     const text = CHAR_SPEECH_MAP[charName];
+    console.log(
+      `[bubble] showCharBubble called: ${charName}, text:${text}, el:${!!charBubbleEl}, activeChar:${charBubbleActiveChar}`,
+    );
     if (!text || !charBubbleEl) return;
     // 이전 말풍선 즉시 교체
     charBubbleEl.classList.remove("is-visible");
@@ -495,19 +498,28 @@ export function Stage6() {
     charObj.updateWorldMatrix(true, false);
     charObj.getWorldPosition(_bubblePos);
     _bubblePos.y += CHAR_BUBBLE_OFFSET_Y;
+    cameraRef.updateProjectionMatrix();
     cameraRef.updateMatrixWorld();
     _bubblePos.project(cameraRef);
     const rect = canvasRef.getBoundingClientRect();
     const x = rect.left + (_bubblePos.x * 0.5 + 0.5) * rect.width;
     const y = rect.top + (-_bubblePos.y * 0.5 + 0.5) * rect.height;
+    console.log(
+      `[bubble] char:${charBubbleActiveChar} ndc:(${_bubblePos.x.toFixed(2)},${_bubblePos.y.toFixed(2)}) px:(${x.toFixed(0)},${y.toFixed(0)}) rect:${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`,
+    );
     charBubbleEl.style.left = `${x}px`;
     charBubbleEl.style.top = `${y}px`;
   }
 
   function playCharacter(charName) {
+    console.log(
+      `[bubble] playCharacter called: ${charName}, bubbleEl:`,
+      charBubbleEl,
+      `charRoots:`,
+      charRoots[charName],
+    );
     const actions = charActions[charName];
     if (!actions?.length) {
-      // INT_Gum_Cry: 애니메이션 없음, 말풍선만 표시
       showCharBubble(charName);
       return;
     }
