@@ -7,7 +7,6 @@ import {
 } from "../../common/gltfTemplateCache.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 
-const PUNCH_TIME_SCALE = 0.15;
 const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
 function applyShadows(model) {
@@ -47,7 +46,10 @@ function findClip(clips, regex) {
  *   getPosition: () => import("three").Vector3 | null,
  *   getYaw: () => number | null,
  *   getIsMoving: () => boolean,
- *   playHammerCue: (onImpact?: () => void) => void,
+ *   playHammerCue: (
+ *     onImpact?: () => void,
+ *     options?: { reverse?: boolean },
+ *   ) => void,
  *   isPunching: () => boolean,
  * }}
  */
@@ -176,7 +178,7 @@ export function createCharacterController({
         config.characterIdleModelPath ?? "/models/common/user_idle.glb",
       );
       const punchUrl = resolvePublicAssetUrl(
-        config.characterPunchModelPath ?? "/models/stage3/user_crash.glb",
+        config.characterPunchModelPath ?? "/models/stage3/user_punch.glb",
       );
 
       Promise.all([
@@ -436,28 +438,45 @@ export function createCharacterController({
     getYaw: () => characterModel?.rotation.y ?? null,
     getIsMoving: () => isMoving,
 
-    playHammerCue(onImpact) {
+    playHammerCue(onImpact, options = {}) {
       if (!punchCharacterModel || !punchAction || isPunchPlaying) return;
       const src = idleCharacterModel?.visible
         ? idleCharacterModel
         : characterModel;
       if (!src) return;
+      const reverse =
+        options.reverse ?? Boolean(config.character?.punchAnimationReverse);
+      const speedRaw = Number(config.character?.punchAnimationTimeScale);
+      const speed = THREE.MathUtils.clamp(
+        Number.isFinite(speedRaw) && speedRaw > 0 ? speedRaw : 1.65,
+        0.05,
+        20,
+      );
       punchCharacterModel.position.copy(src.position);
       punchCharacterModel.rotation.copy(src.rotation);
       characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
       punchCharacterModel.visible = true;
       punchAction.reset();
-      punchAction.timeScale = PUNCH_TIME_SCALE;
+      const clip = punchAction.getClip();
+      const dur = clip.duration;
+      if (reverse) {
+        punchAction.time = dur;
+        punchAction.timeScale = -speed;
+      } else {
+        punchAction.time = 0;
+        punchAction.timeScale = speed;
+      }
       punchAction.enabled = true;
       punchAction.paused = false;
       punchAction.play();
       isPunchPlaying = true;
       if (typeof onImpact === "function") {
-        const delay = Math.max(
-          50,
-          (punchAction.getClip().duration / PUNCH_TIME_SCALE) * 0.85 * 1000,
-        );
+        const wallDur = dur / speed;
+        /** 클립 진행 0~1 중 타격 시점(1=애니 끝 프레임) */
+        const impactFrac = 1;
+        const elapsedFrac = reverse ? 1 - impactFrac : impactFrac;
+        const delay = Math.max(0, wallDur * elapsedFrac * 1000);
         impactTimeoutId = setTimeout(() => {
           impactTimeoutId = null;
           onImpact();

@@ -159,6 +159,8 @@
  * @property {number} [walkSoundVolume] - 이동(걷기) 루프 사운드 볼륨 0~1
  * @property {number} lookAtHeightOffset - lookAt 시 머리 높이
  * @property {number} [collisionRadius] - 바닥 이동용 XZ 원형 충돌 반경(m); 생략 시 scale 기반 추정
+ * @property {boolean} [punchAnimationReverse] - true면 펀치 GLB 애니를 클립 끝→처음 역재생(timeScale 음수)
+ * @property {number} [punchAnimationTimeScale] - 펀치 클립 재생 배율(1=GLB 기본 길이, 2=2배 빠름). 기본 1.65
  * @property {{x?: number, z?: number}} [spawnOffset] - 섬 바운딩 XZ 중심 기준 스폰 추가 오프셋(m)
  * @property {number} [escalatorFrontDistance] - Stage6: INT_Escalator 루트에서 카메라 방향으로 뗀 스폰 거리(m)
  * @property {Stage3GumFollowersConfig} [gumFollowers] - Stage3 껌딱지; Stage6 등 유저만 쓰는 스테이지에서는 생략 가능

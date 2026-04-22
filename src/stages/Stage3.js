@@ -3002,7 +3002,7 @@ export function Stage3() {
   function onEnterHit() {
     if (!sceneRef) return;
     const target = getHitTarget();
-    // 펀치 애니메이션 실행 + 85% 시점에 실제 타격 효과 적용
+    // 펀치 애니: 클립 100%(끝 프레임)에 타격 — 역재생이면 해당 포즈가 시작 시점이라 지연 0에 가깝게 맞춤
     character?.playHammerCue?.(() => {
       if (target) applyHitEffect(target);
     });

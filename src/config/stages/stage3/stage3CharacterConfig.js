@@ -6,7 +6,7 @@ export const STAGE3_CHARACTER_CONFIG = {
   /** idle(서있기) 애니메이션 전용 GLB 경로 */
   characterIdleModelPath: "/models/common/user_idle.glb",
   /** punch(망치질) 애니메이션 전용 GLB 경로 */
-  characterPunchModelPath: "/models/stage3/user_crash.glb",
+  characterPunchModelPath: "/models/stage3/user_punch.glb",
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({
@@ -29,6 +29,10 @@ export const STAGE3_CHARACTER_CONFIG = {
     cameraYawAssistOnlyWhenMoving: true,
     walkSoundVolume: 0.04, // 이동 시 걷기 루프 볼륨 (0~1)
     lookAtHeightOffset: 0.9, // lookAt 시 캐릭터 기준점을 낮춰 화면에서 캐릭터를 살짝 위로 배치
+    /** true면 펀치 애니를 GLB 클립 끝에서 역재생(맞춤 타격 타이밍은 동일 프레임 기준 유지) */
+    punchAnimationReverse: true,
+    /** 펀치 클립 재생 배율(1=원본 길이, 값이 클수록 더 빠름) */
+    punchAnimationTimeScale: 1.65,
     /** XZ 평면 원형 충돌 반경(m). 미설정 시 scale×0.22 (최소 0.2) */
     collisionRadius: 0.65,
     /** 섬 중심 대비 스폰 위치(월드 +X = 오른쪽) */
