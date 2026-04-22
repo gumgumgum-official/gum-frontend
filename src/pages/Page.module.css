@@ -5,7 +5,7 @@
 }
 
 .startBackground {
-  background-image: url("/static/images/ggum_world_no_pixel.png");
+  background-image: url("/static/images/background_start.png");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
