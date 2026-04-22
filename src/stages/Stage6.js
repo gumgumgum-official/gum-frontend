@@ -43,14 +43,13 @@ const CHAR_ROOT_NAMES = [
 ];
 /** 각 캐릭터 클릭 시 말풍선에 표시할 텍스트 */
 const CHAR_SPEECH_MAP = {
-  INT_Gum_Cry: "...",
-  INT_Gum_Heart: "이거 받아요 💕",
+  INT_Gum_Cry: "가지마..나랑 더 놀자...🥺",
+  INT_Gum_Heart: "이거 내 진심인데 받아줄래?💕",
   INT_Gum_Camera: "찰칵! 📸",
-  INT_Gum_Airplane: "날아라~ ✈️",
-  INT_Gum_Lollipop: "같이 먹어요~ 🍭",
+  INT_Gum_Airplane: "아~더 놀고싶어!나랑 더 놀자~~✈️",
+  INT_Gum_Lollipop: "같이..먹을래..?🍭",
 };
 const CHAR_BUBBLE_VISIBLE_SEC = 2.5;
-const CHAR_BUBBLE_OFFSET_Y = 0.45;
 const CHAR_ANIM_MAP = {
   INT_Gum_Cry: [],
   INT_Gum_Heart: ["Heart_Offer_Rig", "Heart_Offer_Prop"],
@@ -219,7 +218,6 @@ export function Stage6() {
   /** @type {string | null} 현재 말풍선이 표시 중인 캐릭터 이름 */
   let charBubbleActiveChar = null;
   let charBubbleRemaining = 0;
-  const _bubblePos = new THREE.Vector3();
 
   function dispatchAirportSubtitleTextByTime(currentSec) {
     const syncedSec = Math.max(0, currentSec + airportSubtitleLeadSec);
@@ -383,7 +381,7 @@ export function Stage6() {
       airplaneCallSignTimeoutId = window.setTimeout(() => {
         airplaneCallSignTimeoutId = 0;
         onStarted?.();
-      }, 1000);
+      }, 10000);
     };
     airplaneCallSignAudio.ontimeupdate = null;
     airplaneCallSignAudio.onended = () => {
@@ -466,13 +464,13 @@ export function Stage6() {
     return el;
   }
 
-  function showCharBubble(charName) {
+  function showCharBubble(charName, clientX, clientY) {
     const text = CHAR_SPEECH_MAP[charName];
     if (!text || !charBubbleEl) return;
-    // 이전 말풍선 즉시 교체
+    charBubbleEl.style.left = `${clientX}px`;
+    charBubbleEl.style.top = `${clientY - 80}px`;
     charBubbleEl.classList.remove("is-visible");
     charBubbleEl.textContent = text;
-    // 한 프레임 뒤 is-visible 추가해야 transition이 트리거됨
     requestAnimationFrame(() => {
       if (charBubbleEl) charBubbleEl.classList.add("is-visible");
     });
@@ -487,45 +485,17 @@ export function Stage6() {
     charBubbleRemaining = 0;
   }
 
-  function updateCharBubblePosition() {
-    if (!charBubbleActiveChar || !charBubbleEl || !cameraRef || !canvasRef)
-      return;
-    const charObj = charRoots[charBubbleActiveChar];
-    if (!charObj) return;
-    charObj.updateWorldMatrix(true, false);
-    charObj.getWorldPosition(_bubblePos);
-    _bubblePos.y += CHAR_BUBBLE_OFFSET_Y;
-    cameraRef.updateMatrixWorld();
-    _bubblePos.project(cameraRef);
-    const rect = canvasRef.getBoundingClientRect();
-    const x = rect.left + (_bubblePos.x * 0.5 + 0.5) * rect.width;
-    const y = rect.top + (-_bubblePos.y * 0.5 + 0.5) * rect.height;
-    charBubbleEl.style.left = `${x}px`;
-    charBubbleEl.style.top = `${y}px`;
-  }
-
-  function playCharacter(charName) {
+  function playCharacter(charName, clientX, clientY) {
     const actions = charActions[charName];
     if (!actions?.length) {
-      // INT_Gum_Cry: 애니메이션 없음, 말풍선만 표시
-      showCharBubble(charName);
+      showCharBubble(charName, clientX, clientY);
       return;
     }
     for (const a of actions) a.reset().play();
-    showCharBubble(charName);
+    showCharBubble(charName, clientX, clientY);
   }
 
   function setupCharAnimations(sceneRoot, animations) {
-    // GLB 안의 실제 INT_ 노드 이름과 애니메이션 클립 이름 덤프
-    const allIntNodes = [];
-    sceneRoot.traverse((o) => {
-      if (o.name?.startsWith("INT_")) allIntNodes.push(o.name);
-    });
-    console.log("[Stage6] INT_ nodes in GLB:", allIntNodes);
-    console.log(
-      "[Stage6] animation clips:",
-      animations.map((a) => a.name),
-    );
     charMixer = new THREE.AnimationMixer(sceneRoot);
     for (const charName of CHAR_ROOT_NAMES) {
       charRoots[charName] = sceneRoot.getObjectByName(charName) ?? null;
@@ -826,28 +796,12 @@ export function Stage6() {
       window.addEventListener("keydown", handleKeyDown, { capture: true });
       onPointerDown = (event) => {
         const hit = getPointerHitTarget(event);
-        console.log(
-          `[Stage6] pointerdown → hit:`,
-          hit,
-          `locked:`,
-          isSceneInteractionLocked,
-        );
         if (!hit) return;
         const isCharacterHit = CHAR_ROOT_NAMES.includes(hit.intName);
-        console.log(
-          `[Stage6] hit.intName:`,
-          JSON.stringify(hit.intName),
-          `hit.target:`,
-          hit.target,
-          `isCharacterHit:`,
-          isCharacterHit,
-        );
         // 씬 잠금 중에도 캐릭터 클릭 애니메이션은 허용.
         if (isSceneInteractionLocked && !isCharacterHit) return;
-        // 캐릭터는 클릭 시마다 재생
         if (isCharacterHit) {
-          console.log(`[Stage6] playCharacter:`, hit.intName);
-          playCharacter(hit.intName);
+          playCharacter(hit.intName, event.clientX, event.clientY);
         }
         if (hit.target === "photobooth") {
           playPhotoboothCurtainSound();
@@ -898,7 +852,6 @@ export function Stage6() {
 
       charBubbleEl = createCharBubbleEl();
 
-      scheduleAirplaneCallSign();
       isSceneInteractionLocked = true;
 
       // 배경 GLB 로드: 템플릿 캐시 (animated 씬은 gltf.scene 직접 사용)
@@ -1027,13 +980,18 @@ export function Stage6() {
           character?.setup(floorY, bounds, [], {
             worldSpawnXZ: { x: spawnX, z: spawnZ },
           });
+
+          // GLB 씬이 실제로 준비된 뒤에 공항 안내 오디오/자막 시퀀스를 시작
+          scheduleAirplaneCallSign();
         })
-        .catch((err) =>
+        .catch((err) => {
           console.error(
             `❌ Stage6 배경 로드 에러 (${config.model.path}):`,
             err,
-          ),
-        );
+          );
+          // 배경 로드 실패해도 안내 방송은 진행 (기존 동작 유지)
+          scheduleAirplaneCallSign();
+        });
 
       // 벤치 로드 (config.bench 있을 때)
       const benchConfig = config.bench;
@@ -1123,8 +1081,6 @@ export function Stage6() {
         charBubbleRemaining -= delta;
         if (charBubbleRemaining <= 0) {
           hideCharBubble();
-        } else {
-          updateCharBubblePosition();
         }
       }
 

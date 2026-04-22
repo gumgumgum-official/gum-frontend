@@ -1,7 +1,3 @@
-/**
- * Stage3 캐릭터 컨트롤러
- * GLB 로드, AnimationMixer 설정, 이동/회전/바운드 클램핑, 카메라 추적을 담당합니다.
- */
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { inspectGLTF } from "../../common/modelInspector.js";
@@ -10,6 +6,21 @@ import {
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
+
+const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
+
+function applyShadows(model) {
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+}
+
+function findClip(clips, regex) {
+  return clips.find((c) => regex.test(String(c?.name ?? ""))) ?? null;
+}
 
 /**
  * @param {{
@@ -35,7 +46,10 @@ import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
  *   getPosition: () => import("three").Vector3 | null,
  *   getYaw: () => number | null,
  *   getIsMoving: () => boolean,
- *   playHammerCue: () => void,
+ *   playHammerCue: (
+ *     onImpact?: () => void,
+ *     options?: { reverse?: boolean },
+ *   ) => void,
  *   isPunching: () => boolean,
  * }}
  */
@@ -48,6 +62,7 @@ export function createCharacterController({
   getCamera = null,
 }) {
   void glbLoader;
+
   let characterModel = null;
   let idleCharacterModel = null;
   let characterYPosition = 0;
@@ -61,31 +76,29 @@ export function createCharacterController({
   /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
   let staticColliderBoxes = [];
   let collisionRadius = 0.55;
-  /** @type {HTMLAudioElement | null} */
   let walkAudio = null;
-  /** @type {THREE.Object3D | null} */
   let punchCharacterModel = null;
-  /** @type {THREE.AnimationMixer | null} */
   let punchMixer = null;
-  /** @type {THREE.AnimationAction | null} */
   let punchAction = null;
   let isPunchPlaying = false;
+  let impactTimeoutId = null;
 
-  const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
+  // 경계 clamp 값 — setup()에서 1회 계산, update() 매 프레임 재사용
+  let _minCx = 0,
+    _maxCx = 0,
+    _minCz = 0,
+    _maxCz = 0;
+
+  const _moveVector = new THREE.Vector3();
+  const _direction = new THREE.Vector3();
+  const _cameraOffset = new THREE.Vector3();
+  const _targetPosition = new THREE.Vector3();
+  const _lookAtPosition = new THREE.Vector3();
+  const _worldUp = new THREE.Vector3(0, 1, 0);
 
   function getWalkSoundVolume() {
     const v = config.character?.walkSoundVolume;
     return THREE.MathUtils.clamp(typeof v === "number" ? v : 0.04, 0, 1);
-  }
-
-  function ensureWalkAudio() {
-    if (walkAudio) return walkAudio;
-    walkAudio = new window.Audio();
-    walkAudio.preload = "auto";
-    walkAudio.loop = true;
-    walkAudio.volume = getWalkSoundVolume();
-    walkAudio.src = resolvePublicAssetUrl(WALK_SOUND_REL);
-    return walkAudio;
   }
 
   function syncWalkSound(moving) {
@@ -96,76 +109,114 @@ export function createCharacterController({
       }
       return;
     }
-    const a = ensureWalkAudio();
-    a.volume = getWalkSoundVolume();
-    if (a.paused) {
-      a.play().catch(() => {});
+    if (!walkAudio) {
+      walkAudio = new window.Audio();
+      walkAudio.preload = "auto";
+      walkAudio.loop = true;
+      walkAudio.src = resolvePublicAssetUrl(WALK_SOUND_REL);
+    }
+    walkAudio.volume = getWalkSoundVolume();
+    if (walkAudio.paused) walkAudio.play().catch(() => {});
+  }
+
+  function updateCameraFollow(camera, position, options) {
+    const {
+      cameraOffset: co,
+      cameraLerpFactor,
+      lookAtHeightOffset,
+    } = config.character;
+    _cameraOffset.set(co.x, co.y, co.z);
+    const yaw = Number(options.cameraYawAssistRad ?? 0);
+    if (yaw !== 0) _cameraOffset.applyAxisAngle(_worldUp, yaw);
+    camera.position.lerp(
+      _targetPosition.copy(position).add(_cameraOffset),
+      cameraLerpFactor,
+    );
+    _lookAtPosition.copy(position);
+    _lookAtPosition.y += lookAtHeightOffset;
+    camera.lookAt(_lookAtPosition);
+  }
+
+  function setCharacterVisibility(walking) {
+    if (!characterModel) return;
+    if (idleCharacterModel) {
+      characterModel.visible = walking;
+      idleCharacterModel.visible = !walking;
+    } else {
+      characterModel.visible = true;
     }
   }
 
-  // 매 프레임 재사용할 Vector3 인스턴스 (GC 압박 방지)
-  const _moveVector = new THREE.Vector3();
-  const _direction = new THREE.Vector3();
-  const _cameraOffset = new THREE.Vector3();
-  const _targetPosition = new THREE.Vector3();
-  const _lookAtPosition = new THREE.Vector3();
-  const _worldUp = new THREE.Vector3(0, 1, 0);
-
   return {
-    /**
-     * @param {number} backgroundMaxY - 캐릭터 발이 놓일 바닥의 월드 Y (지형 상단)
-     * @param {import("three").Box3} bounds
-     * @param {import("./islandStaticColliders.js").IslandColliderAabb[]} [colliderBoxes]
-     * @param {{ worldSpawnXZ?: { x: number, z: number } }} [setupOptions] - worldSpawnXZ가 있으면 XZ 기준은 이 값(bounds 중심 대신), spawnOffset은 여전히 가산
-     */
     setup(backgroundMaxY, bounds, colliderBoxes = [], setupOptions = {}) {
       const { worldSpawnXZ } = setupOptions;
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
 
-      const relChar =
-        config.characterModelPath ?? "/models/common/user_walk_v2.glb";
-      const relIdle =
-        config.characterIdleModelPath ?? "/models/common/user_idle.glb";
-      const relPunch =
-        config.characterPunchModelPath ?? "/models/stage3/user_punch.glb";
-      const characterUrl = resolvePublicAssetUrl(relChar);
-      const idleUrl = resolvePublicAssetUrl(relIdle);
-      const punchUrl = resolvePublicAssetUrl(relPunch);
+      const { boundsPadding } = config.character;
+      _minCx = Math.min(
+        bounds.min.x + boundsPadding,
+        bounds.max.x - boundsPadding,
+      );
+      _maxCx = Math.max(
+        bounds.min.x + boundsPadding,
+        bounds.max.x - boundsPadding,
+      );
+      _minCz = Math.min(
+        bounds.min.z + boundsPadding,
+        bounds.max.z - boundsPadding,
+      );
+      _maxCz = Math.max(
+        bounds.min.z + boundsPadding,
+        bounds.max.z - boundsPadding,
+      );
+
+      const characterUrl = resolvePublicAssetUrl(
+        config.characterModelPath ?? "/models/common/user_walk_v2.glb",
+      );
+      const idleUrl = resolvePublicAssetUrl(
+        config.characterIdleModelPath ?? "/models/common/user_idle.glb",
+      );
+      const punchUrl = resolvePublicAssetUrl(
+        config.characterPunchModelPath ?? "/models/stage3/user_punch.glb",
+      );
+
       Promise.all([
         loadGltfTemplateCached(characterUrl),
         loadGltfTemplateCached(idleUrl).catch(() => null),
         loadGltfTemplateCached(punchUrl).catch(() => null),
       ]).then(
         ([gltf, idleGltf, punchGltf]) => {
-          characterModel = SkeletonUtils.clone(gltf.scene);
-          idleCharacterModel = idleGltf
-            ? SkeletonUtils.clone(idleGltf.scene)
-            : null;
-
           const scale = config.character?.scale ?? 1;
           const radiusCfg = config.character?.collisionRadius;
-          characterModel.scale.setScalar(scale);
-          if (idleCharacterModel) idleCharacterModel.scale.setScalar(scale);
           collisionRadius =
             radiusCfg != null ? radiusCfg : Math.max(0.2, scale * 0.22);
 
-          const characterBox = new THREE.Box3().setFromObject(characterModel);
-          const characterMinY = characterBox.min.y;
+          characterModel = SkeletonUtils.clone(gltf.scene);
+          characterModel.scale.setScalar(scale);
+          applyShadows(characterModel);
 
-          const groundOffset = config.character?.groundOffset ?? 0;
-          characterYPosition = backgroundMaxY - characterMinY + groundOffset;
+          idleCharacterModel = idleGltf
+            ? SkeletonUtils.clone(idleGltf.scene)
+            : null;
+          if (idleCharacterModel) {
+            idleCharacterModel.scale.setScalar(scale);
+            applyShadows(idleCharacterModel);
+          }
 
-          let spawnX = 0;
-          let spawnZ = 0;
-          if (
-            worldSpawnXZ &&
-            Number.isFinite(worldSpawnXZ.x) &&
-            Number.isFinite(worldSpawnXZ.z)
-          ) {
+          const characterMinY = new THREE.Box3().setFromObject(characterModel)
+            .min.y;
+          characterYPosition =
+            backgroundMaxY -
+            characterMinY +
+            (config.character?.groundOffset ?? 0);
+
+          let spawnX = 0,
+            spawnZ = 0;
+          if (worldSpawnXZ && Number.isFinite(worldSpawnXZ.x)) {
             spawnX = worldSpawnXZ.x;
             spawnZ = worldSpawnXZ.z;
-          } else if (bounds && !bounds.isEmpty()) {
+          } else if (!bounds.isEmpty()) {
             spawnX = (bounds.min.x + bounds.max.x) * 0.5;
             spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
           }
@@ -174,69 +225,44 @@ export function createCharacterController({
             spawnX += off.x ?? 0;
             spawnZ += off.z ?? 0;
           }
+
           characterModel.position.set(spawnX, characterYPosition, spawnZ);
           if (idleCharacterModel) {
             idleCharacterModel.position.set(spawnX, characterYPosition, spawnZ);
             idleCharacterModel.visible = false;
           }
 
-          characterModel.traverse((child) => {
-            if (child.isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
-          });
-          if (idleCharacterModel) {
-            idleCharacterModel.traverse((child) => {
-              if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-              }
-            });
-          }
-
-          if (gltf.animations && gltf.animations.length > 0) {
+          if (gltf.animations?.length > 0) {
             characterMixer = new THREE.AnimationMixer(characterModel);
-            const clips = gltf.animations;
-            const idleClips = idleGltf?.animations ?? [];
-            const findClipByName = (regex) =>
-              clips.find((clip) => regex.test(String(clip?.name ?? ""))) ??
-              null;
-            const findIdleClipByName = (regex) =>
-              idleClips.find((clip) => regex.test(String(clip?.name ?? ""))) ??
-              null;
             const walkClip =
-              findClipByName(/walk|run|move/i) ?? clips[0] ?? null;
-            const idleClipFromIdleModel =
-              findIdleClipByName(/idle|stand|wait|pose|breath|rest/i) ??
-              idleClips[0] ??
-              null;
+              findClip(gltf.animations, /walk|run|move/i) ?? gltf.animations[0];
+            characterWalkAction = characterMixer.clipAction(walkClip);
+            characterWalkAction.loop = THREE.LoopRepeat;
+            characterWalkAction.play();
+            characterWalkAction.paused = true;
+            characterWalkAction.enabled = true;
+            characterWalkAction.setEffectiveWeight(1);
 
-            characterWalkAction = walkClip
-              ? characterMixer.clipAction(walkClip)
-              : null;
-            if (idleCharacterModel && idleClipFromIdleModel) {
+            const idleClips = idleGltf?.animations ?? [];
+            if (idleCharacterModel && idleClips.length > 0) {
+              const idleClip =
+                findClip(idleClips, /idle|stand|wait|pose|breath|rest/i) ??
+                idleClips[0];
               idleCharacterMixer = new THREE.AnimationMixer(idleCharacterModel);
-              idleCharacterAction = idleCharacterMixer.clipAction(
-                idleClipFromIdleModel,
-              );
+              idleCharacterAction = idleCharacterMixer.clipAction(idleClip);
             } else {
-              const idleClipFromWalkModel =
-                findClipByName(/idle|stand|wait|pose|breath|rest/i) ??
-                clips.find((clip) => clip !== walkClip) ??
+              const idleClip =
+                findClip(
+                  gltf.animations,
+                  /idle|stand|wait|pose|breath|rest/i,
+                ) ??
+                gltf.animations.find((c) => c !== walkClip) ??
                 null;
-              idleCharacterAction = idleClipFromWalkModel
-                ? characterMixer.clipAction(idleClipFromWalkModel)
+              idleCharacterAction = idleClip
+                ? characterMixer.clipAction(idleClip)
                 : null;
             }
 
-            if (characterWalkAction) {
-              characterWalkAction.loop = THREE.LoopRepeat;
-              characterWalkAction.play();
-              characterWalkAction.paused = true;
-              characterWalkAction.enabled = true;
-              characterWalkAction.setEffectiveWeight(1);
-            }
             if (idleCharacterAction) {
               idleCharacterAction.loop = THREE.LoopRepeat;
               idleCharacterAction.play();
@@ -244,21 +270,16 @@ export function createCharacterController({
               idleCharacterAction.enabled = true;
               idleCharacterAction.setEffectiveWeight(1);
             }
-            // 초기 상태는 정지(idle)로 시작.
-            if (idleCharacterModel) {
-              characterModel.visible = false;
-              idleCharacterModel.visible = true;
-            }
-            if (characterWalkAction) characterWalkAction.paused = true;
-            if (idleCharacterAction) idleCharacterAction.paused = false;
-          } else {
-            console.warn("⚠️ 캐릭터 모델에 애니메이션 클립이 없습니다.");
+          }
+
+          if (idleCharacterModel) {
+            characterModel.visible = false;
+            idleCharacterModel.visible = true;
           }
 
           scene.add(characterModel);
           if (idleCharacterModel) scene.add(idleCharacterModel);
 
-          // Punch 모델: walk/idle과 별도 GLB. 엔터키 타격 시 전체 스왑 재생.
           if (punchGltf) {
             punchCharacterModel = SkeletonUtils.clone(punchGltf.scene);
             punchCharacterModel.scale.setScalar(scale);
@@ -268,31 +289,17 @@ export function createCharacterController({
               spawnZ,
             );
             punchCharacterModel.visible = false;
-            punchCharacterModel.traverse((child) => {
-              if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-              }
-            });
-            if (punchGltf.animations && punchGltf.animations.length > 0) {
+            applyShadows(punchCharacterModel);
+
+            if (punchGltf.animations?.length > 0) {
               punchMixer = new THREE.AnimationMixer(punchCharacterModel);
-              const punchClip = punchGltf.animations[0];
-              punchAction = punchMixer.clipAction(punchClip);
+              punchAction = punchMixer.clipAction(punchGltf.animations[0]);
               punchAction.loop = THREE.LoopOnce;
               punchAction.clampWhenFinished = true;
               punchMixer.addEventListener("finished", () => {
                 isPunchPlaying = false;
                 if (punchCharacterModel) punchCharacterModel.visible = false;
-                // walk/idle 복귀 — 현재 isWalking 상태에 맞춰 둘 중 하나만 show
-                if (isWalking) {
-                  if (characterModel) characterModel.visible = true;
-                  if (idleCharacterModel) idleCharacterModel.visible = false;
-                } else if (idleCharacterModel) {
-                  if (characterModel) characterModel.visible = false;
-                  idleCharacterModel.visible = true;
-                } else if (characterModel) {
-                  characterModel.visible = true;
-                }
+                setCharacterVisibility(isWalking);
               });
             }
             scene.add(punchCharacterModel);
@@ -306,6 +313,7 @@ export function createCharacterController({
               renderer.compile(scene, prewarmCamera);
             }
           }
+
           inspectGLTF(gltf, "캐릭터 모델");
         },
         (err) =>
@@ -316,44 +324,19 @@ export function createCharacterController({
       );
     },
 
-    /**
-     * @param {number} delta
-     * @param {THREE.Camera} camera
-     * @param {{ skipCameraFollow?: boolean; cameraYawAssistRad?: number }} [options] - skipCameraFollow: true면 카메라 추적 생략 (OrbitControls 사용 시). cameraYawAssistRad: 캐릭터 기준 Y축으로 cameraOffset 회전(rad)
-     */
     update(delta, camera, options = {}) {
       if (!characterModel || !backgroundBounds) return;
 
-      const {
-        moveSpeed,
-        boundsPadding,
-        cameraOffset: camOffset,
-        cameraLerpFactor,
-        lookAtHeightOffset,
-      } = config.character;
-
-      // punch 애니메이션 중: 입력 무시하고 punchMixer만 업데이트. 카메라 추적은 유지.
       if (isPunchPlaying) {
         if (punchMixer) punchMixer.update(delta);
         syncWalkSound(false);
-        if (!options.skipCameraFollow) {
-          _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
-          const yawAssist = Number(options.cameraYawAssistRad ?? 0);
-          if (yawAssist !== 0) {
-            _cameraOffset.applyAxisAngle(_worldUp, yawAssist);
-          }
-          _targetPosition.copy(characterModel.position).add(_cameraOffset);
-          camera.position.lerp(_targetPosition, cameraLerpFactor);
-          _lookAtPosition.copy(characterModel.position);
-          _lookAtPosition.y += lookAtHeightOffset;
-          camera.lookAt(_lookAtPosition);
-        }
+        if (!options.skipCameraFollow)
+          updateCameraFollow(camera, characterModel.position, options);
         return;
       }
 
       const keys = getKeys();
       _moveVector.set(0, 0, 0);
-
       if (keys.ArrowUp || keys.w || keys.W || keys.KeyW) _moveVector.z -= 1;
       if (keys.ArrowDown || keys.s || keys.S || keys.KeyS) _moveVector.z += 1;
       if (keys.ArrowLeft || keys.a || keys.A || keys.KeyA) _moveVector.x -= 1;
@@ -364,109 +347,55 @@ export function createCharacterController({
 
       if (movingInput) {
         _direction.copy(_moveVector).normalize();
-        _moveVector.copy(_direction).multiplyScalar(moveSpeed * delta);
+        _moveVector
+          .copy(_direction)
+          .multiplyScalar(config.character.moveSpeed * delta);
 
         const oldX = characterModel.position.x;
         const oldZ = characterModel.position.z;
-
-        let newX = characterModel.position.x + _moveVector.x;
-        let newZ = characterModel.position.z + _moveVector.z;
-
-        // 패딩 때문에 low>high가 되면 Three clamp가 한 점으로 몰아 이동이 0이 된다.
-        const minCx = Math.min(
-          backgroundBounds.min.x + boundsPadding,
-          backgroundBounds.max.x - boundsPadding,
-        );
-        const maxCx = Math.max(
-          backgroundBounds.min.x + boundsPadding,
-          backgroundBounds.max.x - boundsPadding,
-        );
-        const minCz = Math.min(
-          backgroundBounds.min.z + boundsPadding,
-          backgroundBounds.max.z - boundsPadding,
-        );
-        const maxCz = Math.max(
-          backgroundBounds.min.z + boundsPadding,
-          backgroundBounds.max.z - boundsPadding,
-        );
-        newX = THREE.MathUtils.clamp(newX, minCx, maxCx);
-        newZ = THREE.MathUtils.clamp(newZ, minCz, maxCz);
-
         const slid = slideMoveXZAgainstAABBs(
           oldX,
           oldZ,
-          newX,
-          newZ,
+          THREE.MathUtils.clamp(oldX + _moveVector.x, _minCx, _maxCx),
+          THREE.MathUtils.clamp(oldZ + _moveVector.z, _minCz, _maxCz),
           collisionRadius,
           staticColliderBoxes,
         );
-        newX = slid.x;
-        newZ = slid.z;
-
-        characterModel.position.x = newX;
-        characterModel.position.z = newZ;
-        characterModel.position.y = characterYPosition;
-
-        moved = Math.abs(newX - oldX) > 1e-6 || Math.abs(newZ - oldZ) > 1e-6;
-
-        const angle = Math.atan2(_direction.x, _direction.z);
-        characterModel.rotation.y = angle;
+        characterModel.position.set(slid.x, characterYPosition, slid.z);
+        moved =
+          Math.abs(slid.x - oldX) > 1e-6 || Math.abs(slid.z - oldZ) > 1e-6;
+        characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
       }
 
-      // 실제 이동 여부는 외부 상태(getIsMoving)와 사운드에 유지
       isMoving = moved;
-      if (characterWalkAction) {
-        // 이동 상태가 바뀔 때만 walk/idle 토글을 수행한다.
-        if (isWalking !== movingInput) {
-          if (movingInput) {
-            characterModel.visible = true;
-            if (idleCharacterModel) idleCharacterModel.visible = false;
-            characterWalkAction.paused = false;
-            if (idleCharacterAction) idleCharacterAction.paused = true;
-          } else {
-            if (idleCharacterModel) {
-              characterModel.visible = false;
-              idleCharacterModel.visible = true;
-            } else {
-              characterModel.visible = true;
-            }
-            characterWalkAction.paused = true;
-            if (idleCharacterAction) idleCharacterAction.paused = false;
-          }
-          isWalking = movingInput;
-        }
+
+      if (characterWalkAction && isWalking !== movingInput) {
+        setCharacterVisibility(movingInput);
+        characterWalkAction.paused = !movingInput;
+        if (idleCharacterAction) idleCharacterAction.paused = movingInput;
+        isWalking = movingInput;
       }
-      if (!movingInput && idleCharacterModel && characterModel) {
+
+      if (!movingInput && idleCharacterModel) {
         idleCharacterModel.position.copy(characterModel.position);
         idleCharacterModel.rotation.copy(characterModel.rotation);
       }
 
-      if (characterMixer && (isWalking || !idleCharacterMixer)) {
+      if (characterMixer && (isWalking || !idleCharacterMixer))
         characterMixer.update(delta);
-      }
-      if (idleCharacterMixer && !isWalking) {
-        idleCharacterMixer.update(delta);
-      }
+      if (idleCharacterMixer && !isWalking) idleCharacterMixer.update(delta);
 
       syncWalkSound(moved);
 
-      // 카메라 추적 (OrbitControls 사용 시에는 스킵)
-      if (!options.skipCameraFollow) {
-        _cameraOffset.set(camOffset.x, camOffset.y, camOffset.z);
-        const yawAssist = Number(options.cameraYawAssistRad ?? 0);
-        if (yawAssist !== 0) {
-          _cameraOffset.applyAxisAngle(_worldUp, yawAssist);
-        }
-        _targetPosition.copy(characterModel.position).add(_cameraOffset);
-        camera.position.lerp(_targetPosition, cameraLerpFactor);
-
-        _lookAtPosition.copy(characterModel.position);
-        _lookAtPosition.y += lookAtHeightOffset;
-        camera.lookAt(_lookAtPosition);
-      }
+      if (!options.skipCameraFollow)
+        updateCameraFollow(camera, characterModel.position, options);
     },
 
     cleanup() {
+      if (impactTimeoutId !== null) {
+        clearTimeout(impactTimeoutId);
+        impactTimeoutId = null;
+      }
       if (punchMixer) {
         punchMixer.stopAllAction();
         punchMixer = null;
@@ -505,47 +434,56 @@ export function createCharacterController({
       staticColliderBoxes = [];
     },
 
-    getPosition() {
-      return characterModel?.position ?? null;
-    },
-    /**
-     * 바닥 플래너(y=0) 기준 유저가 바라보는 방향의 yaw(radian).
-     * @returns {number|null}
-     */
-    getYaw() {
-      return characterModel ? characterModel.rotation.y : null;
-    },
-    /**
-     * 현재 프레임 입력 기준으로 이동 중인지 여부.
-     * @returns {boolean}
-     */
-    getIsMoving() {
-      return isMoving;
-    },
+    getPosition: () => characterModel?.position ?? null,
+    getYaw: () => characterModel?.rotation.y ?? null,
+    getIsMoving: () => isMoving,
 
-    playHammerCue() {
+    playHammerCue(onImpact, options = {}) {
       if (!punchCharacterModel || !punchAction || isPunchPlaying) return;
-      // 현재 보이는 모델(walk 또는 idle)의 포즈를 punch에 복사
       const src = idleCharacterModel?.visible
         ? idleCharacterModel
         : characterModel;
       if (!src) return;
+      const reverse =
+        options.reverse ?? Boolean(config.character?.punchAnimationReverse);
+      const speedRaw = Number(config.character?.punchAnimationTimeScale);
+      const speed = THREE.MathUtils.clamp(
+        Number.isFinite(speedRaw) && speedRaw > 0 ? speedRaw : 1.65,
+        0.05,
+        20,
+      );
       punchCharacterModel.position.copy(src.position);
       punchCharacterModel.rotation.copy(src.rotation);
-      // walk/idle 숨기고 punch만 보이게
-      if (characterModel) characterModel.visible = false;
+      characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
       punchCharacterModel.visible = true;
-      // 애니메이션 리셋 후 1회 재생
       punchAction.reset();
+      const clip = punchAction.getClip();
+      const dur = clip.duration;
+      if (reverse) {
+        punchAction.time = dur;
+        punchAction.timeScale = -speed;
+      } else {
+        punchAction.time = 0;
+        punchAction.timeScale = speed;
+      }
       punchAction.enabled = true;
       punchAction.paused = false;
       punchAction.play();
       isPunchPlaying = true;
+      if (typeof onImpact === "function") {
+        const wallDur = dur / speed;
+        /** 클립 진행 0~1 중 타격 시점(1=애니 끝 프레임) */
+        const impactFrac = 1;
+        const elapsedFrac = reverse ? 1 - impactFrac : impactFrac;
+        const delay = Math.max(0, wallDur * elapsedFrac * 1000);
+        impactTimeoutId = setTimeout(() => {
+          impactTimeoutId = null;
+          onImpact();
+        }, delay);
+      }
     },
 
-    isPunching() {
-      return isPunchPlaying;
-    },
+    isPunching: () => isPunchPlaying,
   };
 }

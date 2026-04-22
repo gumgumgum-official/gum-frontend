@@ -67,6 +67,7 @@ import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../events/stage6Events.js";
 import {
   playRandomCrackSound,
   playCrackFinalSound,
+  playFlowerMagicSound,
   disposeStage3CrackSound,
 } from "../utils/stages/stage3/playCrackSound.js";
 
@@ -128,6 +129,15 @@ const STREET_LIGHT_TRIGGER_RADIUS = 10;
 const STREET_LIGHT_TRIGGER_COOLDOWN_MS = 1500;
 const CLOCK_TRIGGER_RADIUS = 8;
 const CLOCK_TRIGGER_COOLDOWN_MS = 2000;
+/*
+ * 글자 위 hammer_only + "click" 말풍선 (현재 미사용 — 다시 쓸 때 주석 해제)
+const STAGE3_HAMMER_MODEL_PATH = "/models/stage3/hammer_only.glb";
+const STAGE3_HAMMER_FLOAT_HEIGHT = 0.25;
+const STAGE3_HAMMER_FLOAT_AMPLITUDE = 0.06;
+const STAGE3_HAMMER_FLOAT_SPEED = 2.2;
+const STAGE3_HAMMER_BASE_ROT_Y = THREE.MathUtils.degToRad(18);
+const STAGE3_HAMMER_BUBBLE_OFFSET_Y = 0.85;
+*/
 
 /** 다른 스테이지 대비 Stage3만 살짝 밝게 (진입 시 가산, cleanup 시 복원) */
 const STAGE3_TONE_MAPPING_EXPOSURE_DELTA = 0.06;
@@ -199,6 +209,15 @@ export function Stage3() {
   // 낙하 글자 1개 (할당된 svgUrl 우선)
   let letterState = null;
   let letterLoadInProgress = false;
+  /**
+   * 섬 static collider 리스트 참조. 캐릭터/껌딱지는 setup 시 이 배열 레퍼런스를 보존하므로
+   * 런타임에 push/splice 하면 즉시 충돌에 반영된다.
+   * @type {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb[] | null}
+   */
+  let stage3CollidersRef = null;
+  /** 글자가 착지한 뒤 colliders에 추가한 AABB 엔트리 (shatter/reset 시 splice로 제거) */
+  /** @type {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb | null} */
+  let letterColliderBox = null;
   const fragments = [];
   /** Enter 타격 시 스폰된 꽃 목록 — bloom 애니메이션 + 자동 제거 */
   /** @type {{ group: import("three").Object3D, age: number }[]} */
@@ -294,10 +313,18 @@ export function Stage3() {
   let stage3IntroFlowStarted = false;
   /** 이스터에그 3 + 걱정 텍스트 파괴 후 축하 자막 1회만 */
   let worryCompletionCelebrationDone = false;
+  /** 첫 꽃이 피어나는 시점에 flower_magic 효과음 1회만 재생 — 이후 꽃들은 무음 */
+  let flowerMagicPlayed = false;
   /** @type {HTMLDivElement | null} */
   let stampUiRoot = null;
   /** @type {HTMLDivElement | null} */
   let userWorryEnterBubbleEl = null;
+  /*
+  let letterHammerModel = null;
+  let hammerModelLoadInProgress = false;
+  let hammerFloatElapsed = 0;
+  let hammerClickBubbleEl = null;
+  */
   /** 포탈 → 다음 스테이지 전환용 풀스크린 화이트아웃 */
   /** @type {HTMLDivElement | null} */
   let whiteoutOverlayEl = null;
@@ -310,6 +337,11 @@ export function Stage3() {
   let userWorryEnterBubbleT = 0;
   let cameraShakeEndTime = 0;
   const _projWorry = new THREE.Vector3();
+  /*
+  const _hammerBox = new THREE.Box3();
+  const _hammerSize = new THREE.Vector3();
+  const _hammerBubbleWorld = new THREE.Vector3();
+  */
   let stage3EntryStampRevealTimerId = null;
   /** 모달/미니게임 닫힌 뒤 재생할 이스터에그 발견 자막 (notice / gameMachine / tent) */
   let pendingEggDiscoverySubtitle = null;
@@ -677,7 +709,44 @@ export function Stage3() {
     userWorryEnterBubbleEl.textContent = "🔨 [ ENTER ]";
     userWorryEnterBubbleEl.setAttribute("aria-hidden", "true");
     document.body.appendChild(userWorryEnterBubbleEl);
+
+    /*
+    hammerClickBubbleEl = document.createElement("div");
+    hammerClickBubbleEl.className =
+      "speech-bubble-stage2 speech-bubble-stage3-user";
+    hammerClickBubbleEl.textContent = "click";
+    hammerClickBubbleEl.setAttribute("aria-hidden", "true");
+    document.body.appendChild(hammerClickBubbleEl);
+    */
   }
+
+  /*
+  async function ensureLetterHammerModelLoaded(scene) {
+    if (letterHammerModel || hammerModelLoadInProgress) return;
+    hammerModelLoadInProgress = true;
+    try {
+      const hammerGltf = await loadGltfTemplateCached(
+        resolvePublicAssetUrl(STAGE3_HAMMER_MODEL_PATH),
+      );
+      if (!isStage3Active) return;
+      const model = hammerGltf.scene.clone(true);
+      model.visible = false;
+      model.rotation.y = STAGE3_HAMMER_BASE_ROT_Y;
+      model.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(model);
+      letterHammerModel = model;
+    } catch (error) {
+      console.warn("[Stage3] hammer_only.glb 로드 실패:", error);
+    } finally {
+      hammerModelLoadInProgress = false;
+    }
+  }
+  */
 
   function ensureWhiteoutOverlay() {
     if (whiteoutOverlayEl) return;
@@ -753,6 +822,8 @@ export function Stage3() {
     stampUiRoot = null;
     userWorryEnterBubbleEl?.remove();
     userWorryEnterBubbleEl = null;
+    // hammerClickBubbleEl?.remove();
+    // hammerClickBubbleEl = null;
     userWorryEnterBubblePhase = "off";
     userWorryEnterBubbleT = 0;
   }
@@ -1904,6 +1975,32 @@ export function Stage3() {
     return { id: latest.id, url: urlData?.publicUrl ?? "" };
   }
 
+  /** 글자의 현재 월드 AABB를 계산해 stage3CollidersRef에 추가. 이미 있으면 no-op. */
+  function addLetterColliderIfNeeded() {
+    if (!letterState?.group || !stage3CollidersRef) return;
+    if (letterColliderBox) return;
+    letterState.group.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(letterState.group);
+    if (box.isEmpty()) return;
+    letterColliderBox = {
+      minX: box.min.x,
+      maxX: box.max.x,
+      minZ: box.min.z,
+      maxZ: box.max.z,
+      minY: box.min.y,
+      maxY: box.max.y,
+    };
+    stage3CollidersRef.push(letterColliderBox);
+  }
+
+  /** 글자 파괴/리셋 시 collider 엔트리 제거. */
+  function removeLetterCollider() {
+    if (!letterColliderBox || !stage3CollidersRef) return;
+    const idx = stage3CollidersRef.indexOf(letterColliderBox);
+    if (idx >= 0) stage3CollidersRef.splice(idx, 1);
+    letterColliderBox = null;
+  }
+
   function setReadableRotationTowardCamera(group, camera, _groundY) {
     const dir = new THREE.Vector3(
       camera.position.x - group.position.x,
@@ -1929,6 +2026,7 @@ export function Stage3() {
       disposeHandwritingSvgPlaneGroup(obj);
     });
     letterState?.pulseTween?.kill();
+    removeLetterCollider();
     letterState = null;
   }
 
@@ -2128,6 +2226,7 @@ export function Stage3() {
       s.velocity.rotationZ = 0;
       setReadableRotationTowardCamera(s.group, camera, s.groundY);
       s.landed = true;
+      addLetterColliderIfNeeded();
       return;
     }
     s.velocity.y += s.gravity * delta;
@@ -2537,6 +2636,13 @@ export function Stage3() {
 
   function spawnFlowerAt(x, z, groundY) {
     if (!sceneRef) return;
+    // 텐트·돗자리 등 정적 오브젝트 AABB 안이면 꽃 스폰 금지
+    if (stage3CollidersRef) {
+      for (const box of stage3CollidersRef) {
+        if (x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ)
+          return;
+      }
+    }
     const url = pickRandomFlowerAssetUrl();
     const gy = groundY ?? stage3GroundY;
     void loadGltfTemplateCached(url)
@@ -2563,6 +2669,10 @@ export function Stage3() {
         container.scale.setScalar(0);
         sceneRef.add(container);
         standaloneFlowers.push({ group: container, age: 0 });
+        if (!flowerMagicPlayed) {
+          flowerMagicPlayed = true;
+          playFlowerMagicSound();
+        }
         // 첫 꽃이 실제로 씬에 추가되는 순간 축하 자막 발동(가드로 1회만)
         tryDispatchWorryCompletionCelebration();
       })
@@ -2723,7 +2833,17 @@ export function Stage3() {
     const line = new THREE.Line(geom, mat);
     line.renderOrder = 10;
     state.group.add(line);
-    gsap.to(mat, { opacity: 0.95, duration: 0.12, ease: "power2.out" });
+    gsap.to(mat, {
+      opacity: 1,
+      duration: 0.12,
+      ease: "power2.out",
+      // 페이드 인 끝난 뒤 transparent를 꺼서 알파 블렌딩을 완전히 제거 — 뒤의 검정 글자가 비쳐
+      // 크랙이 회색빛으로 보이는 투과 현상 방지. 이후 렌더링은 순수 불투명 라인.
+      onComplete: () => {
+        mat.transparent = false;
+        mat.needsUpdate = true;
+      },
+    });
     if (!state.crackMeshes) state.crackMeshes = [];
     state.crackMeshes.push(line);
   }
@@ -2733,10 +2853,10 @@ export function Stage3() {
    * 한 점에서 갈라져 나가는 별 모양 균열 패턴.
    */
   function addCrackCluster(state, anchor) {
-    const branchCount = 2 + Math.floor(Math.random() * 2); // 2~3
+    const branchCount = 2 + Math.floor(Math.random() * 3); // 3~5
     for (let b = 0; b < branchCount; b++) {
       const angle = Math.random() * Math.PI * 2;
-      const len = 0.22 + Math.random() * 0.35;
+      const len = 0.22 + Math.random() * 0.5;
       const end = new THREE.Vector3(
         anchor.x + Math.cos(angle) * len,
         anchor.y + Math.sin(angle) * len,
@@ -2747,15 +2867,15 @@ export function Stage3() {
   }
 
   /**
-   * 한 타격당 클러스터 생성. hitCount가 커질수록 완만하게 증가 — 후반에 징그럽지 않게 제동.
-   * hit 0: 1, hit 3: 2, hit 6: 3, hit 9: 4, hit 12: 5, hit 15: 6, hit 18: 7.
-   * 최대 7 클러스터 × 2~3 branch = 14~21 line per hit.
+   * 한 타격당 클러스터 생성. hitCount가 커질수록 완만하게 증가.
+   * hit 0: 3, hit 2: 4, hit 4: 5, ... 최대 10.
+   * 최대 10 클러스터 × 3~5 branch = 30~50 line per hit.
    */
   function addCrackHit(state) {
     if (!state?.group) return;
     const verts = getLetterFrontCapVertices(state);
     if (verts.length === 0) return;
-    const clusterCount = 1 + Math.floor(state.hitCount / 3);
+    const clusterCount = Math.min(10, 3 + Math.floor(state.hitCount / 2));
     for (let i = 0; i < clusterCount; i++) {
       const anchor = verts[Math.floor(Math.random() * verts.length)];
       addCrackCluster(state, anchor);
@@ -2790,12 +2910,8 @@ export function Stage3() {
     );
   }
 
-  function onEnterHit() {
+  function applyHitEffect(target) {
     if (!sceneRef) return;
-    const target = getHitTarget();
-    if (!target) return;
-
-    character?.playHammerCue?.();
 
     const sourceObject =
       target.type === "fragment"
@@ -2805,6 +2921,7 @@ export function Stage3() {
 
     if (target.type === "fragment") {
       const fragIdx = target.index;
+      if (fragIdx >= fragments.length) return;
       const frag = fragments[fragIdx];
       const mesh = frag.group;
       const tris = collectTrianglesFromGroup(mesh);
@@ -2852,7 +2969,10 @@ export function Stage3() {
       return;
     }
 
-    // letter 타격: 초반 CRACK_HITS_BEFORE_SHATTER 번은 크랙 라인만 추가, 마지막 1회에 전면 shatter
+    // letter 타격: letterState가 아직 유효한지 확인
+    if (!letterState || letterState.hitCount >= HITS_TO_DESTROY) return;
+
+    // 초반 CRACK_HITS_BEFORE_SHATTER 번은 크랙 라인만 추가, 마지막 1회에 전면 shatter
     if (letterState.hitCount < CRACK_HITS_BEFORE_SHATTER) {
       addCrackHit(letterState);
       pulseLetterScale(letterState);
@@ -2870,12 +2990,22 @@ export function Stage3() {
     );
     createFragmentMeshes(shatterPieces, mat, target.groundY);
     playCrackFinalSound();
+    removeLetterCollider();
     sceneRef.remove(group);
     disposeHandwritingSvgPlaneGroup(group);
     letterState.pulseTween?.kill();
     letterState = null;
     textDestroyed = true;
     // 축하 자막은 첫 꽃이 피어나는 순간(spawnFlowerAt 성공)에 dispatch.
+  }
+
+  function onEnterHit() {
+    if (!sceneRef) return;
+    const target = getHitTarget();
+    // 펀치 애니: 클립 100%(끝 프레임)에 타격 — 역재생이면 해당 포즈가 시작 시점이라 지연 0에 가깝게 맞춤
+    character?.playHammerCue?.(() => {
+      if (target) applyHitEffect(target);
+    });
   }
 
   function updateFragments(delta) {
@@ -2935,8 +3065,10 @@ export function Stage3() {
       textDestroyed = false;
       discoveredEggs.clear();
       worryCompletionCelebrationDone = false;
+      flowerMagicPlayed = false;
       stage3IntroFlowStarted = false;
       cameraShakeEndTime = 0;
+      // hammerFloatElapsed = 0;
       pendingEggDiscoverySubtitle = null;
       if (stage3EntryStampRevealTimerId != null) {
         window.clearTimeout(stage3EntryStampRevealTimerId);
@@ -2953,6 +3085,7 @@ export function Stage3() {
       const canvas = renderer.domElement;
       sceneRef = scene;
       canvasRef = canvas;
+      // void ensureLetterHammerModelLoaded(scene);
 
       character = createCharacterController({
         scene,
@@ -3086,6 +3219,8 @@ export function Stage3() {
                 backgroundBounds,
               )
             : [];
+          // 런타임에 letter AABB를 push/splice할 수 있도록 상위 스코프에 참조 보관
+          stage3CollidersRef = islandStaticColliders;
           if (import.meta.env.DEV) {
             // dev-only collider diagnostics intentionally muted to reduce console noise.
           }
@@ -3197,6 +3332,62 @@ export function Stage3() {
       }
 
       if (cameraRef && canvasRef) {
+        /*
+        const canShowHammer =
+          Boolean(letterState?.group && letterState.landed) && !textDestroyed;
+        if (letterHammerModel && canShowHammer && letterState?.group) {
+          hammerFloatElapsed += delta;
+          letterState.group.updateMatrixWorld(true);
+          _hammerBox.setFromObject(letterState.group);
+          let anchorX = letterState.group.position.x;
+          let anchorZ = letterState.group.position.z;
+          const letterTopY = !_hammerBox.isEmpty()
+            ? _hammerBox.max.y
+            : letterState.group.position.y + STAGE3_HAMMER_FLOAT_HEIGHT;
+          if (!_hammerBox.isEmpty()) {
+            anchorX = (_hammerBox.min.x + _hammerBox.max.x) * 0.5;
+            anchorZ = (_hammerBox.min.z + _hammerBox.max.z) * 0.5;
+          }
+          const bobY =
+            Math.sin(hammerFloatElapsed * STAGE3_HAMMER_FLOAT_SPEED) *
+            STAGE3_HAMMER_FLOAT_AMPLITUDE;
+          letterHammerModel.position.set(
+            anchorX,
+            letterTopY + STAGE3_HAMMER_FLOAT_HEIGHT + bobY,
+            anchorZ,
+          );
+          letterHammerModel.rotation.y = STAGE3_HAMMER_BASE_ROT_Y;
+          letterHammerModel.visible = true;
+          if (hammerClickBubbleEl) {
+            _hammerBox.setFromObject(letterHammerModel);
+            if (!_hammerBox.isEmpty()) {
+              _hammerBox.getCenter(_hammerBubbleWorld);
+              _hammerBox.getSize(_hammerSize);
+              _hammerBubbleWorld.y +=
+                _hammerSize.y * STAGE3_HAMMER_BUBBLE_OFFSET_Y;
+            } else {
+              _hammerBubbleWorld.copy(letterHammerModel.position);
+              _hammerBubbleWorld.y += 0.6;
+            }
+            cameraRef.updateMatrixWorld(true);
+            _hammerBubbleWorld.project(cameraRef);
+            const rect = canvasRef.getBoundingClientRect();
+            const bx =
+              (_hammerBubbleWorld.x * 0.5 + 0.5) * rect.width + rect.left;
+            const by =
+              (-_hammerBubbleWorld.y * 0.5 + 0.5) * rect.height + rect.top;
+            hammerClickBubbleEl.style.left = `${bx}px`;
+            hammerClickBubbleEl.style.top = `${by}px`;
+            hammerClickBubbleEl.classList.add("is-visible");
+          }
+        } else {
+          if (letterHammerModel) letterHammerModel.visible = false;
+          if (hammerClickBubbleEl) {
+            hammerClickBubbleEl.classList.remove("is-visible");
+          }
+        }
+        */
+
         const charPos = character?.getPosition?.();
         const nearLetter =
           Boolean(
@@ -3423,6 +3614,13 @@ export function Stage3() {
         portalVortexMaterial = null;
         backgroundModel = null;
       }
+      /*
+      if (letterHammerModel) {
+        scene.remove(letterHammerModel);
+        letterHammerModel = null;
+      }
+      hammerModelLoadInProgress = false;
+      */
 
       if (skyBackgroundTexture) {
         skyBackgroundTexture.dispose();
