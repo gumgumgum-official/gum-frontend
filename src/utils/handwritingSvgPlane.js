@@ -82,6 +82,9 @@ export async function rasterizeSvgToTexture(svgText) {
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
 
   return {
@@ -117,8 +120,9 @@ export async function createHandwritingSvgPlaneGroup(svgPublicUrl, options) {
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
+    alphaTest: 0.01,
     side: THREE.DoubleSide,
-    depthWrite: true,
+    depthWrite: false,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = false;
