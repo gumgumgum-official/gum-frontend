@@ -157,6 +157,10 @@ const PORTAL_WHITEOUT_HOLD_MS = 500;
 const PORTAL_WHITEOUT_FADE_OUT_SEC = 1.45;
 /** App.jsx NoticeModalBoard onClose — 게시판 UI가 닫힌 뒤(Stage3 이스터에그 자막용) */
 const NOTICE_MODAL_USER_CLOSED_EVENT = "gum:noticeModalClosed";
+/** 포탈 통과 판정 반경 보정치(포탈 bbox 구체 반경 기반) */
+const PORTAL_PASS_TRIGGER_RADIUS_SCALE = 0.55;
+const PORTAL_PASS_TRIGGER_RADIUS_MIN = 1.2;
+const PORTAL_PASS_TRIGGER_RADIUS_MAX = 3.2;
 
 const REQUIRED_EGG_COUNT = 3;
 /** 🔨 ENTER 말풍선 표시 거리 — 상호작용보다 넓게 */
@@ -248,6 +252,11 @@ export function Stage3() {
   /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
   /** island2.glb 내 INT_gameMachine 루트 */
   let gameMachineRef = null;
+  /** island GLB 내 INT_Portal 루트 (클릭 + 통과 트리거 공용) */
+  let portalRef = null;
+  const portalPassTriggerSphere = new THREE.Sphere();
+  let hasPortalPassTriggerSphere = false;
+  let wasInsidePortalPassTrigger = false;
   let unlistenMinigameClose = null;
   /** @type {HTMLAudioElement | null} */
   let gameMachineClickAudio = null;
@@ -410,6 +419,7 @@ export function Stage3() {
   const _iceModelSize = new THREE.Vector3();
   const _camAssistBox = new THREE.Box3();
   const _camAssistSphere = new THREE.Sphere();
+  const _portalTriggerCenter = new THREE.Vector3();
   const _camProjView = new THREE.Matrix4();
   const _camFrustum = new THREE.Frustum();
 
@@ -980,6 +990,9 @@ export function Stage3() {
     smoothedCameraYawAssistDemand = 0;
     iceCreamCartRef = null;
     gameMachineRef = null;
+    portalRef = null;
+    hasPortalPassTriggerSphere = false;
+    wasInsidePortalPassTrigger = false;
 
     // ANIM_Gumtoongji 캐릭터 애니메이션 설정
     if (gumtoongjiMixer) {
@@ -1068,6 +1081,7 @@ export function Stage3() {
       }
       if (intTarget === "gameMachine") gameMachineRef = obj;
       if (intTarget === "icecream") iceCreamCartRef = obj;
+      if (intTarget === "portal") portalRef = obj;
       if (intTarget === "clock") {
         obj.updateMatrixWorld(true);
         const worldPos = new THREE.Vector3();
@@ -1095,6 +1109,19 @@ export function Stage3() {
     }
     if (iceCreamCartRef) {
       assistRootSet.add(iceCreamCartRef);
+    }
+    if (portalRef) {
+      portalRef.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(portalRef);
+      if (!_camAssistBox.isEmpty()) {
+        _camAssistBox.getBoundingSphere(portalPassTriggerSphere);
+        portalPassTriggerSphere.radius = THREE.MathUtils.clamp(
+          portalPassTriggerSphere.radius * PORTAL_PASS_TRIGGER_RADIUS_SCALE,
+          PORTAL_PASS_TRIGGER_RADIUS_MIN,
+          PORTAL_PASS_TRIGGER_RADIUS_MAX,
+        );
+        hasPortalPassTriggerSphere = true;
+      }
     }
     for (const root of assistRootSet) {
       root.updateMatrixWorld(true);
@@ -1192,6 +1219,34 @@ export function Stage3() {
 
   function handlePointerLeave() {
     if (canvasRef) canvasRef.style.cursor = "default";
+  }
+
+  function isPortalOpenForStageTransition() {
+    return easterEggCount >= REQUIRED_EGG_COUNT && textDestroyed;
+  }
+
+  function handlePortalBlockedFeedback() {
+    if (easterEggCount >= REQUIRED_EGG_COUNT && !textDestroyed) {
+      dispatchSubtitleLine(
+        "아직 걱정이 남아있어요. 우리 걱정을 부셔볼까요? 💥 ",
+      );
+      return;
+    }
+    if (easterEggCount < REQUIRED_EGG_COUNT) {
+      dispatchSubtitleLine(
+        "아직 열리지 않은 것 같아요. 섬을 더 둘러볼까요? 🗺",
+      );
+    }
+  }
+
+  function tryEnterPortalToStage6() {
+    if (portalTransitionInProgress) return;
+    if (isPortalOpenForStageTransition()) {
+      const targetStage = config.portal_bright?.targetStage ?? 6;
+      startPortalTransitionToStage6(targetStage);
+      return;
+    }
+    handlePortalBlockedFeedback();
   }
 
   function applyMonitorIdleState() {
@@ -1421,24 +1476,7 @@ export function Stage3() {
     }
 
     if (target === "portal") {
-      if (portalTransitionInProgress) return;
-      if (easterEggCount >= REQUIRED_EGG_COUNT && textDestroyed) {
-        const targetStage = config.portal_bright?.targetStage ?? 6;
-        startPortalTransitionToStage6(targetStage);
-        return;
-      }
-      if (easterEggCount >= REQUIRED_EGG_COUNT && !textDestroyed) {
-        dispatchSubtitleLine(
-          "아직 걱정이 남아있어요. 우리 걱정을 부셔볼까요? 💥 ",
-        );
-        return;
-      }
-      if (easterEggCount < REQUIRED_EGG_COUNT) {
-        dispatchSubtitleLine(
-          "아직 열리지 않은 것 같아요. 섬을 더 둘러볼까요? 🗺",
-        );
-        return;
-      }
+      tryEnterPortalToStage6();
       return;
     }
 
@@ -3394,6 +3432,24 @@ export function Stage3() {
         */
 
         const charPos = character?.getPosition?.();
+        if (
+          charPos &&
+          hasPortalPassTriggerSphere &&
+          !portalTransitionInProgress
+        ) {
+          _portalTriggerCenter.copy(portalPassTriggerSphere.center);
+          const dx = charPos.x - _portalTriggerCenter.x;
+          const dz = charPos.z - _portalTriggerCenter.z;
+          const portalRadius = portalPassTriggerSphere.radius;
+          const insidePortalPassTrigger =
+            dx * dx + dz * dz <= portalRadius * portalRadius;
+          if (!wasInsidePortalPassTrigger && insidePortalPassTrigger) {
+            tryEnterPortalToStage6();
+          }
+          wasInsidePortalPassTrigger = insidePortalPassTrigger;
+        } else {
+          wasInsidePortalPassTrigger = false;
+        }
         const nearLetter =
           Boolean(
             letterState?.landed &&
@@ -3514,6 +3570,9 @@ export function Stage3() {
         unlistenMinigameClose = null;
       }
       gameMachineRef = null;
+      portalRef = null;
+      hasPortalPassTriggerSphere = false;
+      wasInsidePortalPassTrigger = false;
       disposeNoticePaperAudio();
       disposeStreetLightSound();
       disposePortalTransitionSound();
