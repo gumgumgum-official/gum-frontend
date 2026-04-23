@@ -27,9 +27,8 @@ export function getGumServerBaseUrl() {
 export function getMonitorDeviceId() {
   const params = new URLSearchParams(window.location.search);
   const qsMonitor = params.get("monitor") || params.get("monitorId");
-  // 동일 빌드·동일 배포에서 모니터만 나누려면 ?monitor= / ?monitorId= 가 빌드 시 env보다 우선해야 함
   return normalizeMonitorDeviceId(
-    qsMonitor || import.meta.env.VITE_MONITOR_DEVICE || "monitor-1",
+    import.meta.env.VITE_MONITOR_DEVICE || qsMonitor || "monitor-1",
   );
 }
 
