@@ -14,11 +14,11 @@ const FLOWER_MAGIC_PATHS = [
   "/static/sounds/text_crack/flower_magic.mp3",
   "/static/sounds/text_crack/flower_magic2.mp3",
 ];
-const CRACK_VOLUME = 0.55;
-const CRACK_FINAL_VOLUME = 0.8;
-/** 배경 루프 음량과 동일하게 재생 — config.audio.backgroundAmbientVolume 기준 */
+const getCrackVolume = () => Number(STAGE3_AUDIO_CONFIG.crackVolume ?? 0.027);
+const getCrackFinalVolume = () =>
+  Number(STAGE3_AUDIO_CONFIG.crackFinalVolume ?? 0.027);
 const getFlowerMagicVolume = () =>
-  Number(STAGE3_AUDIO_CONFIG.backgroundAmbientVolume ?? 0.03);
+  Number(STAGE3_AUDIO_CONFIG.flowerMagicVolume ?? 0.027);
 
 let lastCrackIdx = -1;
 /** @type {HTMLAudioElement | null} */
@@ -45,7 +45,7 @@ export function playRandomCrackSound() {
   lastCrackIdx = idx;
   try {
     const a = new window.Audio(resolvePublicAssetUrl(CRACK_PATHS[idx]));
-    a.volume = clamp01(CRACK_VOLUME);
+    a.volume = clamp01(getCrackVolume());
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
   } catch {
@@ -83,7 +83,7 @@ export function playCrackFinalSound() {
     crackFinalAudio.preload = "auto";
     crackFinalAudio.src = resolvePublicAssetUrl(CRACK_FINAL_PATH);
   }
-  crackFinalAudio.volume = clamp01(CRACK_FINAL_VOLUME);
+  crackFinalAudio.volume = clamp01(getCrackFinalVolume());
   crackFinalAudio.pause();
   crackFinalAudio.currentTime = 0;
   const p = crackFinalAudio.play();

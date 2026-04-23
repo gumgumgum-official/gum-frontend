@@ -282,7 +282,6 @@ export function Stage6() {
     activeSubtitleCueIndex = -1;
     isAirportSubtitleVisible = false;
     window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
-    isSceneInteractionLocked = false;
   }
 
   function playAirportAnnounceIntro() {
