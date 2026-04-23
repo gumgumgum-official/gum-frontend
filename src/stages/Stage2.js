@@ -958,6 +958,11 @@ function loadCharacters(
     const surfaceY = walkGroundY + yExtra;
     const scatter = config.scatterCharacters !== false;
     const minSep = Math.max(0, config.characterScatterMinDistance ?? 3.5);
+    // Stage2 스폰 시 울타리 바로 옆에 붙지 않도록 내부 여유 반경을 둔다.
+    const spawnFenceClearance = Math.max(
+      padding * 1.8,
+      config.characterSpawnFenceClearance ?? 1.2,
+    );
     const spanX = maxX - minX;
     const spanZ = maxZ - minZ;
     /** @type {{ x: number, z: number }[]} */
@@ -973,6 +978,22 @@ function loadCharacters(
       return typeof islandValidator === "function"
         ? islandValidator(x, z)
         : true;
+    }
+    function hasFenceClearance(x, z) {
+      if (typeof islandValidator !== "function") return true;
+      if (!isInsideFence(x, z)) return false;
+      const r = spawnFenceClearance;
+      const diag = r * 0.7071067811865476;
+      return (
+        islandValidator(x + r, z) &&
+        islandValidator(x - r, z) &&
+        islandValidator(x, z + r) &&
+        islandValidator(x, z - r) &&
+        islandValidator(x + diag, z + diag) &&
+        islandValidator(x + diag, z - diag) &&
+        islandValidator(x - diag, z + diag) &&
+        islandValidator(x - diag, z - diag)
+      );
     }
     function isBlockedByObstacle(x, z) {
       return obstacleBoxes.length > 0
@@ -1012,13 +1033,37 @@ function loadCharacters(
           z = p.z;
           attempts++;
         } while (
-          attempts < 160 &&
-          (!isInsideFence(x, z) || isBlockedByObstacle(x, z) || tooClose(x, z))
+          attempts < 220 &&
+          (!hasFenceClearance(x, z) ||
+            isBlockedByObstacle(x, z) ||
+            tooClose(x, z))
         );
-        if (!isInsideFence(x, z) || isBlockedByObstacle(x, z)) {
+        if (!hasFenceClearance(x, z) || isBlockedByObstacle(x, z)) {
           // 난수 시도 실패 시 bounds 중앙을 시작점으로 사용하고 경계 검증에 맡긴다.
           x = minX + spanX * 0.5;
           z = minZ + spanZ * 0.5;
+          if (!hasFenceClearance(x, z)) {
+            // 중앙도 불안정하면 가장 안쪽 후보를 짧게 재탐색해 스폰 안정성을 높인다.
+            let best = { x, z };
+            let bestScore = -Infinity;
+            for (let k = 0; k < 80; k++) {
+              const p = randomXZ();
+              if (!isInsideFence(p.x, p.z) || isBlockedByObstacle(p.x, p.z))
+                continue;
+              const score =
+                (islandValidator?.(p.x + spawnFenceClearance, p.z) ? 1 : 0) +
+                (islandValidator?.(p.x - spawnFenceClearance, p.z) ? 1 : 0) +
+                (islandValidator?.(p.x, p.z + spawnFenceClearance) ? 1 : 0) +
+                (islandValidator?.(p.x, p.z - spawnFenceClearance) ? 1 : 0);
+              if (score > bestScore) {
+                bestScore = score;
+                best = p;
+              }
+              if (score >= 4) break;
+            }
+            x = best.x;
+            z = best.z;
+          }
         }
         scatterPlaced.push({ x, z });
       } else {
@@ -1026,7 +1071,7 @@ function loadCharacters(
         z = pos.z ?? 0;
         x = THREE.MathUtils.clamp(x, minX, maxX);
         z = THREE.MathUtils.clamp(z, minZ, maxZ);
-        if (!isInsideFence(x, z) || isBlockedByObstacle(x, z)) {
+        if (!hasFenceClearance(x, z) || isBlockedByObstacle(x, z)) {
           x = minX + spanX * 0.5;
           z = minZ + spanZ * 0.5;
         }
