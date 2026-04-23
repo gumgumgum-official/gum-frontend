@@ -7,7 +7,7 @@ import { GgumddiVoteSection } from "./GgumddiVoteSection";
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const NOTICE_POSTER = NOTICE.posterImages;
 const THIRD_POSTER_SRC =
-  NOTICE.voteCandidateImages?.[2] ?? "/assets/poster/icecream_poster.png";
+  NOTICE.voteCandidateImages?.[2] ?? "/assets/poster/vote_3.png";
 
 const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
