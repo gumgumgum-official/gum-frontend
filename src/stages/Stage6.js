@@ -41,7 +41,7 @@ const CHAR_ROOT_NAMES = [
   "INT_Gum_Airplane",
   "INT_Gum_Lollipop",
 ];
-/** 각 캐릭터 클릭 시 말풍선에 표시할 텍스트 */
+/** 각 캐릭터 hover 시 말풍선에 표시할 텍스트 */
 const CHAR_SPEECH_MAP = {
   INT_Gum_Cry: "가지마..나랑 더 놀자...🥺",
   INT_Gum_Heart: "이거 내 진심인데 받아줄래?💕",
@@ -50,6 +50,7 @@ const CHAR_SPEECH_MAP = {
   INT_Gum_Lollipop: "같이..먹을래..?🍭",
 };
 const CHAR_BUBBLE_VISIBLE_SEC = 2.5;
+const CHAR_BUBBLE_OFFSET_Y = 0.92;
 const CHAR_ANIM_MAP = {
   INT_Gum_Cry: [],
   INT_Gum_Heart: ["Heart_Offer_Rig", "Heart_Offer_Prop"],
@@ -64,7 +65,7 @@ const CHAR_ANIM_MAP = {
 };
 const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
 const ATM_OBJECT_NAME = "OBJ_ATM";
-const ATM_INTERACTION_REQUIRED_COUNT = 2;
+const ATM_INTERACTION_REQUIRED_COUNT = 3;
 const ATM_EMISSIVE_DARK_STRENGTH = 0.06;
 const ATM_EMISSIVE_BRIGHT_STRENGTH = 1.25;
 const ATM_EMISSIVE_TWEEN_SPEED = 3.5;
@@ -72,6 +73,14 @@ const _down = new THREE.Vector3(0, -1, 0);
 const _floorRayOrigin = new THREE.Vector3();
 const _escWorld = new THREE.Vector3();
 const _toCam = new THREE.Vector3();
+
+/**
+ * @param {THREE.Object3D} obj
+ * @returns {obj is THREE.Mesh}
+ */
+function isMeshObject3D(obj) {
+  return "isMesh" in obj && obj.isMesh === true;
+}
 
 function normalizeAnimToken(name) {
   return String(name ?? "")
@@ -102,7 +111,7 @@ function collectMeshesDeep(root) {
   /** @type {THREE.Mesh[]} */
   const meshes = [];
   root.traverse((o) => {
-    if (o.isMesh) meshes.push(o);
+    if (isMeshObject3D(o)) meshes.push(o);
   });
   return meshes;
 }
@@ -120,6 +129,46 @@ function raycastFloorY(meshes, x, z, rc, rayStartY) {
   rc.set(_floorRayOrigin, _down);
   const hits = rc.intersectObjects(meshes, false);
   return hits.length > 0 ? hits[0].point.y : null;
+}
+
+/**
+ * Stage6 공항 씬에서 OBJ_/INT_ 서브트리 메쉬를 정적 충돌 AABB로 수집한다.
+ * @param {THREE.Object3D} root
+ * @returns {Array<{ minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number }>}
+ */
+function collectStage6StaticColliderBoxes(root) {
+  /** @type {Array<{ minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number }>} */
+  const out = [];
+  const tmp = new THREE.Box3();
+  root.updateMatrixWorld(true);
+  root.traverse((obj) => {
+    if (!isMeshObject3D(obj)) return;
+    /** @type {THREE.Object3D | null} */
+    let p = obj;
+    let underColliderRoot = false;
+    while (p) {
+      if (
+        typeof p.name === "string" &&
+        (p.name.startsWith("OBJ_") || p.name.startsWith("INT_"))
+      ) {
+        underColliderRoot = true;
+        break;
+      }
+      p = p.parent;
+    }
+    if (!underColliderRoot) return;
+    tmp.setFromObject(obj);
+    if (tmp.isEmpty()) return;
+    out.push({
+      minX: tmp.min.x,
+      maxX: tmp.max.x,
+      minZ: tmp.min.z,
+      maxZ: tmp.max.z,
+      minY: tmp.min.y,
+      maxY: tmp.max.y,
+    });
+  });
+  return out;
 }
 
 export function Stage6() {
@@ -150,6 +199,8 @@ export function Stage6() {
   let onInteractionLock = null;
   let onInteractionUnlock = null;
   const interactedTargets = new Set();
+  /** @type {string | null} */
+  let hoveredCharacterName = null;
   let isAtmActivated = false;
   /** @type {THREE.Object3D | null} */
   let atmRootRef = null;
@@ -200,6 +251,18 @@ export function Stage6() {
     "ArrowDown",
     "ArrowLeft",
     "ArrowRight",
+    "w",
+    "W",
+    "a",
+    "A",
+    "s",
+    "S",
+    "d",
+    "D",
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
   ]);
   /** @type {ReturnType<typeof createCharacterController> | null} */
   let character = null;
@@ -218,6 +281,9 @@ export function Stage6() {
   /** @type {string | null} 현재 말풍선이 표시 중인 캐릭터 이름 */
   let charBubbleActiveChar = null;
   let charBubbleRemaining = 0;
+  const _charBubbleBox = new THREE.Box3();
+  const _charBubbleSize = new THREE.Vector3();
+  const _charBubbleProjected = new THREE.Vector3();
 
   function dispatchAirportSubtitleTextByTime(currentSec) {
     const syncedSec = Math.max(0, currentSec + airportSubtitleLeadSec);
@@ -457,17 +523,36 @@ export function Stage6() {
 
   function createCharBubbleEl() {
     const el = document.createElement("div");
-    el.className = "speech-bubble-stage6";
+    el.className = "speech-bubble-stage2 speech-bubble-stage6-size";
     el.setAttribute("aria-hidden", "true");
     document.body.appendChild(el);
     return el;
   }
 
-  function showCharBubble(charName, clientX, clientY) {
+  function updateCharBubblePosition(charName) {
+    if (!charBubbleEl || !canvasRef || !cameraRef) return false;
+    const charRoot = charRoots[charName];
+    if (!charRoot) return false;
+    _charBubbleBox.setFromObject(charRoot);
+    if (_charBubbleBox.isEmpty()) return false;
+    _charBubbleBox.getCenter(_charBubbleProjected);
+    _charBubbleBox.getSize(_charBubbleSize);
+    _charBubbleProjected.y += _charBubbleSize.y * CHAR_BUBBLE_OFFSET_Y;
+    _charBubbleProjected.project(cameraRef);
+    const rect = canvasRef.getBoundingClientRect();
+    const rw = rect.width || 1;
+    const rh = rect.height || 1;
+    const x = rect.left + (_charBubbleProjected.x * 0.5 + 0.5) * rw;
+    const y = rect.top + (-_charBubbleProjected.y * 0.5 + 0.5) * rh;
+    charBubbleEl.style.left = `${x}px`;
+    charBubbleEl.style.top = `${y}px`;
+    return true;
+  }
+
+  function showCharBubble(charName) {
     const text = CHAR_SPEECH_MAP[charName];
     if (!text || !charBubbleEl) return;
-    charBubbleEl.style.left = `${clientX}px`;
-    charBubbleEl.style.top = `${clientY - 80}px`;
+    if (!updateCharBubblePosition(charName)) return;
     charBubbleEl.classList.remove("is-visible");
     charBubbleEl.textContent = text;
     requestAnimationFrame(() => {
@@ -484,14 +569,14 @@ export function Stage6() {
     charBubbleRemaining = 0;
   }
 
-  function playCharacter(charName, clientX, clientY) {
+  function playCharacter(charName) {
     const actions = charActions[charName];
     if (!actions?.length) {
-      showCharBubble(charName, clientX, clientY);
+      showCharBubble(charName);
       return;
     }
     for (const a of actions) a.reset().play();
-    showCharBubble(charName, clientX, clientY);
+    showCharBubble(charName);
   }
 
   function setupCharAnimations(sceneRoot, animations) {
@@ -797,11 +882,7 @@ export function Stage6() {
         const hit = getPointerHitTarget(event);
         if (!hit) return;
         const isCharacterHit = CHAR_ROOT_NAMES.includes(hit.intName);
-        // 씬 잠금 중에도 캐릭터 클릭 애니메이션은 허용.
         if (isSceneInteractionLocked && !isCharacterHit) return;
-        if (isCharacterHit) {
-          playCharacter(hit.intName, event.clientX, event.clientY);
-        }
         if (hit.target === "photobooth") {
           playPhotoboothCurtainSound();
         }
@@ -840,11 +921,23 @@ export function Stage6() {
       };
       canvas.addEventListener("pointerdown", onPointerDown, { capture: true });
       onPointerMove = (event) => {
-        if (isSceneInteractionLocked) {
+        const hit = getPointerHitTarget(event);
+        const isCharacterHit = !!hit && CHAR_ROOT_NAMES.includes(hit.intName);
+        // 씬 잠금 중에도 캐릭터 hover 애니메이션은 허용.
+        if (isSceneInteractionLocked && !isCharacterHit) {
           canvas.style.cursor = "default";
+          hoveredCharacterName = null;
           return;
         }
-        const hit = getPointerHitTarget(event);
+
+        if (isCharacterHit && hit) {
+          if (hoveredCharacterName !== hit.intName) {
+            playCharacter(hit.intName);
+            hoveredCharacterName = hit.intName;
+          }
+        } else {
+          hoveredCharacterName = null;
+        }
         canvas.style.cursor = hit ? "pointer" : "default";
       };
       canvas.addEventListener("pointermove", onPointerMove);
@@ -976,7 +1069,9 @@ export function Stage6() {
             }
           }
 
-          character?.setup(floorY, bounds, [], {
+          const staticColliderBoxes = collectStage6StaticColliderBoxes(model);
+          const characterController = /** @type {any} */ (character);
+          characterController?.setup(floorY, bounds, staticColliderBoxes, {
             worldSpawnXZ: { x: spawnX, z: spawnZ },
           });
 
@@ -1077,6 +1172,7 @@ export function Stage6() {
       if (charMixer) charMixer.update(delta);
 
       if (charBubbleActiveChar) {
+        updateCharBubblePosition(charBubbleActiveChar);
         charBubbleRemaining -= delta;
         if (charBubbleRemaining <= 0) {
           hideCharBubble();
@@ -1137,6 +1233,7 @@ export function Stage6() {
       onInteractionLock = null;
       onInteractionUnlock = null;
       interactedTargets.clear();
+      hoveredCharacterName = null;
       isAtmActivated = false;
       atmRootRef = null;
       atmEmissiveMaterials.length = 0;

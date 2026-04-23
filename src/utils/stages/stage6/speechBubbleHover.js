@@ -38,7 +38,7 @@ export function createSpeechBubbleHover({
   }
 
   speechBubbleEl = document.createElement("div");
-  speechBubbleEl.className = "speech-bubble-stage6";
+  speechBubbleEl.className = "speech-bubble-stage2 speech-bubble-stage6-size";
   speechBubbleEl.setAttribute("aria-hidden", "true");
   document.body.appendChild(speechBubbleEl);
 

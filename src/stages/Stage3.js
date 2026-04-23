@@ -49,6 +49,7 @@ import {
   postMonitorStart,
 } from "../lib/monitorCurrentApi.js";
 import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
+import { stopStage3IntroAudio } from "../utils/common/stage3IntroAudio.js";
 import {
   playRandomNoticePaperSound,
   disposeNoticePaperAudio,
@@ -130,6 +131,8 @@ const STREET_LIGHT_TRIGGER_RADIUS = 10;
 const STREET_LIGHT_TRIGGER_COOLDOWN_MS = 1500;
 const CLOCK_TRIGGER_RADIUS = 8;
 const CLOCK_TRIGGER_COOLDOWN_MS = 2000;
+const STAGE3_INT_CLICK_HINT_RADIUS = 15;
+const STAGE3_INT_CLICK_HINT_OFFSET_Y = 0.2;
 /*
  * 글자 위 hammer_only + "click" 말풍선 (현재 미사용 — 다시 쓸 때 주석 해제)
 const STAGE3_HAMMER_MODEL_PATH = "/models/stage3/hammer_only.glb";
@@ -157,6 +160,10 @@ const PORTAL_WHITEOUT_HOLD_MS = 500;
 const PORTAL_WHITEOUT_FADE_OUT_SEC = 1.45;
 /** App.jsx NoticeModalBoard onClose — 게시판 UI가 닫힌 뒤(Stage3 이스터에그 자막용) */
 const NOTICE_MODAL_USER_CLOSED_EVENT = "gum:noticeModalClosed";
+/** 포탈 통과 판정 반경 보정치(포탈 bbox 구체 반경 기반) */
+const PORTAL_PASS_TRIGGER_RADIUS_SCALE = 0.55;
+const PORTAL_PASS_TRIGGER_RADIUS_MIN = 1.2;
+const PORTAL_PASS_TRIGGER_RADIUS_MAX = 3.2;
 
 const REQUIRED_EGG_COUNT = 3;
 /** 🔨 ENTER 말풍선 표시 거리 — 상호작용보다 넓게 */
@@ -247,7 +254,14 @@ export function Stage3() {
   let iceCreamCartRef = null;
   /** 게시판 클릭 → 모달 (React NoticeModalBoard에 이벤트로 전달) */
   /** island2.glb 내 INT_gameMachine 루트 */
+  /** @type {THREE.Object3D | null} */
   let gameMachineRef = null;
+  /** island GLB 내 INT_Portal 루트 (클릭 + 통과 트리거 공용) */
+  /** @type {THREE.Object3D | null} */
+  let portalRef = null;
+  const portalPassTriggerSphere = new THREE.Sphere();
+  let hasPortalPassTriggerSphere = false;
+  let wasInsidePortalPassTrigger = false;
   let unlistenMinigameClose = null;
   /** @type {HTMLAudioElement | null} */
   let gameMachineClickAudio = null;
@@ -302,6 +316,9 @@ export function Stage3() {
   let smoothedCameraYawAssistDemand = 0;
   /** INT_StreetLight* 월드 좌표 (근접 사운드 트리거용) */
   const streetLightWorldPositions = [];
+  /** @type {{ sphere: THREE.Sphere, anchorWorld: THREE.Vector3, hintText: string, hintVariant: "default" | "well-side" }[]} */
+  /** INT_* 월드 바운딩 스피어 + 앵커 (근접 Click! 말풍선 표시용) */
+  const intProximityTargets = [];
   let wasNearStreetLight = false;
   let lastStreetLightSoundAtMs = 0;
   const clockWorldPositions = [];
@@ -320,6 +337,8 @@ export function Stage3() {
   let stampUiRoot = null;
   /** @type {HTMLDivElement | null} */
   let userWorryEnterBubbleEl = null;
+  /** @type {HTMLDivElement | null} */
+  let intClickHintBubbleEl = null;
   /*
   let letterHammerModel = null;
   let hammerModelLoadInProgress = false;
@@ -410,6 +429,8 @@ export function Stage3() {
   const _iceModelSize = new THREE.Vector3();
   const _camAssistBox = new THREE.Box3();
   const _camAssistSphere = new THREE.Sphere();
+  const _intHintWorld = new THREE.Vector3();
+  const _portalTriggerCenter = new THREE.Vector3();
   const _camProjView = new THREE.Matrix4();
   const _camFrustum = new THREE.Frustum();
 
@@ -711,6 +732,13 @@ export function Stage3() {
     userWorryEnterBubbleEl.setAttribute("aria-hidden", "true");
     document.body.appendChild(userWorryEnterBubbleEl);
 
+    intClickHintBubbleEl = document.createElement("div");
+    intClickHintBubbleEl.className =
+      "speech-bubble-stage2 speech-bubble-stage3-user speech-bubble-stage3-int-click";
+    intClickHintBubbleEl.textContent = "Click!";
+    intClickHintBubbleEl.setAttribute("aria-hidden", "true");
+    document.body.appendChild(intClickHintBubbleEl);
+
     /*
     hammerClickBubbleEl = document.createElement("div");
     hammerClickBubbleEl.className =
@@ -823,6 +851,8 @@ export function Stage3() {
     stampUiRoot = null;
     userWorryEnterBubbleEl?.remove();
     userWorryEnterBubbleEl = null;
+    intClickHintBubbleEl?.remove();
+    intClickHintBubbleEl = null;
     // hammerClickBubbleEl?.remove();
     // hammerClickBubbleEl = null;
     userWorryEnterBubblePhase = "off";
@@ -976,10 +1006,14 @@ export function Stage3() {
     intRaycastMeshes.length = 0;
     gumtoongjiRaycastMeshes.length = 0;
     cameraAssistTargets.length = 0;
+    intProximityTargets.length = 0;
     smoothedCameraYawAssist = 0;
     smoothedCameraYawAssistDemand = 0;
     iceCreamCartRef = null;
     gameMachineRef = null;
+    portalRef = null;
+    hasPortalPassTriggerSphere = false;
+    wasInsidePortalPassTrigger = false;
 
     // ANIM_Gumtoongji 캐릭터 애니메이션 설정
     if (gumtoongjiMixer) {
@@ -1045,7 +1079,7 @@ export function Stage3() {
     }
 
     const meshSet = new Set();
-    const assistRootSet = new Set();
+    const assistRootSet = /** @type {Set<THREE.Object3D>} */ (new Set());
     const rootNames = [];
     const nonIntCartCandidates = [];
     islandModel.traverse((obj) => {
@@ -1068,6 +1102,7 @@ export function Stage3() {
       }
       if (intTarget === "gameMachine") gameMachineRef = obj;
       if (intTarget === "icecream") iceCreamCartRef = obj;
+      if (intTarget === "portal") portalRef = obj;
       if (intTarget === "clock") {
         obj.updateMatrixWorld(true);
         const worldPos = new THREE.Vector3();
@@ -1096,12 +1131,53 @@ export function Stage3() {
     if (iceCreamCartRef) {
       assistRootSet.add(iceCreamCartRef);
     }
+    if (portalRef) {
+      portalRef.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(portalRef);
+      if (!_camAssistBox.isEmpty()) {
+        _camAssistBox.getBoundingSphere(portalPassTriggerSphere);
+        portalPassTriggerSphere.radius = THREE.MathUtils.clamp(
+          portalPassTriggerSphere.radius * PORTAL_PASS_TRIGGER_RADIUS_SCALE,
+          PORTAL_PASS_TRIGGER_RADIUS_MIN,
+          PORTAL_PASS_TRIGGER_RADIUS_MAX,
+        );
+        hasPortalPassTriggerSphere = true;
+      }
+    }
     for (const root of assistRootSet) {
       root.updateMatrixWorld(true);
       _camAssistBox.setFromObject(root);
       _camAssistBox.getBoundingSphere(_camAssistSphere);
       cameraAssistTargets.push({ sphere: _camAssistSphere.clone() });
     }
+
+    islandModel.traverse((obj) => {
+      if (typeof obj.name !== "string" || !obj.name.startsWith(INT_PREFIX)) {
+        return;
+      }
+      const suffix = obj.name.slice(INT_PREFIX.length);
+      const intTarget = intSuffixToTarget(suffix);
+      obj.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(obj);
+      if (_camAssistBox.isEmpty()) return;
+      _camAssistBox.getBoundingSphere(_camAssistSphere);
+      const isWell = intTarget === "well";
+      const anchorWorld = new THREE.Vector3(
+        isWell
+          ? _camAssistBox.max.x + 0.5
+          : (_camAssistBox.min.x + _camAssistBox.max.x) * 0.5,
+        isWell
+          ? (_camAssistBox.min.y + _camAssistBox.max.y) * 0.5 + 0.25
+          : _camAssistBox.max.y + STAGE3_INT_CLICK_HINT_OFFSET_Y,
+        (_camAssistBox.min.z + _camAssistBox.max.z) * 0.5,
+      );
+      intProximityTargets.push({
+        sphere: _camAssistSphere.clone(),
+        anchorWorld,
+        hintText: intTarget === "portal" ? "통과!" : "Click!",
+        hintVariant: isWell ? "well-side" : "default",
+      });
+    });
 
     intRaycastMeshes.push(...meshSet);
 
@@ -1192,6 +1268,34 @@ export function Stage3() {
 
   function handlePointerLeave() {
     if (canvasRef) canvasRef.style.cursor = "default";
+  }
+
+  function isPortalOpenForStageTransition() {
+    return easterEggCount >= REQUIRED_EGG_COUNT && textDestroyed;
+  }
+
+  function handlePortalBlockedFeedback() {
+    if (easterEggCount >= REQUIRED_EGG_COUNT && !textDestroyed) {
+      dispatchSubtitleLine(
+        "아직 걱정이 남아있어요. 우리 걱정을 부셔볼까요? 💥 ",
+      );
+      return;
+    }
+    if (easterEggCount < REQUIRED_EGG_COUNT) {
+      dispatchSubtitleLine(
+        "아직 열리지 않은 것 같아요. 섬을 더 둘러볼까요? 🗺",
+      );
+    }
+  }
+
+  function tryEnterPortalToStage6() {
+    if (portalTransitionInProgress) return;
+    if (isPortalOpenForStageTransition()) {
+      const targetStage = config.portal_bright?.targetStage ?? 6;
+      startPortalTransitionToStage6(targetStage);
+      return;
+    }
+    handlePortalBlockedFeedback();
   }
 
   function applyMonitorIdleState() {
@@ -1421,24 +1525,7 @@ export function Stage3() {
     }
 
     if (target === "portal") {
-      if (portalTransitionInProgress) return;
-      if (easterEggCount >= REQUIRED_EGG_COUNT && textDestroyed) {
-        const targetStage = config.portal_bright?.targetStage ?? 6;
-        startPortalTransitionToStage6(targetStage);
-        return;
-      }
-      if (easterEggCount >= REQUIRED_EGG_COUNT && !textDestroyed) {
-        dispatchSubtitleLine(
-          "아직 걱정이 남아있어요. 우리 걱정을 부셔볼까요? 💥 ",
-        );
-        return;
-      }
-      if (easterEggCount < REQUIRED_EGG_COUNT) {
-        dispatchSubtitleLine(
-          "아직 열리지 않은 것 같아요. 섬을 더 둘러볼까요? 🗺",
-        );
-        return;
-      }
+      tryEnterPortalToStage6();
       return;
     }
 
@@ -1560,6 +1647,47 @@ export function Stage3() {
       lastClockSoundAtMs = now;
     }
     wasNearClock = true;
+  }
+
+  function updateIntClickHintBubble() {
+    if (!intClickHintBubbleEl || !cameraRef || !canvasRef) return;
+    const charPos = character?.getPosition?.();
+    if (!charPos || intProximityTargets.length === 0) {
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
+    const radiusSq =
+      STAGE3_INT_CLICK_HINT_RADIUS * STAGE3_INT_CLICK_HINT_RADIUS;
+    let nearest = null;
+    let nearestDistSq = Infinity;
+    for (let i = 0; i < intProximityTargets.length; i++) {
+      const target = intProximityTargets[i];
+      const sphere = target.sphere;
+      const dx = sphere.center.x - charPos.x;
+      const dz = sphere.center.z - charPos.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq > radiusSq || distSq >= nearestDistSq) continue;
+      nearest = target;
+      nearestDistSq = distSq;
+    }
+    if (!nearest) {
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
+    _intHintWorld.copy(nearest.anchorWorld);
+    cameraRef.updateMatrixWorld(true);
+    _intHintWorld.project(cameraRef);
+    const rect = canvasRef.getBoundingClientRect();
+    const x = (_intHintWorld.x * 0.5 + 0.5) * rect.width + rect.left;
+    const y = (-_intHintWorld.y * 0.5 + 0.5) * rect.height + rect.top;
+    intClickHintBubbleEl.textContent = nearest.hintText;
+    intClickHintBubbleEl.classList.toggle(
+      "speech-bubble-stage3-int-click--well-side",
+      nearest.hintVariant === "well-side",
+    );
+    intClickHintBubbleEl.style.left = `${x}px`;
+    intClickHintBubbleEl.style.top = `${y}px`;
+    intClickHintBubbleEl.classList.add("is-visible");
   }
 
   let _iceCreamGroundMat = null;
@@ -3224,6 +3352,25 @@ export function Stage3() {
                 backgroundBounds,
               )
             : [];
+          /** @type {import("three").Mesh[]} */
+          const brickWalkableMeshes = [];
+          model.traverse((obj) => {
+            if (!(obj instanceof THREE.Mesh)) return;
+            let p = /** @type {THREE.Object3D | null} */ (obj);
+            let isBrick = false;
+            while (p) {
+              const n = typeof p.name === "string" ? p.name.trim() : "";
+              if (n.toUpperCase().startsWith("DECO_BRICK")) {
+                isBrick = true;
+                break;
+              }
+              p = p.parent;
+            }
+            if (!isBrick) return;
+            // 배경 로더에서 비-INT 메시에 raycast를 비활성화하므로, 벽돌 표면 샘플용으로만 복원.
+            obj.raycast = THREE.Mesh.prototype.raycast;
+            brickWalkableMeshes.push(obj);
+          });
           // 런타임에 letter AABB를 push/splice할 수 있도록 상위 스코프에 참조 보관
           stage3CollidersRef = islandStaticColliders;
           if (import.meta.env.DEV) {
@@ -3233,6 +3380,7 @@ export function Stage3() {
             backgroundMaxY,
             backgroundBounds,
             islandStaticColliders,
+            { walkableMeshes: brickWalkableMeshes },
           );
 
           // 섬 GLB는 backgroundLoader에서 이미 `scene.add(model)`로 들어와 있기 때문에,
@@ -3266,6 +3414,7 @@ export function Stage3() {
               backgroundMaxY,
               isCancelled: () => !isStage3Active || gumCancelled,
               staticColliderBoxes: islandStaticColliders,
+              walkableMeshes: brickWalkableMeshes,
             })
             .catch((e) => {
               if (import.meta.env.DEV) {
@@ -3323,6 +3472,7 @@ export function Stage3() {
       }
       updateStreetLightProximitySound();
       updateClockProximitySound();
+      updateIntClickHintBubble();
       if (gumFollowers) {
         gumFollowers.update(delta);
       }
@@ -3394,6 +3544,24 @@ export function Stage3() {
         */
 
         const charPos = character?.getPosition?.();
+        if (
+          charPos &&
+          hasPortalPassTriggerSphere &&
+          !portalTransitionInProgress
+        ) {
+          _portalTriggerCenter.copy(portalPassTriggerSphere.center);
+          const dx = charPos.x - _portalTriggerCenter.x;
+          const dz = charPos.z - _portalTriggerCenter.z;
+          const portalRadius = portalPassTriggerSphere.radius;
+          const insidePortalPassTrigger =
+            dx * dx + dz * dz <= portalRadius * portalRadius;
+          if (!wasInsidePortalPassTrigger && insidePortalPassTrigger) {
+            tryEnterPortalToStage6();
+          }
+          wasInsidePortalPassTrigger = insidePortalPassTrigger;
+        } else {
+          wasInsidePortalPassTrigger = false;
+        }
         const nearLetter =
           Boolean(
             letterState?.landed &&
@@ -3438,6 +3606,9 @@ export function Stage3() {
           } else {
             userWorryEnterBubblePhase = "off";
             userWorryEnterBubbleT = 0;
+            // Kiosk 라우팅 전환처럼 StageManager switch를 거치지 않는 경우에도
+            // Stage3 인트로/배경 루프가 남지 않도록 직접 정리한다.
+            stopStage3IntroAudio();
             userWorryEnterBubbleEl.classList.remove("is-visible");
           }
         }
@@ -3468,6 +3639,7 @@ export function Stage3() {
       smoothedCameraYawAssist = 0;
       smoothedCameraYawAssistDemand = 0;
       cameraAssistTargets.length = 0;
+      intProximityTargets.length = 0;
       keyboard.unmount();
       window.removeEventListener("keydown", handleStageKeyDown, {
         capture: true,
@@ -3514,6 +3686,9 @@ export function Stage3() {
         unlistenMinigameClose = null;
       }
       gameMachineRef = null;
+      portalRef = null;
+      hasPortalPassTriggerSphere = false;
+      wasInsidePortalPassTrigger = false;
       disposeNoticePaperAudio();
       disposeStreetLightSound();
       disposePortalTransitionSound();
