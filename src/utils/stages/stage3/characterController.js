@@ -36,6 +36,10 @@ function findClip(clips, regex) {
  *     backgroundMaxY: number,
  *     backgroundBounds: import("three").Box3,
  *     staticColliderBoxes?: import("./islandStaticColliders.js").IslandColliderAabb[],
+ *     setupOptions?: {
+ *       worldSpawnXZ?: { x: number, z: number },
+ *       walkableMeshes?: import("three").Mesh[],
+ *     },
  *   ) => void,
  *   update: (
  *     delta: number,
