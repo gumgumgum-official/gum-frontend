@@ -877,7 +877,7 @@ function buildStage2CharacterObstacleBoxes(roots, backgroundBounds) {
   const tmp = new THREE.Box3();
   roots.forEach((root) =>
     root.traverse((obj) => {
-      if (!obj?.isMesh) return;
+      if (!(obj instanceof THREE.Mesh)) return;
       const lower = String(obj.name ?? "").toLowerCase();
       if (skipWords.some((w) => lower.includes(w))) return;
       tmp.setFromObject(obj);
