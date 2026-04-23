@@ -54,7 +54,7 @@ export const STAGE6_CONFIG = {
       STAGE6_USER_GROUND_OFFSET_MIN,
     ),
     moveSpeed: STAGE6_MOVE_SPEED,
-    spawnOffset: { x: 0, z: 0 },
+    spawnOffset: { x: -3, z: -0.4 },
     escalatorFrontDistance: 1.15,
   },
 };

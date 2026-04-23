@@ -122,6 +122,45 @@ function raycastFloorY(meshes, x, z, rc, rayStartY) {
   return hits.length > 0 ? hits[0].point.y : null;
 }
 
+/**
+ * Stage6 공항 씬에서 OBJ_/INT_ 서브트리 메쉬를 정적 충돌 AABB로 수집한다.
+ * @param {THREE.Object3D} root
+ * @returns {Array<{ minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number }>}
+ */
+function collectStage6StaticColliderBoxes(root) {
+  /** @type {Array<{ minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number }>} */
+  const out = [];
+  const tmp = new THREE.Box3();
+  root.updateMatrixWorld(true);
+  root.traverse((obj) => {
+    if (!obj?.isMesh) return;
+    let p = obj;
+    let underColliderRoot = false;
+    while (p) {
+      if (
+        typeof p.name === "string" &&
+        (p.name.startsWith("OBJ_") || p.name.startsWith("INT_"))
+      ) {
+        underColliderRoot = true;
+        break;
+      }
+      p = p.parent;
+    }
+    if (!underColliderRoot) return;
+    tmp.setFromObject(obj);
+    if (tmp.isEmpty()) return;
+    out.push({
+      minX: tmp.min.x,
+      maxX: tmp.max.x,
+      minZ: tmp.min.z,
+      maxZ: tmp.max.z,
+      minY: tmp.min.y,
+      maxY: tmp.max.y,
+    });
+  });
+  return out;
+}
+
 export function Stage6() {
   const objects = [];
   /** @type {import("../types.js").Stage6Config} */
@@ -200,6 +239,18 @@ export function Stage6() {
     "ArrowDown",
     "ArrowLeft",
     "ArrowRight",
+    "w",
+    "W",
+    "a",
+    "A",
+    "s",
+    "S",
+    "d",
+    "D",
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
   ]);
   /** @type {ReturnType<typeof createCharacterController> | null} */
   let character = null;
@@ -976,7 +1027,8 @@ export function Stage6() {
             }
           }
 
-          character?.setup(floorY, bounds, [], {
+          const staticColliderBoxes = collectStage6StaticColliderBoxes(model);
+          character?.setup(floorY, bounds, staticColliderBoxes, {
             worldSpawnXZ: { x: spawnX, z: spawnZ },
           });
 
