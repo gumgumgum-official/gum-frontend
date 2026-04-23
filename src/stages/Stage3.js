@@ -3263,6 +3263,25 @@ export function Stage3() {
                 backgroundBounds,
               )
             : [];
+          /** @type {import("three").Mesh[]} */
+          const brickWalkableMeshes = [];
+          model.traverse((obj) => {
+            if (!obj?.isMesh) return;
+            let p = obj;
+            let isBrick = false;
+            while (p) {
+              const n = typeof p.name === "string" ? p.name.trim() : "";
+              if (n.toUpperCase().startsWith("DECO_BRICK")) {
+                isBrick = true;
+                break;
+              }
+              p = p.parent;
+            }
+            if (!isBrick) return;
+            // 배경 로더에서 비-INT 메시에 raycast를 비활성화하므로, 벽돌 표면 샘플용으로만 복원.
+            obj.raycast = THREE.Mesh.prototype.raycast;
+            brickWalkableMeshes.push(obj);
+          });
           // 런타임에 letter AABB를 push/splice할 수 있도록 상위 스코프에 참조 보관
           stage3CollidersRef = islandStaticColliders;
           if (import.meta.env.DEV) {
@@ -3272,6 +3291,7 @@ export function Stage3() {
             backgroundMaxY,
             backgroundBounds,
             islandStaticColliders,
+            { walkableMeshes: brickWalkableMeshes },
           );
 
           // 섬 GLB는 backgroundLoader에서 이미 `scene.add(model)`로 들어와 있기 때문에,
@@ -3305,6 +3325,7 @@ export function Stage3() {
               backgroundMaxY,
               isCancelled: () => !isStage3Active || gumCancelled,
               staticColliderBoxes: islandStaticColliders,
+              walkableMeshes: brickWalkableMeshes,
             })
             .catch((e) => {
               if (import.meta.env.DEV) {

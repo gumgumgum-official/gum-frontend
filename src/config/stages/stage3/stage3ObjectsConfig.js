@@ -67,6 +67,7 @@ export const STAGE3_OBJECTS_CONFIG = {
     posterImages: {
       party: "/assets/poster/festival_poster.png",
       bestGum: "/assets/poster/vote_poster.png",
+      icecream: "/assets/poster/vote_3.png",
     },
     /** `GgumddiVoteSection` 후보 카드 이미지 (순서 = 1·2·3번) */
     voteCandidateImages: [

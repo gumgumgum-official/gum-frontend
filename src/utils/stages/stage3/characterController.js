@@ -73,6 +73,12 @@ export function createCharacterController({
   let isWalking = false;
   let isMoving = false;
   let backgroundBounds = null;
+  let baseGroundY = 0;
+  let characterGroundLift = 0;
+  let resolvedGroundY = 0;
+  let groundMissFrames = 0;
+  /** @type {import("three").Mesh[]} */
+  let walkableGroundMeshes = [];
   /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
   let staticColliderBoxes = [];
   let collisionRadius = 0.55;
@@ -95,6 +101,12 @@ export function createCharacterController({
   const _targetPosition = new THREE.Vector3();
   const _lookAtPosition = new THREE.Vector3();
   const _worldUp = new THREE.Vector3(0, 1, 0);
+  const _groundRaycaster = new THREE.Raycaster();
+  const _groundRayOrigin = new THREE.Vector3();
+  const _groundDown = new THREE.Vector3(0, -1, 0);
+  const _groundHits = [];
+  const GROUND_MISS_TOLERANCE_FRAMES = 5;
+  const GROUND_HEIGHT_EASE_SPEED = 16;
 
   function getWalkSoundVolume() {
     const v = config.character?.walkSoundVolume;
@@ -149,9 +161,15 @@ export function createCharacterController({
 
   return {
     setup(backgroundMaxY, bounds, colliderBoxes = [], setupOptions = {}) {
-      const { worldSpawnXZ } = setupOptions;
+      const { worldSpawnXZ, walkableMeshes } = setupOptions;
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
+      walkableGroundMeshes = Array.isArray(walkableMeshes)
+        ? walkableMeshes
+        : [];
+      baseGroundY = backgroundMaxY;
+      resolvedGroundY = backgroundMaxY;
+      groundMissFrames = 0;
 
       const { boundsPadding } = config.character;
       _minCx = Math.min(
@@ -206,10 +224,9 @@ export function createCharacterController({
 
           const characterMinY = new THREE.Box3().setFromObject(characterModel)
             .min.y;
-          characterYPosition =
-            backgroundMaxY -
-            characterMinY +
-            (config.character?.groundOffset ?? 0);
+          characterGroundLift =
+            -characterMinY + (config.character?.groundOffset ?? 0);
+          characterYPosition = baseGroundY + characterGroundLift;
 
           let spawnX = 0,
             spawnZ = 0;
@@ -347,6 +364,33 @@ export function createCharacterController({
     update(delta, camera, options = {}) {
       if (!characterModel || !backgroundBounds) return;
 
+      const sampleGroundY = (x, z) => {
+        if (!walkableGroundMeshes.length) return baseGroundY;
+        _groundRayOrigin.set(x, baseGroundY + 30, z);
+        _groundRaycaster.set(_groundRayOrigin, _groundDown);
+        _groundHits.length = 0;
+        _groundRaycaster.intersectObjects(
+          walkableGroundMeshes,
+          false,
+          _groundHits,
+        );
+        return _groundHits.length > 0 ? _groundHits[0].point.y : null;
+      };
+
+      const resolveGroundY = (x, z) => {
+        const sampledGroundY = sampleGroundY(x, z);
+        if (sampledGroundY != null) {
+          groundMissFrames = 0;
+          resolvedGroundY = sampledGroundY;
+          return resolvedGroundY;
+        }
+        groundMissFrames += 1;
+        if (groundMissFrames >= GROUND_MISS_TOLERANCE_FRAMES) {
+          resolvedGroundY = baseGroundY;
+        }
+        return resolvedGroundY;
+      };
+
       if (isPunchPlaying) {
         if (punchMixer) punchMixer.update(delta);
         syncWalkSound(false);
@@ -381,10 +425,29 @@ export function createCharacterController({
           collisionRadius,
           staticColliderBoxes,
         );
+        const nextGroundY = resolveGroundY(slid.x, slid.z);
+        const targetY = nextGroundY + characterGroundLift;
+        const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
+        characterYPosition = THREE.MathUtils.lerp(
+          characterYPosition,
+          targetY,
+          easeAlpha,
+        );
         characterModel.position.set(slid.x, characterYPosition, slid.z);
         moved =
           Math.abs(slid.x - oldX) > 1e-6 || Math.abs(slid.z - oldZ) > 1e-6;
         characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
+      } else {
+        const p = characterModel.position;
+        const nextGroundY = resolveGroundY(p.x, p.z);
+        const targetY = nextGroundY + characterGroundLift;
+        const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
+        characterYPosition = THREE.MathUtils.lerp(
+          characterYPosition,
+          targetY,
+          easeAlpha,
+        );
+        characterModel.position.y = characterYPosition;
       }
 
       isMoving = moved;
@@ -451,6 +514,9 @@ export function createCharacterController({
       idleCharacterAction = null;
       isWalking = false;
       backgroundBounds = null;
+      walkableGroundMeshes = [];
+      resolvedGroundY = 0;
+      groundMissFrames = 0;
       staticColliderBoxes = [];
     },
 

@@ -81,8 +81,6 @@ export function createGumFollowersController({
   let followerYPosition = 0;
   /** setFromObject AABB 실패 시 루트 Y + 이 값(로드 시 box.max.y 기준) */
   let followerBubbleFallbackHeadY = 1.1;
-  // user.y 변화에 대응하기 위한 상대 오프셋 (첫 업데이트에서 확정)
-  let followerYOffsetFromUserY = null;
   let isReady = false;
 
   // 매 프레임 재사용 (GC 방지)
@@ -92,11 +90,21 @@ export function createGumFollowersController({
   const _look = new THREE.Vector3();
   const _bubbleBox = new THREE.Box3();
   const _bubbleSize = new THREE.Vector3();
+  const _groundRaycaster = new THREE.Raycaster();
+  const _groundRayOrigin = new THREE.Vector3();
+  const _groundDown = new THREE.Vector3(0, -1, 0);
+  const _groundHits = [];
+  const GROUND_MISS_TOLERANCE_FRAMES = 5;
+  const GROUND_HEIGHT_EASE_SPEED = 16;
 
   let isMovingPrev = false;
   let elapsedSec = 0;
   let breakOffUntil = 0;
   let prevUserYaw = null;
+  let baseGroundY = 0;
+  let followerGroundLift = 0;
+  /** @type {import("three").Mesh[]} */
+  let walkableGroundMeshes = [];
   /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
   let staticColliderBoxes = [];
 
@@ -121,18 +129,22 @@ export function createGumFollowersController({
    *   backgroundMaxY?: number,
    *   isCancelled?: () => boolean,
    *   staticColliderBoxes?: import("./islandStaticColliders.js").IslandColliderAabb[],
+   *   walkableMeshes?: import("three").Mesh[],
    * }} [opts]
    */
   async function init({
     backgroundMaxY,
     isCancelled,
     staticColliderBoxes: colliderBoxes = [],
+    walkableMeshes = [],
   } = {}) {
     if (isReady) return;
     if (backgroundMaxY == null) {
       throw new Error("[GumFollowers] init requires backgroundMaxY");
     }
     staticColliderBoxes = Array.isArray(colliderBoxes) ? colliderBoxes : [];
+    walkableGroundMeshes = Array.isArray(walkableMeshes) ? walkableMeshes : [];
+    baseGroundY = backgroundMaxY;
 
     const fullPath = resolvePublicAssetUrl(modelPath);
     const idleFullPath = resolvePublicAssetUrl(idleModelPath);
@@ -153,6 +165,7 @@ export function createGumFollowersController({
     // y position 보정: 모델 바운딩(minY) 기준
     const box = new THREE.Box3().setFromObject(baseModel);
     const minY = box.min.y;
+    followerGroundLift = -minY + groundOffset;
     followerYPosition = backgroundMaxY - minY + groundOffset;
     followerBubbleFallbackHeadY = Math.max(0.25, box.max.y + 0.08);
 
@@ -232,6 +245,8 @@ export function createGumFollowersController({
         idleAction,
         offsetYaw: null,
         breakDriftScalar: side * breakOffDriftAmplitude,
+        resolvedGroundY: backgroundMaxY,
+        groundMissFrames: 0,
       });
 
       scene.add(model);
@@ -280,6 +295,7 @@ export function createGumFollowersController({
       if (!isReady) return;
 
       elapsedSec += delta;
+      const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
 
       const userState = getUserState();
       const userPos = userState.position;
@@ -299,11 +315,18 @@ export function createGumFollowersController({
         prevUserYaw = userYaw;
       }
 
-      if (followerYOffsetFromUserY == null) {
-        // "현재 user y가 곧 바닥 기준에 서 있다는 가정" 하에,
-        // follower가 계산된 ground 맞춤 y(followerYPosition)를 user 기준으로 환산
-        followerYOffsetFromUserY = followerYPosition - userPos.y;
-      }
+      const sampleGroundY = (x, z) => {
+        if (!walkableGroundMeshes.length) return null;
+        _groundRayOrigin.set(x, baseGroundY + 30, z);
+        _groundRaycaster.set(_groundRayOrigin, _groundDown);
+        _groundHits.length = 0;
+        _groundRaycaster.intersectObjects(
+          walkableGroundMeshes,
+          false,
+          _groundHits,
+        );
+        return _groundHits.length > 0 ? _groundHits[0].point.y : null;
+      };
 
       // 이동 상태가 바뀔 때만 walk/idle 토글을 수행한다.
       if (isMovingPrev !== moving) {
@@ -326,7 +349,6 @@ export function createGumFollowersController({
       }
 
       _userPos.copy(userPos);
-      const tY = Math.min(1, followLerpFactor * delta);
 
       followers.forEach((f) => {
         const breaking = breakOffEnabled && elapsedSec < breakOffUntil;
@@ -349,15 +371,6 @@ export function createGumFollowersController({
           _target.x += perpX * f.breakDriftScalar;
           _target.z += perpZ * f.breakDriftScalar;
         }
-
-        // y는 유저 y 변화에 상대 오프셋을 더해 자연스럽게 lerp
-        const userY = userPos.y ?? 0;
-        const targetY = userY + followerYOffsetFromUserY;
-        f.model.position.y = THREE.MathUtils.lerp(
-          f.model.position.y,
-          targetY,
-          tY,
-        );
 
         // xz만 자연스럽게 따라오게 처리 (GC 방지: Vector3 생성 최소화)
         const dynFollow = breaking
@@ -391,6 +404,25 @@ export function createGumFollowersController({
           f.model.position.x = slid.x;
           f.model.position.z = slid.z;
         }
+        const sampledGroundY = sampleGroundY(
+          f.model.position.x,
+          f.model.position.z,
+        );
+        if (sampledGroundY != null) {
+          f.groundMissFrames = 0;
+          f.resolvedGroundY = sampledGroundY;
+        } else {
+          f.groundMissFrames += 1;
+          if (f.groundMissFrames >= GROUND_MISS_TOLERANCE_FRAMES) {
+            f.resolvedGroundY = baseGroundY;
+          }
+        }
+        const targetY = f.resolvedGroundY + followerGroundLift;
+        f.model.position.y = THREE.MathUtils.lerp(
+          f.model.position.y,
+          targetY,
+          easeAlpha,
+        );
         if (!moving && f.idleModel) {
           f.idleModel.position.copy(f.model.position);
         }
@@ -423,13 +455,15 @@ export function createGumFollowersController({
         if (f.idleMixer) f.idleMixer.stopAllAction();
       });
       followers.length = 0;
-      followerYOffsetFromUserY = null;
       followerBubbleFallbackHeadY = 1.1;
       isReady = false;
       isMovingPrev = false;
       elapsedSec = 0;
       breakOffUntil = 0;
       prevUserYaw = null;
+      baseGroundY = 0;
+      followerGroundLift = 0;
+      walkableGroundMeshes = [];
       staticColliderBoxes = [];
     },
 
