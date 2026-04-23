@@ -381,7 +381,7 @@ export function Stage6() {
       airplaneCallSignTimeoutId = window.setTimeout(() => {
         airplaneCallSignTimeoutId = 0;
         onStarted?.();
-      }, 10000);
+      }, 1000);
     };
     airplaneCallSignAudio.ontimeupdate = null;
     airplaneCallSignAudio.onended = () => {
