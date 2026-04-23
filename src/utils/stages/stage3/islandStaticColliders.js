@@ -8,6 +8,9 @@ import * as THREE from "three";
 
 const PREFIXES_UPPER = ["INT_", "OBJ_"];
 const EXTRA_COLLIDER_PREFIXES_UPPER = ["DECO_FT_ROCK"];
+const WELL_NODE_RE = /^INT_Well$/i;
+
+/** @typedef {{ centerX: number, centerZ: number, radius: number }} WellPassZone */
 
 /**
  * @param {string} name
@@ -52,6 +55,58 @@ function isUnderPortalRoot(mesh) {
 }
 
 /**
+ * 우물 주변의 "울타리 없는 안쪽" 진입을 허용하기 위한 통과 존 생성.
+ * @param {import("three").Object3D} islandRoot
+ * @returns {WellPassZone[]}
+ */
+function collectWellPassZones(islandRoot) {
+  /** @type {WellPassZone[]} */
+  const zones = [];
+  const box = new THREE.Box3();
+  islandRoot.traverse((obj) => {
+    const n = typeof obj.name === "string" ? obj.name.trim() : "";
+    if (!WELL_NODE_RE.test(n)) return;
+    obj.updateMatrixWorld(true);
+    box.setFromObject(obj);
+    if (box.isEmpty()) return;
+    const w = Math.max(0, box.max.x - box.min.x);
+    const d = Math.max(0, box.max.z - box.min.z);
+    const halfMax = Math.max(w, d) * 0.5;
+    zones.push({
+      centerX: (box.min.x + box.max.x) * 0.5,
+      centerZ: (box.min.z + box.max.z) * 0.5,
+      // 우물 bbox 기반 반경 + 소폭 여유를 둬 내부 진입만 확실히 허용
+      radius: Math.max(2.2, halfMax + 0.9),
+    });
+  });
+  return zones;
+}
+
+/**
+ * @param {IslandColliderAabb} box
+ * @param {WellPassZone[]} zones
+ * @returns {boolean}
+ */
+function overlapsWellPassZone(box, zones) {
+  if (!zones.length) return false;
+  for (let i = 0; i < zones.length; i++) {
+    const z = zones[i];
+    const innerRadius = z.radius * 0.62;
+    const px = Math.max(box.minX, Math.min(z.centerX, box.maxX));
+    const pz = Math.max(box.minZ, Math.min(z.centerZ, box.maxZ));
+    const dx = z.centerX - px;
+    const dz = z.centerZ - pz;
+    if (dx * dx + dz * dz > innerRadius * innerRadius) continue;
+
+    const h = box.maxY - box.minY;
+    // 울타리(세로 구조물)는 유지하고, 내부 진입을 막는 낮은/평평한 박스만 제거.
+    if (h > 2.2) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
  * island 루트 기준 월드 AABB 목록 (메시 단위, 얇은 조각은 그대로 포함)
  * @param {import("three").Object3D} islandRoot
  * @returns {IslandColliderAabb[]}
@@ -61,6 +116,7 @@ export function collectIslandStaticColliderBoxes(islandRoot) {
   const out = [];
   const tmp = new THREE.Box3();
   islandRoot.updateMatrixWorld(true);
+  const wellPassZones = collectWellPassZones(islandRoot);
 
   islandRoot.traverse((obj) => {
     if (!obj.isMesh) return;
@@ -70,14 +126,16 @@ export function collectIslandStaticColliderBoxes(islandRoot) {
     tmp.setFromObject(obj);
     if (tmp.isEmpty()) return;
 
-    out.push({
+    const candidate = {
       minX: tmp.min.x,
       maxX: tmp.max.x,
       minZ: tmp.min.z,
       maxZ: tmp.max.z,
       minY: tmp.min.y,
       maxY: tmp.max.y,
-    });
+    };
+    if (overlapsWellPassZone(candidate, wellPassZones)) return;
+    out.push(candidate);
   });
 
   return out;

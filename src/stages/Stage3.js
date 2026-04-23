@@ -316,7 +316,7 @@ export function Stage3() {
   let smoothedCameraYawAssistDemand = 0;
   /** INT_StreetLight* 월드 좌표 (근접 사운드 트리거용) */
   const streetLightWorldPositions = [];
-  /** @type {{ sphere: THREE.Sphere, anchorWorld: THREE.Vector3, hintText: string }[]} */
+  /** @type {{ sphere: THREE.Sphere, anchorWorld: THREE.Vector3, hintText: string, hintVariant: "default" | "well-side" }[]} */
   /** INT_* 월드 바운딩 스피어 + 앵커 (근접 Click! 말풍선 표시용) */
   const intProximityTargets = [];
   let wasNearStreetLight = false;
@@ -1161,15 +1161,21 @@ export function Stage3() {
       _camAssistBox.setFromObject(obj);
       if (_camAssistBox.isEmpty()) return;
       _camAssistBox.getBoundingSphere(_camAssistSphere);
+      const isWell = intTarget === "well";
       const anchorWorld = new THREE.Vector3(
-        (_camAssistBox.min.x + _camAssistBox.max.x) * 0.5,
-        _camAssistBox.max.y + STAGE3_INT_CLICK_HINT_OFFSET_Y,
+        isWell
+          ? _camAssistBox.max.x + 0.5
+          : (_camAssistBox.min.x + _camAssistBox.max.x) * 0.5,
+        isWell
+          ? (_camAssistBox.min.y + _camAssistBox.max.y) * 0.5 + 0.25
+          : _camAssistBox.max.y + STAGE3_INT_CLICK_HINT_OFFSET_Y,
         (_camAssistBox.min.z + _camAssistBox.max.z) * 0.5,
       );
       intProximityTargets.push({
         sphere: _camAssistSphere.clone(),
         anchorWorld,
         hintText: intTarget === "portal" ? "통과!" : "Click!",
+        hintVariant: isWell ? "well-side" : "default",
       });
     });
 
@@ -1675,6 +1681,10 @@ export function Stage3() {
     const x = (_intHintWorld.x * 0.5 + 0.5) * rect.width + rect.left;
     const y = (-_intHintWorld.y * 0.5 + 0.5) * rect.height + rect.top;
     intClickHintBubbleEl.textContent = nearest.hintText;
+    intClickHintBubbleEl.classList.toggle(
+      "speech-bubble-stage3-int-click--well-side",
+      nearest.hintVariant === "well-side",
+    );
     intClickHintBubbleEl.style.left = `${x}px`;
     intClickHintBubbleEl.style.top = `${y}px`;
     intClickHintBubbleEl.classList.add("is-visible");

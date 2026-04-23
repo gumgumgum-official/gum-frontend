@@ -183,6 +183,22 @@ body {
   border-top-color: #fff7bf;
 }
 
+/* Stage3 우물 힌트 말풍선: 오브제 옆에 붙고 꼬리는 좌측에서 나옴 */
+.speech-bubble-stage2.speech-bubble-stage3-user.speech-bubble-stage3-int-click.speech-bubble-stage3-int-click--well-side {
+  transform: translate(0, -50%);
+}
+
+.speech-bubble-stage2.speech-bubble-stage3-user.speech-bubble-stage3-int-click.speech-bubble-stage3-int-click--well-side::after {
+  left: -6px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid #fff7bf;
+  border-left: 0;
+}
+
 /* Stage6 말풍선 크기 보정 — Stage3와 동일한 크기 */
 .speech-bubble-stage2.speech-bubble-stage6-size {
   margin-bottom: 8px;
