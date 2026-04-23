@@ -225,10 +225,27 @@ export function createCharacterController({
             spawnX += off.x ?? 0;
             spawnZ += off.z ?? 0;
           }
+          const spawnRotationRadRaw = Number(
+            config.character?.spawnRotationRad,
+          );
+          const spawnRotationDegRaw = Number(
+            config.character?.spawnRotationDeg,
+          );
+          const spawnYaw = Number.isFinite(spawnRotationRadRaw)
+            ? spawnRotationRadRaw
+            : Number.isFinite(spawnRotationDegRaw)
+              ? THREE.MathUtils.degToRad(spawnRotationDegRaw)
+              : null;
 
           characterModel.position.set(spawnX, characterYPosition, spawnZ);
+          if (spawnYaw != null) {
+            characterModel.rotation.y = spawnYaw;
+          }
           if (idleCharacterModel) {
             idleCharacterModel.position.set(spawnX, characterYPosition, spawnZ);
+            if (spawnYaw != null) {
+              idleCharacterModel.rotation.y = spawnYaw;
+            }
             idleCharacterModel.visible = false;
           }
 
@@ -288,6 +305,9 @@ export function createCharacterController({
               characterYPosition,
               spawnZ,
             );
+            if (spawnYaw != null) {
+              punchCharacterModel.rotation.y = spawnYaw;
+            }
             punchCharacterModel.visible = false;
             applyShadows(punchCharacterModel);
 
