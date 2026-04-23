@@ -16,6 +16,7 @@ import {
  * @property {import("three").Vector3} center - 배경 모델의 중심점
  * @property {number} backgroundMaxY - 배경 메시 전체의 최대 Y값
  * @property {import("three").Box3} backgroundBounds - 캐릭터 이동 범위용 바운딩 박스
+ * @property {import("three").AnimationClip[]} animations - 배경 GLB 애니메이션 목록
  */
 
 /**

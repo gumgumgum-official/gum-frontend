@@ -59,6 +59,7 @@ import {
   playRandomStreetLightClickSound,
   disposeStreetLightSound,
 } from "../utils/common/playStreetLightSound.js";
+import { applyExtendedAudioVolume } from "../utils/common/audioGain.js";
 import {
   playRandomPortalTransitionSound,
   disposePortalTransitionSound,
@@ -986,6 +987,7 @@ export function Stage3() {
       gumtoongjiMixer = null;
     }
     gumtoongjiActions = [];
+    /** @type {THREE.Object3D | null} */
     let gumtoongjiRoot = null;
     islandModel.traverse((obj) => {
       if (obj.name === "ANIM_Gumtoongji") gumtoongjiRoot = obj;
@@ -999,15 +1001,18 @@ export function Stage3() {
     );
     if (gumtoongjiRoot && animations.length > 0) {
       gumtoongjiRoot.traverse((obj) => {
-        if (obj.isSkinnedMesh) {
-          obj.frustumCulled = false;
+        const meshLike = /** @type {any} */ (obj);
+        if (meshLike.isSkinnedMesh) {
+          meshLike.frustumCulled = false;
           // backgroundLoader가 비-INT 메시의 raycast를 비활성화했으므로 복구
-          obj.raycast = THREE.SkinnedMesh.prototype.raycast;
+          meshLike.raycast = THREE.SkinnedMesh.prototype.raycast;
         }
-        if (obj.isMesh && !obj.isSkinnedMesh) {
-          obj.raycast = THREE.Mesh.prototype.raycast;
+        if (meshLike.isMesh && !meshLike.isSkinnedMesh) {
+          meshLike.raycast = THREE.Mesh.prototype.raycast;
         }
-        if (obj.isMesh || obj.isSkinnedMesh) gumtoongjiRaycastMeshes.push(obj);
+        if (meshLike.isMesh || meshLike.isSkinnedMesh) {
+          gumtoongjiRaycastMeshes.push(obj);
+        }
       });
       console.log(
         "[Gumtoongji] 레이캐스트 메시 수:",
@@ -1881,7 +1886,7 @@ export function Stage3() {
       const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
       const landAudio = new window.Audio();
       const v = Number(config.icecreamCart?.landSoundVolume ?? 0.22);
-      landAudio.volume = Math.min(1, Math.max(0, v));
+      applyExtendedAudioVolume(landAudio, v);
       landAudio.src = base + path;
       landAudio.play().catch(() => {});
     };
@@ -2569,15 +2574,19 @@ export function Stage3() {
   function cloneFragmentMaterial(source) {
     /** @type {THREE.Material | null} */
     let found = null;
-    if (source?.isMesh && source.material) {
-      found = Array.isArray(source.material)
-        ? source.material[0]
-        : source.material;
+    const sourceMesh = /** @type {any} */ (source);
+    if (sourceMesh?.isMesh && sourceMesh.material) {
+      found = Array.isArray(sourceMesh.material)
+        ? sourceMesh.material[0]
+        : sourceMesh.material;
     } else if (source) {
       source.traverse?.((c) => {
         if (found) return;
-        if (c.isMesh && c.material) {
-          found = Array.isArray(c.material) ? c.material[0] : c.material;
+        const mesh = /** @type {any} */ (c);
+        if (mesh.isMesh && mesh.material) {
+          found = Array.isArray(mesh.material)
+            ? mesh.material[0]
+            : mesh.material;
         }
       });
     }
@@ -3172,13 +3181,9 @@ export function Stage3() {
         glbLoader,
         config,
         getIsActive: () => isStage3Active,
-        onReady: ({
-          model,
-          center,
-          backgroundMaxY,
-          backgroundBounds,
-          animations,
-        }) => {
+        onReady: (payload) => {
+          const { model, center, backgroundMaxY, backgroundBounds } = payload;
+          const animations = /** @type {any} */ (payload).animations ?? [];
           backgroundModel = model;
           ensureStage3UiMounted();
           updateStampSlotsFilled(0);

@@ -1,5 +1,6 @@
 import { resolvePublicAssetUrl } from "./gltfTemplateCache.js";
 import { STAGE3_OBJECTS_CONFIG } from "../../config/stages/stage3/stage3ObjectsConfig.js";
+import { applyExtendedAudioVolume } from "./audioGain.js";
 
 /** @type {HTMLAudioElement | null} */
 let portalTransitionAudio = null;
@@ -18,7 +19,7 @@ export function playRandomPortalTransitionSound() {
     portalTransitionAudio = new window.Audio();
     portalTransitionAudio.preload = "auto";
   }
-  portalTransitionAudio.volume = Math.min(1, Math.max(0, v));
+  applyExtendedAudioVolume(portalTransitionAudio, v);
   portalTransitionAudio.pause();
   portalTransitionAudio.currentTime = 0;
   portalTransitionAudio.src = src;
