@@ -201,10 +201,12 @@ export function Stage6BoardingOverlay() {
       setIsOverlayOpen(false);
       setNameInputValue(latestPassengerNameRef.current);
       setIsNameModalOpen(true);
+      window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
     };
 
     const onStage6NameModalHide = () => {
       setIsNameModalOpen(false);
+      window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
 
     const onBoardingReset = () => {
@@ -363,7 +365,12 @@ export function Stage6BoardingOverlay() {
         role="dialog"
         aria-modal="true"
         aria-label="Passenger name input"
-        onClick={() => setIsNameModalOpen(false)}
+        onClick={() => {
+          setIsNameModalOpen(false);
+          window.dispatchEvent(
+            new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT),
+          );
+        }}
       >
         <div className="name-card" onClick={(event) => event.stopPropagation()}>
           <h3>PASSENGER NAME</h3>
