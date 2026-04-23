@@ -23,7 +23,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 32vh;
+  padding-top: 24vh;
   gap: 3vh;
 }
 
@@ -34,7 +34,7 @@
 .startButtonImg {
   display: block;
   box-sizing: border-box;
-  width: min(52vw, 300px);
+  width: min(92vw, 600px);
   height: auto;
   max-width: 92vw;
   image-rendering: crisp-edges;
