@@ -1476,6 +1476,11 @@ export function Stage3() {
     window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
   }
 
+  /** 게임기 클릭 시 기본 모달 표시 (React App에 커스텀 이벤트로 전달) */
+  function showGameMachineModal() {
+    window.dispatchEvent(new CustomEvent("gum:showGameMachineModal"));
+  }
+
   function playGameMachineClickSound() {
     const src = resolvePublicAssetUrl(GAME_MACHINE_CLICK_SOUND_PATH);
     if (!gameMachineClickAudio) {
@@ -1569,11 +1574,7 @@ export function Stage3() {
     }
     if (target === "gameMachine") {
       playGameMachineClickSound();
-      openMinigame({
-        camera: cameraRef,
-        gameMachineRef,
-        orbitControls: debugControls?.getOrbitControls?.() ?? null,
-      });
+      showGameMachineModal();
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
       }

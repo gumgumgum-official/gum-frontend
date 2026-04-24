@@ -10,6 +10,7 @@ import { NoticeModalBoard } from "./components/NoticeModalBoard.jsx";
 import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
 import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
 import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
+import { BasicWhiteModal } from "./components/BasicWhiteModal.jsx";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
@@ -19,6 +20,7 @@ import {
 
 export function App() {
   const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [showGameMachineModal, setShowGameMachineModal] = useState(false);
   const [showStage6PosterModal, setShowStage6PosterModal] = useState(false);
   const [stage6PosterImageSrc, setStage6PosterImageSrc] = useState(
     "/assets/poster/stamp_poster.png",
@@ -33,6 +35,17 @@ export function App() {
     return () => {
       window.removeEventListener("gum:showNoticeModal", showHandler);
       window.removeEventListener("gum:closeNoticeModal", closeHandler);
+    };
+  }, []);
+
+  useEffect(() => {
+    const showHandler = () => setShowGameMachineModal(true);
+    const closeHandler = () => setShowGameMachineModal(false);
+    window.addEventListener("gum:showGameMachineModal", showHandler);
+    window.addEventListener("gum:closeGameMachineModal", closeHandler);
+    return () => {
+      window.removeEventListener("gum:showGameMachineModal", showHandler);
+      window.removeEventListener("gum:closeGameMachineModal", closeHandler);
     };
   }, []);
 
@@ -82,6 +95,13 @@ export function App() {
           window.dispatchEvent(new CustomEvent("gum:noticeModalClosed"));
         }}
       />
+      <BasicWhiteModal
+        isOpen={showGameMachineModal}
+        onClose={() => setShowGameMachineModal(false)}
+        ariaLabel="게임기 기본 모달"
+      >
+        <h2>게임기 모달</h2>
+      </BasicWhiteModal>
       <Stage6PosterModal
         isOpen={showStage6PosterModal}
         imageSrc={stage6PosterImageSrc}
