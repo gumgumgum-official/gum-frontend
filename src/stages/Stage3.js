@@ -3599,9 +3599,6 @@ export function Stage3() {
           } else {
             userWorryEnterBubblePhase = "off";
             userWorryEnterBubbleT = 0;
-            // Kiosk 라우팅 전환처럼 StageManager switch를 거치지 않는 경우에도
-            // Stage3 인트로/배경 루프가 남지 않도록 직접 정리한다.
-            stopStage3IntroAudio();
             userWorryEnterBubbleEl.classList.remove("is-visible");
           }
         }
@@ -3610,6 +3607,7 @@ export function Stage3() {
 
     cleanup(scene) {
       isStage3Active = false;
+      stopStage3IntroAudio();
       gumCancelled = true;
       pendingEggDiscoverySubtitle = null;
       if (stage3EntryStampRevealTimerId != null) {
