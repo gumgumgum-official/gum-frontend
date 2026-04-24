@@ -1,5 +1,18 @@
 /** Stage3 오브제/배경: 씬 지오메트리는 단일 island GLB (Draco 압축 포함 가능) */
 
+/**
+ * `spawnFlowerAt` 등 랜덤 꽃 스폰에 쓰는 GLB. `stage3GltfWarmup`과 동기화.
+ * @type {readonly string[]}
+ */
+export const STAGE3_STANDALONE_FLOWER_GLB_PATHS = [
+  "/models/common/flowers/pink2.glb",
+  "/models/common/flowers/white2.glb",
+  "/models/common/flowers/red2.glb",
+  "/models/common/flowers/purple2.glb",
+  "/models/common/flowers/pastelpink2.glb",
+  "/models/common/flowers/blue3.glb",
+];
+
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
     path: "/models/stage3/island10_well_animated.glb",

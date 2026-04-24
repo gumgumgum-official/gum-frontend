@@ -16,6 +16,10 @@
   cursor: wait;
 }
 
+.startBlockClick {
+  pointer-events: none;
+}
+
 .startOverlay {
   position: absolute;
   inset: 0;

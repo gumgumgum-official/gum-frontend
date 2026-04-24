@@ -25,11 +25,16 @@ export function StartPage() {
   const toastRef = useRef(null);
   const startNavigationLockedRef = useRef(false);
   const [isPreparingKiosk, setIsPreparingKiosk] = useState(false);
+  /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
+  const [isCompletingKioskSession, setIsCompletingKioskSession] =
+    useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("complete") === "1") return;
     getGLBLoader().preloadDecoders();
     warmStage3GltfTemplateUrls();
-  }, []);
+  }, [location.search]);
 
   useEffect(() => {
     if (toastMessage && !prevToast.current) {
@@ -120,6 +125,7 @@ export function StartPage() {
   }, []);
 
   const handleStart = useCallback(async () => {
+    if (isCompletingKioskSession) return;
     if (startNavigationLockedRef.current) return;
     startNavigationLockedRef.current = true;
     setIsPreparingKiosk(true);
@@ -133,37 +139,61 @@ export function StartPage() {
       setIsPreparingKiosk(false);
       startNavigationLockedRef.current = false;
     }
-  }, [location.search, navigate]);
+  }, [isCompletingKioskSession, location.search, navigate]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const shouldComplete = params.get("complete") === "1";
     if (!shouldComplete) return;
 
+    setIsCompletingKioskSession(true);
     postMonitorComplete()
       .catch((e) => {
         console.warn("[StartPage] monitor complete 요청 실패:", e);
       })
       .finally(() => {
         void (async () => {
-          await resetClientForNextKioskVisitor();
-          setToastMessage(null);
-          params.delete("complete");
-          const nextQuery = params.toString();
-          navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
-            replace: true,
-          });
+          try {
+            await resetClientForNextKioskVisitor();
+            getGLBLoader().preloadDecoders();
+            await waitForStage3GltfTemplatesReady();
+            setToastMessage(null);
+            params.delete("complete");
+            const nextQuery = params.toString();
+            navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
+              replace: true,
+            });
+          } catch (e) {
+            console.warn(
+              "[StartPage] complete 후 웜업 실패 — 다음 화면만 열기:",
+              e,
+            );
+            setToastMessage(null);
+            params.delete("complete");
+            const nextQuery = params.toString();
+            navigate(nextQuery ? `/start?${nextQuery}` : "/start", {
+              replace: true,
+            });
+          } finally {
+            setIsCompletingKioskSession(false);
+          }
         })();
       });
   }, [location.search, navigate]);
 
+  const isStartInteractiveBlocked =
+    isPreparingKiosk || isCompletingKioskSession;
+  const startPageClassName = [
+    styles.page,
+    styles.startBackground,
+    isStartInteractiveBlocked && styles.startEnterLoading,
+    isCompletingKioskSession && styles.startBlockClick,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div
-      className={`${styles.page} ${styles.startBackground}${
-        isPreparingKiosk ? ` ${styles.startEnterLoading}` : ""
-      }`}
-      onClick={handleStart}
-    >
+    <div className={startPageClassName} onClick={handleStart}>
       <div className={styles.startOverlay}>
         <div className={styles.startButtonHit}>
           <img
