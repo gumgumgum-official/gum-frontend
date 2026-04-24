@@ -30,6 +30,7 @@ import {
 import { createHandwritingSvgVolumeGroup } from "../utils/stages/stage3/stage3HandwritingSvgVolume.js";
 import * as CANNON from "cannon-es";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
+import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import {
   openMinigame,
   closeMinigame,
@@ -105,14 +106,6 @@ const FRAGMENT_FADE_END = 2.0;
 const FLOWER_BLOOM_DURATION = 3;
 const FLOWER_SCALE = 2;
 const FLOWER_Y_OFFSET = 0.15;
-const FRAGMENT_FLOWER_PATHS = [
-  "/models/common/flowers/pink2.glb",
-  "/models/common/flowers/white2.glb",
-  "/models/common/flowers/red2.glb",
-  "/models/common/flowers/purple2.glb",
-  "/models/common/flowers/pastelpink2.glb",
-  "/models/common/flowers/blue3.glb",
-];
 const STAGE3_ICECREAM_DEBUG_BOX_ONLY = false;
 
 /** 아이스크림이 지면에 처음 닿을 때 재생 (랜덤 1종) */
@@ -2736,8 +2729,8 @@ export function Stage3() {
 
   function pickRandomFlowerAssetUrl() {
     const rel =
-      FRAGMENT_FLOWER_PATHS[
-        Math.floor(Math.random() * FRAGMENT_FLOWER_PATHS.length)
+      STAGE3_STANDALONE_FLOWER_GLB_PATHS[
+        Math.floor(Math.random() * STAGE3_STANDALONE_FLOWER_GLB_PATHS.length)
       ];
     return resolvePublicAssetUrl(rel);
   }
@@ -3607,9 +3600,6 @@ export function Stage3() {
           } else {
             userWorryEnterBubblePhase = "off";
             userWorryEnterBubbleT = 0;
-            // Kiosk 라우팅 전환처럼 StageManager switch를 거치지 않는 경우에도
-            // Stage3 인트로/배경 루프가 남지 않도록 직접 정리한다.
-            stopStage3IntroAudio();
             userWorryEnterBubbleEl.classList.remove("is-visible");
           }
         }
@@ -3618,6 +3608,7 @@ export function Stage3() {
 
     cleanup(scene) {
       isStage3Active = false;
+      stopStage3IntroAudio();
       gumCancelled = true;
       pendingEggDiscoverySubtitle = null;
       if (stage3EntryStampRevealTimerId != null) {

@@ -222,7 +222,12 @@ export function initThreeApp(canvasElement, options = {}) {
   const drawingSizeScratch = new THREE.Vector2();
   let animationId = null;
 
-  /** Stage3 성능 프로파일: localStorage.setItem('STAGE3_PROFILE','1') 후 새로고침 */
+  /**
+   * Stage3만 프레임 간격(ms)을 60샘플마다 로그(avg/max, 대략적 FPS).
+   * 설정: `localStorage.setItem('STAGE3_PROFILE','1')` 후 새로고침, 또는
+   * 콘솔에 `window.STAGE3_PROFILE = 1` (동일).
+   * 키오스크: Start `complete=1` 웜업 순서·에셋 변경 **전/후**를 **같은 기기**에서 비교할 때 사용.
+   */
   const profileEnabled = () =>
     typeof window !== "undefined" &&
     (window.STAGE3_PROFILE || localStorage.getItem("STAGE3_PROFILE"));

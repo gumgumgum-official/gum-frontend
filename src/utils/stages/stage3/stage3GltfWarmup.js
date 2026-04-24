@@ -2,6 +2,7 @@
  * Stage3에 쓰이는 GLB URL을 앱 기동 직후 백그라운드에서 파싱까지 시작한다.
  */
 import { STAGE3_CONFIG } from "../../../config/stages/stage3.js";
+import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
@@ -18,6 +19,11 @@ function getStage3PrewarmAbsoluteUrls() {
   const charIdlePath =
     STAGE3_CONFIG.characterIdleModelPath ?? "/models/common/user_idle.glb";
   urls.push(resolvePublicAssetUrl(charIdlePath));
+  const punchPath =
+    STAGE3_CONFIG.characterPunchModelPath ?? "/models/stage3/user_punch.glb";
+  if (punchPath) {
+    urls.push(resolvePublicAssetUrl(punchPath));
+  }
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
     "/models/common/gum_walk_final.glb";
@@ -29,14 +35,7 @@ function getStage3PrewarmAbsoluteUrls() {
   for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
     urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
   }
-  for (const rel of [
-    "/models/common/flowers/pink2.glb",
-    "/models/common/flowers/white2.glb",
-    "/models/common/flowers/red2.glb",
-    "/models/common/flowers/purple2.glb",
-    "/models/common/flowers/pastelpink2.glb",
-    "/models/common/flowers/blue3.glb",
-  ]) {
+  for (const rel of STAGE3_STANDALONE_FLOWER_GLB_PATHS) {
     urls.push(resolvePublicAssetUrl(rel));
   }
   return [...new Set(urls)];
