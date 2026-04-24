@@ -198,7 +198,7 @@ export function StartPage() {
         <div className={styles.startButtonHit}>
           <img
             className={styles.startButtonImg}
-            src="/static/images/start_button.png"
+            src="/static/images/start_button_pink.png"
             alt="START"
             width={1024}
             height={388}
