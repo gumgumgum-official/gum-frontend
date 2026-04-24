@@ -101,6 +101,8 @@ export function createGumFollowersController({
   let elapsedSec = 0;
   let breakOffUntil = 0;
   let prevUserYaw = null;
+  /** true면 다음 update에서 유저 기준 목표 위치/각도로 한 번에 맞춤(월드 0,0에서 lerp로 끌려 오는 현상 방지) */
+  let pendingInitialWorldAlign = true;
   let baseGroundY = 0;
   let followerGroundLift = 0;
   /** @type {import("three").Mesh[]} */
@@ -268,6 +270,7 @@ export function createGumFollowersController({
     }
 
     isReady = true;
+    pendingInitialWorldAlign = true;
   }
 
   function computeOffsetYaw(userYaw, side) {
@@ -287,6 +290,13 @@ export function createGumFollowersController({
       yaw,
       tFace,
     );
+  }
+
+  function setFollowerFacingInstant(lookTarget, follower) {
+    _look.copy(lookTarget).sub(follower.model.position);
+    _look.y = 0;
+    if (_look.lengthSq() < 1e-6) return;
+    follower.model.rotation.y = Math.atan2(_look.x, _look.z);
   }
 
   return {
@@ -329,7 +339,8 @@ export function createGumFollowersController({
       };
 
       // 이동 상태가 바뀔 때만 walk/idle 토글을 수행한다.
-      if (isMovingPrev !== moving) {
+      // 첫 유저 좌표 스냅 프레임은 이전 tick과 무관하므로 한 번 강제 동기화
+      if (isMovingPrev !== moving || pendingInitialWorldAlign) {
         followers.forEach((f) => {
           if (moving) {
             f.model.visible = true;
@@ -350,13 +361,18 @@ export function createGumFollowersController({
 
       _userPos.copy(userPos);
 
+      const instantWorldAlign = pendingInitialWorldAlign;
+
       followers.forEach((f) => {
         const breaking = breakOffEnabled && elapsedSec < breakOffUntil;
 
         const desiredOffsetYaw = computeOffsetYaw(userYaw, f.side);
-        if (f.offsetYaw == null) f.offsetYaw = desiredOffsetYaw;
-        const ty = Math.min(1, turnLerpFactor * delta);
-        f.offsetYaw = lerpAngle(f.offsetYaw, desiredOffsetYaw, ty);
+        if (f.offsetYaw == null || instantWorldAlign) {
+          f.offsetYaw = desiredOffsetYaw;
+        } else {
+          const ty = Math.min(1, turnLerpFactor * delta);
+          f.offsetYaw = lerpAngle(f.offsetYaw, desiredOffsetYaw, ty);
+        }
 
         _dir.set(Math.sin(f.offsetYaw), 0, Math.cos(f.offsetYaw));
         const dynDistance = breaking
@@ -379,16 +395,21 @@ export function createGumFollowersController({
         const txz = Math.min(1, dynFollow * delta);
         const prevX = f.model.position.x;
         const prevZ = f.model.position.z;
-        f.model.position.x = THREE.MathUtils.lerp(
-          f.model.position.x,
-          _target.x,
-          txz,
-        );
-        f.model.position.z = THREE.MathUtils.lerp(
-          f.model.position.z,
-          _target.z,
-          txz,
-        );
+        if (instantWorldAlign) {
+          f.model.position.x = _target.x;
+          f.model.position.z = _target.z;
+        } else {
+          f.model.position.x = THREE.MathUtils.lerp(
+            f.model.position.x,
+            _target.x,
+            txz,
+          );
+          f.model.position.z = THREE.MathUtils.lerp(
+            f.model.position.z,
+            _target.z,
+            txz,
+          );
+        }
         const movedXZ =
           Math.abs(f.model.position.x - prevX) > 1e-6 ||
           Math.abs(f.model.position.z - prevZ) > 1e-6;
@@ -418,17 +439,27 @@ export function createGumFollowersController({
           }
         }
         const targetY = f.resolvedGroundY + followerGroundLift;
-        f.model.position.y = THREE.MathUtils.lerp(
-          f.model.position.y,
-          targetY,
-          easeAlpha,
-        );
+        if (instantWorldAlign) {
+          f.model.position.y = targetY;
+        } else {
+          f.model.position.y = THREE.MathUtils.lerp(
+            f.model.position.y,
+            targetY,
+            easeAlpha,
+          );
+        }
         if (!moving && f.idleModel) {
           f.idleModel.position.copy(f.model.position);
         }
 
         // 걷는 동안은 "이동 앞"을 보고, 멈추면 유저를 바라보도록 전환
-        if (moving) {
+        if (instantWorldAlign) {
+          if (moving) {
+            setFollowerFacingInstant(_target, f);
+          } else {
+            setFollowerFacingInstant(userPos, f);
+          }
+        } else if (moving) {
           updateFollowerFacingTo(_target, f, delta);
         } else {
           updateFollowerFacingTo(userPos, f, delta);
@@ -446,6 +477,10 @@ export function createGumFollowersController({
           f.mixer.update(delta);
         }
       });
+
+      if (instantWorldAlign) {
+        pendingInitialWorldAlign = false;
+      }
     },
     cleanup() {
       followers.forEach((f) => {
@@ -457,6 +492,7 @@ export function createGumFollowersController({
       followers.length = 0;
       followerBubbleFallbackHeadY = 1.1;
       isReady = false;
+      pendingInitialWorldAlign = true;
       isMovingPrev = false;
       elapsedSec = 0;
       breakOffUntil = 0;
