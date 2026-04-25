@@ -16,7 +16,18 @@ export function createKeyboardInput(keyList) {
     });
   };
 
+  const isInputFocused = () => {
+    const el = /** @type {Element | null} */ (document.activeElement);
+    const tagName = el?.tagName;
+    return (
+      tagName === "INPUT" ||
+      tagName === "TEXTAREA" ||
+      Boolean(el?.isContentEditable)
+    );
+  };
+
   const handleKeyDown = (event) => {
+    if (isInputFocused()) return;
     if (event.key in keys) {
       keys[event.key] = true;
       event.preventDefault();
@@ -29,6 +40,7 @@ export function createKeyboardInput(keyList) {
   };
 
   const handleKeyUp = (event) => {
+    if (isInputFocused()) return;
     if (event.key in keys) {
       keys[event.key] = false;
       event.preventDefault();

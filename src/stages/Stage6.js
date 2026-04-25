@@ -33,6 +33,7 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
+import { slideMoveXZAgainstAABBs } from "../utils/stages/stage3/islandStaticColliders.js";
 const INT_PREFIX = "INT_";
 const CHAR_ROOT_NAMES = [
   "INT_Gum_Cry",
@@ -63,8 +64,28 @@ const CHAR_ANIM_MAP = {
   INT_Gum_Airplane: ["Plane_Throw_Rig", "Plane_Throw_Prop"],
   INT_Gum_Lollipop: ["Lollipop_ArmShake_Rig", "Lollipop_Shake"],
 };
-const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
+const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM", "OBJ_Tel"]);
 const ATM_OBJECT_NAME = "OBJ_ATM";
+const TEL_OBJECT_NAME = "OBJ_Tel";
+const TEL_EMISSIVE_DARK_STRENGTH = 0.06;
+const TEL_EMISSIVE_BRIGHT_STRENGTH = 1.25;
+const TEL_EMISSIVE_TWEEN_SPEED = 3.5;
+const PHONE_RING_SOUND_PATH = "/static/sounds/airport/phone_ring.mp3";
+const PHONE_RING_SOUND_VOLUME = 0.6;
+const PHONE_HANGUP_SOUND_PATH = "/static/sounds/airport/phone_hangup.mp3";
+const PHONE_HANGUP_SOUND_VOLUME = 0.7;
+const PHONE_CALL_SOUNDS = [
+  "/static/sounds/airport/phone_prank.mp3",
+  "/static/sounds/airport/phone_love.mp3",
+];
+const PHONE_CALL_SUBTITLES = [
+  null,
+  "당신을 사랑하는 익명의 껌딱지에게 전화가 왔네요! 💌",
+];
+const PHONE_CALL_SOUND_VOLUME = 0.7;
+const TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS = 5000;
+const TEL_RING_AGAIN_DELAY_MS = 10000;
+const TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS = 5000;
 const ATM_INTERACTION_REQUIRED_COUNT = 3;
 const ATM_EMISSIVE_DARK_STRENGTH = 0.06;
 const ATM_EMISSIVE_BRIGHT_STRENGTH = 1.25;
@@ -74,12 +95,47 @@ const _floorRayOrigin = new THREE.Vector3();
 const _escWorld = new THREE.Vector3();
 const _toCam = new THREE.Vector3();
 
+// --- OBJ_Bag1 dynamic nudge physics ---
+const BAG_OBJECT_NAME = "OBJ_Bag1";
+const BAG_IMPULSE_STRENGTH = 5.5;
+const BAG_FRICTION = 3.5;
+const BAG_NUDGE_COOLDOWN_SEC = 0.22;
+const BAG_MAX_DRIFT = 3.5;
+const BAG_MAX_SPEED = 7.0;
+const BAG_TOUCH_SOUNDS = [
+  "/static/sounds/airport/bag_touch1.mp3",
+  "/static/sounds/airport/bag_touch2.mp3",
+];
+const BAG_TOUCH_SOUND_VOLUME = 0.55;
+
 /**
  * @param {THREE.Object3D} obj
  * @returns {obj is THREE.Mesh}
  */
 function isMeshObject3D(obj) {
   return "isMesh" in obj && obj.isMesh === true;
+}
+
+/**
+ * @param {THREE.Object3D} obj
+ * @returns {Array<{minX: number, maxX: number, minZ: number, maxZ: number}>}
+ */
+function collectMeshAabbsXZ(obj) {
+  const out = [];
+  const tmp = new THREE.Box3();
+  obj.updateMatrixWorld(true);
+  obj.traverse((child) => {
+    if (!isMeshObject3D(child)) return;
+    tmp.setFromObject(child);
+    if (tmp.isEmpty()) return;
+    out.push({
+      minX: tmp.min.x,
+      maxX: tmp.max.x,
+      minZ: tmp.min.z,
+      maxZ: tmp.max.z,
+    });
+  });
+  return out;
 }
 
 function normalizeAnimToken(name) {
@@ -204,10 +260,21 @@ export function Stage6() {
   let isAtmActivated = false;
   /** @type {THREE.Object3D | null} */
   let atmRootRef = null;
+  let isTelActivated = false;
+  let isTelRinging = false;
+  let telEmissiveProgress = 0;
+  let telEmissiveTarget = 0;
+  let telCallIndex = 0;
+  let telActivateTimeoutId = 0;
+  let telRingAgainTimeoutId = 0;
+  /** @type {THREE.Object3D | null} */
+  let telRootRef = null;
   /** @type {Array<THREE.Material & { emissive?: THREE.Color, emissiveIntensity?: number, userData?: Record<string, any> }>} */
   const atmEmissiveMaterials = [];
   let atmEmissiveProgress = 0;
   let atmEmissiveTarget = 0;
+  /** @type {Array<THREE.Material & { emissive?: THREE.Color, emissiveIntensity?: number, userData?: Record<string, any> }>} */
+  const telEmissiveMaterials = [];
   let isSceneInteractionLocked = false;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
@@ -219,7 +286,34 @@ export function Stage6() {
   let photoboothCurtainAudio = null;
   /** @type {HTMLAudioElement | null} */
   let atmClickAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let phoneRingAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let phoneHangupAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let phoneCallAudio = null;
   let isAirportChimeVisible = false;
+
+  /** @type {THREE.Object3D | null} */
+  let bagObject = null;
+  let bagVelocityX = 0;
+  let bagVelocityZ = 0;
+  let bagNudgeCooldown = 0;
+  const _bagInitialWorldPos = new THREE.Vector3();
+  const _bagWorldPos = new THREE.Vector3();
+  const _bagInitialAabb = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  const _bagCurrentAabb = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  // AABB 센터 기준 충돌 — origin ≠ AABB center 인 경우 올바른 충돌 보장
+  let bagAabbCenterInitX = 0;
+  let bagAabbCenterInitZ = 0;
+  let bagAabbOffsetX = 0; // world: AABB센터 - origin
+  let bagAabbOffsetZ = 0;
+  /** @type {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb[]} */
+  let bagStaticColliders = [];
+  let bagCollisionRadius = 0.3;
+  /** @type {[HTMLAudioElement | null, HTMLAudioElement | null]} */
+  const bagTouchAudios = [null, null];
+  let bagTouchSoundIndex = 0;
 
   function isLoadingOverlayVisible() {
     const loadingOverlay = document.getElementById("loading-overlay");
@@ -285,6 +379,13 @@ export function Stage6() {
   const _charBubbleSize = new THREE.Vector3();
   const _charBubbleProjected = new THREE.Vector3();
 
+  // Tel 말풍선 상태 (int-click 스타일)
+  /** @type {HTMLDivElement | null} */
+  let telBubbleEl = null;
+  const _telBubbleBox = new THREE.Box3();
+  const _telBubbleSize = new THREE.Vector3();
+  const _telBubbleProjected = new THREE.Vector3();
+
   function dispatchAirportSubtitleTextByTime(currentSec) {
     const syncedSec = Math.max(0, currentSec + airportSubtitleLeadSec);
     const nextIdx = airportAnnouncementSubtitleCues.findIndex(
@@ -322,6 +423,10 @@ export function Stage6() {
     if (airportAnnounceIntroTimeoutId) {
       window.clearTimeout(airportAnnounceIntroTimeoutId);
       airportAnnounceIntroTimeoutId = 0;
+    }
+    if (telActivateTimeoutId) {
+      window.clearTimeout(telActivateTimeoutId);
+      telActivateTimeoutId = 0;
     }
     if (airplaneCallSignAudio) {
       airplaneCallSignAudio.onplay = null;
@@ -375,6 +480,10 @@ export function Stage6() {
       isAirportSubtitleVisible = false;
       window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
       isSceneInteractionLocked = false;
+      telActivateTimeoutId = window.setTimeout(() => {
+        telActivateTimeoutId = 0;
+        activateTelRinging();
+      }, TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
     };
     airportAnnounceIntroAudio.play().catch(() => {
       isSceneInteractionLocked = false;
@@ -569,6 +678,48 @@ export function Stage6() {
     charBubbleRemaining = 0;
   }
 
+  function createTelBubbleEl() {
+    const el = document.createElement("div");
+    el.className =
+      "speech-bubble-stage2 speech-bubble-stage3-user speech-bubble-stage3-int-click";
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function updateTelBubblePosition() {
+    if (!telBubbleEl || !canvasRef || !cameraRef || !telRootRef) return false;
+    _telBubbleBox.setFromObject(telRootRef);
+    if (_telBubbleBox.isEmpty()) return false;
+    _telBubbleBox.getCenter(_telBubbleProjected);
+    _telBubbleBox.getSize(_telBubbleSize);
+    _telBubbleProjected.y += _telBubbleSize.y * 0.85;
+    _telBubbleProjected.project(cameraRef);
+    const rect = canvasRef.getBoundingClientRect();
+    const rw = rect.width || 1;
+    const rh = rect.height || 1;
+    const x = rect.left + (_telBubbleProjected.x * 0.5 + 0.5) * rw;
+    const y = rect.top + (-_telBubbleProjected.y * 0.5 + 0.5) * rh;
+    telBubbleEl.style.left = `${x}px`;
+    telBubbleEl.style.top = `${y}px`;
+    return true;
+  }
+
+  function showTelBubble(text) {
+    if (!telBubbleEl) return;
+    if (!updateTelBubblePosition()) return;
+    telBubbleEl.classList.remove("is-visible");
+    telBubbleEl.textContent = text;
+    requestAnimationFrame(() => {
+      if (telBubbleEl) telBubbleEl.classList.add("is-visible");
+    });
+  }
+
+  function hideTelBubble() {
+    if (!telBubbleEl) return;
+    telBubbleEl.classList.remove("is-visible");
+  }
+
   function playCharacter(charName) {
     const actions = charActions[charName];
     if (!actions?.length) {
@@ -672,6 +823,173 @@ export function Stage6() {
     });
   }
 
+  function collectTelInteractiveRoot(rootModel) {
+    telRootRef = null;
+    rootModel.traverse((obj) => {
+      if (telRootRef || obj?.name !== TEL_OBJECT_NAME) return;
+      telRootRef = obj;
+    });
+  }
+
+  function registerTelEmissiveMaterials() {
+    telEmissiveMaterials.length = 0;
+    if (!telRootRef) return;
+    telRootRef.traverse((child) => {
+      const mesh = /** @type {THREE.Mesh} */ (child);
+      if (!mesh?.isMesh || !mesh.material) return;
+      const materials = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material];
+      materials.forEach((rawMaterial) => {
+        const material = /** @type {typeof telEmissiveMaterials[number]} */ (
+          rawMaterial
+        );
+        if (!material?.emissive) return;
+        const hasVisibleEmissive = material.emissive.getHex() !== 0x000000;
+        material.userData = material.userData ?? {};
+        if (!material.userData.stage6TelBaseEmissive) {
+          material.userData.stage6TelBaseEmissive = hasVisibleEmissive
+            ? material.emissive.clone()
+            : new THREE.Color(0x7fd6ff);
+        }
+        telEmissiveMaterials.push(material);
+      });
+    });
+  }
+
+  function applyTelEmissive(progress) {
+    const strength = THREE.MathUtils.lerp(
+      TEL_EMISSIVE_DARK_STRENGTH,
+      TEL_EMISSIVE_BRIGHT_STRENGTH,
+      progress,
+    );
+    telEmissiveMaterials.forEach((material) => {
+      const baseColor = material.userData?.stage6TelBaseEmissive;
+      if (!baseColor || !material.emissive) return;
+      material.emissive.copy(baseColor).multiplyScalar(strength);
+      if (typeof material.emissiveIntensity === "number") {
+        material.emissiveIntensity = 1;
+      }
+      material.needsUpdate = true;
+    });
+  }
+
+  function isTelHitTarget(hit) {
+    return (
+      hit?.intName === TEL_OBJECT_NAME ||
+      normalizeIntNameToken(hit?.target) ===
+        normalizeIntNameToken(TEL_OBJECT_NAME)
+    );
+  }
+
+  function playPhoneRing() {
+    if (!phoneRingAudio) {
+      phoneRingAudio = new window.Audio();
+      phoneRingAudio.preload = "auto";
+      phoneRingAudio.loop = true;
+      phoneRingAudio.src = resolvePublicAssetUrl(PHONE_RING_SOUND_PATH);
+    }
+    phoneRingAudio.volume = PHONE_RING_SOUND_VOLUME;
+    phoneRingAudio.currentTime = 0;
+    const p = phoneRingAudio.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    isTelRinging = true;
+  }
+
+  function stopPhoneRing() {
+    if (phoneRingAudio) {
+      phoneRingAudio.pause();
+      phoneRingAudio.currentTime = 0;
+    }
+    isTelRinging = false;
+  }
+
+  function activateTelRinging() {
+    if (!isStage6Active) return;
+    isTelActivated = true;
+    telEmissiveTarget = 1;
+    playPhoneRing();
+    showTelBubble("click!");
+    dispatchStage6SubtitleSequence([
+      { text: "어! 전화가 온 것 같아요! 한번 받아볼까요? 📞", holdMs: 3000 },
+    ]);
+  }
+
+  function startPhoneCallAfterHangup(callSrc, callSubtitle) {
+    if (!phoneCallAudio) {
+      phoneCallAudio = new window.Audio();
+      phoneCallAudio.preload = "auto";
+    }
+    phoneCallAudio.onended = null;
+    phoneCallAudio.pause();
+    phoneCallAudio.currentTime = 0;
+    phoneCallAudio.src = callSrc;
+    phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
+    if (callSubtitle) {
+      dispatchStage6SubtitleSequence([{ text: callSubtitle, holdMs: 3500 }]);
+    }
+    phoneCallAudio.onended = () => {
+      if (telCallIndex < PHONE_CALL_SOUNDS.length && isStage6Active) {
+        telRingAgainTimeoutId = window.setTimeout(() => {
+          telRingAgainTimeoutId = 0;
+          if (isStage6Active) {
+            playPhoneRing();
+            showTelBubble("click!");
+            dispatchStage6SubtitleSequence([
+              {
+                text: "어! 전화가 온 것 같아요! 한번 받아볼까요? 📞",
+                holdMs: 3000,
+              },
+            ]);
+          }
+        }, TEL_RING_AGAIN_DELAY_MS);
+      } else {
+        telEmissiveTarget = 0;
+        telRingAgainTimeoutId = window.setTimeout(() => {
+          telRingAgainTimeoutId = 0;
+          if (isStage6Active && !isAtmActivated) {
+            activateAtmKiosk();
+          }
+        }, TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS);
+      }
+    };
+    try {
+      phoneCallAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = phoneCallAudio.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  }
+
+  function playCurrentPhoneCall() {
+    if (telCallIndex >= PHONE_CALL_SOUNDS.length) return;
+    stopPhoneRing();
+    hideTelBubble();
+    const callIdx = telCallIndex;
+    const callSrc = resolvePublicAssetUrl(PHONE_CALL_SOUNDS[callIdx]);
+    const callSubtitle = PHONE_CALL_SUBTITLES[callIdx] ?? null;
+    telCallIndex++;
+    if (!phoneHangupAudio) {
+      phoneHangupAudio = new window.Audio();
+      phoneHangupAudio.preload = "auto";
+      phoneHangupAudio.src = resolvePublicAssetUrl(PHONE_HANGUP_SOUND_PATH);
+    }
+    phoneHangupAudio.onended = null;
+    phoneHangupAudio.pause();
+    phoneHangupAudio.currentTime = 0;
+    phoneHangupAudio.volume = PHONE_HANGUP_SOUND_VOLUME;
+    phoneHangupAudio.onended = () => {
+      if (isStage6Active) startPhoneCallAfterHangup(callSrc, callSubtitle);
+    };
+    const p = phoneHangupAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {
+        if (isStage6Active) startPhoneCallAfterHangup(callSrc, callSubtitle);
+      });
+    }
+  }
+
   function activateAtmKiosk() {
     if (isAtmActivated) return;
     isAtmActivated = true;
@@ -691,66 +1009,14 @@ export function Stage6() {
   }
 
   function registerNonAtmInteraction(hit) {
-    if (!hit || isAtmHitTarget(hit) || isAtmActivated) return;
+    if (!hit || isAtmHitTarget(hit) || isTelHitTarget(hit) || isAtmActivated)
+      return;
     const interactionKey = hit.intName || hit.target;
     if (!interactionKey || interactedTargets.has(interactionKey)) return;
     interactedTargets.add(interactionKey);
     if (interactedTargets.size >= ATM_INTERACTION_REQUIRED_COUNT) {
       activateAtmKiosk();
     }
-  }
-
-  /**
-   * 템플릿 씬과 분리된 인스턴스 (cleanup 시 dispose 안전)
-   * @param {import("three").Object3D} source
-   */
-  function cloneStage6ModelInstance(source) {
-    const root = source.clone(true);
-    root.traverse((obj) => {
-      const mesh = /** @type {any} */ (obj);
-      if (!mesh.isMesh) return;
-      if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
-      const mat = mesh.material;
-      if (Array.isArray(mat)) {
-        mesh.material = mat.map((m) => (m?.clone ? m.clone() : m));
-      } else if (mat?.clone) {
-        mesh.material = mat.clone();
-      }
-
-      const materials = Array.isArray(mesh.material)
-        ? mesh.material
-        : [mesh.material];
-      for (const material of materials) {
-        if (!material) continue;
-        // 외부 Chrome에서는 transmission 유리를 유지하고,
-        // Cursor/Electron 웹뷰에서만 fallback glass로 치환한다.
-        if (
-          isElectronLike &&
-          typeof material.transmission === "number" &&
-          material.transmission > 0
-        ) {
-          const originalOpacity =
-            typeof material.opacity === "number" ? material.opacity : 1;
-          material.transmission = 0;
-          material.transparent = true;
-          material.opacity = Math.min(originalOpacity, 0.42);
-          if (typeof material.roughness === "number") {
-            material.roughness = Math.max(material.roughness, 0.08);
-          }
-          if (typeof material.metalness === "number") {
-            material.metalness = Math.min(material.metalness, 0.05);
-          }
-          if (typeof material.envMapIntensity === "number") {
-            material.envMapIntensity = Math.max(material.envMapIntensity, 1.15);
-          }
-          if ("depthWrite" in material) {
-            material.depthWrite = false;
-          }
-          material.needsUpdate = true;
-        }
-      }
-    });
-    return root;
   }
 
   function registerIntInteractions(rootModel) {
@@ -771,8 +1037,11 @@ export function Stage6() {
       });
     });
     intRaycastMeshes.push(...meshSet);
+    collectTelInteractiveRoot(rootModel);
     registerAtmEmissiveMaterials();
+    registerTelEmissiveMaterials();
     applyAtmEmissive(atmEmissiveProgress);
+    applyTelEmissive(telEmissiveProgress);
     if (import.meta.env.DEV) {
       console.log(
         `[Stage6] INT_ clickable mesh count: ${intRaycastMeshes.length}`,
@@ -864,6 +1133,13 @@ export function Stage6() {
       atmEmissiveProgress = 0;
       atmRootRef = null;
       atmEmissiveMaterials.length = 0;
+      isTelActivated = false;
+      isTelRinging = false;
+      telEmissiveTarget = 0;
+      telEmissiveProgress = 0;
+      telCallIndex = 0;
+      telRootRef = null;
+      telEmissiveMaterials.length = 0;
       isSceneInteractionLocked = false;
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
       onInteractionLock = () => {
@@ -887,7 +1163,12 @@ export function Stage6() {
           playPhotoboothCurtainSound();
         }
         const isAtmHit = isAtmHitTarget(hit);
-        if (isAtmHit) {
+        const isTelHit = isTelHitTarget(hit);
+        if (isTelHit) {
+          if (isTelActivated) {
+            playCurrentPhoneCall();
+          }
+        } else if (isAtmHit) {
           playAtmClickSound();
           if (!isAtmActivated) {
             dispatchStage6SubtitleSequence([
@@ -943,6 +1224,7 @@ export function Stage6() {
       canvas.addEventListener("pointermove", onPointerMove);
 
       charBubbleEl = createCharBubbleEl();
+      telBubbleEl = createTelBubbleEl();
 
       isSceneInteractionLocked = true;
 
@@ -1069,7 +1351,49 @@ export function Stage6() {
             }
           }
 
-          const staticColliderBoxes = collectStage6StaticColliderBoxes(model);
+          // Initialize dynamic bag before collider collection so it can be excluded
+          bagObject = model.getObjectByName(BAG_OBJECT_NAME) ?? null;
+          if (bagObject) {
+            bagObject.updateMatrixWorld(true);
+            bagObject.getWorldPosition(_bagInitialWorldPos);
+            const bagWorldBox = new THREE.Box3().setFromObject(bagObject);
+            _bagInitialAabb.minX = bagWorldBox.min.x;
+            _bagInitialAabb.maxX = bagWorldBox.max.x;
+            _bagInitialAabb.minZ = bagWorldBox.min.z;
+            _bagInitialAabb.maxZ = bagWorldBox.max.z;
+            Object.assign(_bagCurrentAabb, _bagInitialAabb);
+            bagVelocityX = 0;
+            bagVelocityZ = 0;
+            bagNudgeCooldown = 0;
+            const halfW = (_bagInitialAabb.maxX - _bagInitialAabb.minX) * 0.5;
+            const halfD = (_bagInitialAabb.maxZ - _bagInitialAabb.minZ) * 0.5;
+            bagAabbCenterInitX =
+              (_bagInitialAabb.minX + _bagInitialAabb.maxX) * 0.5;
+            bagAabbCenterInitZ =
+              (_bagInitialAabb.minZ + _bagInitialAabb.maxZ) * 0.5;
+            bagAabbOffsetX = bagAabbCenterInitX - _bagInitialWorldPos.x;
+            bagAabbOffsetZ = bagAabbCenterInitZ - _bagInitialWorldPos.z;
+            bagCollisionRadius = Math.max(halfW, halfD);
+          }
+
+          const allStaticColliders = collectStage6StaticColliderBoxes(model);
+          const bagMeshBoxes = bagObject ? collectMeshAabbsXZ(bagObject) : [];
+          const staticColliderBoxes =
+            bagMeshBoxes.length > 0
+              ? allStaticColliders.filter(
+                  (box) =>
+                    !bagMeshBoxes.some(
+                      (b) =>
+                        Math.abs(box.minX - b.minX) < 0.01 &&
+                        Math.abs(box.maxX - b.maxX) < 0.01 &&
+                        Math.abs(box.minZ - b.minZ) < 0.01 &&
+                        Math.abs(box.maxZ - b.maxZ) < 0.01,
+                    ),
+                )
+              : allStaticColliders;
+
+          bagStaticColliders = staticColliderBoxes;
+
           const characterController = /** @type {any} */ (character);
           characterController?.setup(floorY, bounds, staticColliderBoxes, {
             worldSpawnXZ: { x: spawnX, z: spawnZ },
@@ -1112,6 +1436,22 @@ export function Stage6() {
             });
             objects.push(model);
             scene.add(model);
+            // bench 메쉬별 AABB를 캐리어 충돌체에 추가 (단일 AABB는 빈 공간 포함/실제 geometry 누락 발생)
+            model.updateMatrixWorld(true);
+            const _benchTmp = new THREE.Box3();
+            model.traverse((child) => {
+              if (!child.isMesh) return;
+              _benchTmp.setFromObject(child);
+              if (_benchTmp.isEmpty()) return;
+              bagStaticColliders.push({
+                minX: _benchTmp.min.x,
+                maxX: _benchTmp.max.x,
+                minZ: _benchTmp.min.z,
+                maxZ: _benchTmp.max.z,
+                minY: _benchTmp.min.y,
+                maxY: _benchTmp.max.y,
+              });
+            });
           },
           onError: (err) =>
             console.warn("❌ Stage6 bench 로드 실패:", benchConfig.path, err),
@@ -1168,6 +1508,15 @@ export function Stage6() {
       if (atmEmissiveMaterials.length > 0) {
         applyAtmEmissive(atmEmissiveProgress);
       }
+      telEmissiveProgress = THREE.MathUtils.damp(
+        telEmissiveProgress,
+        telEmissiveTarget,
+        TEL_EMISSIVE_TWEEN_SPEED,
+        delta,
+      );
+      if (telEmissiveMaterials.length > 0) {
+        applyTelEmissive(telEmissiveProgress);
+      }
 
       if (charMixer) charMixer.update(delta);
 
@@ -1179,8 +1528,124 @@ export function Stage6() {
         }
       }
 
+      if (isTelRinging && telBubbleEl) {
+        updateTelBubblePosition();
+      }
+
       if (character) {
         character.update(delta, this.camera, { skipCameraFollow: true });
+      }
+
+      if (bagObject && character) {
+        bagNudgeCooldown = Math.max(0, bagNudgeCooldown - delta);
+        const charPos = character.getPosition();
+        if (charPos) {
+          const charR = config.character.collisionRadius ?? 0.22;
+          const px = Math.max(
+            _bagCurrentAabb.minX,
+            Math.min(charPos.x, _bagCurrentAabb.maxX),
+          );
+          const pz = Math.max(
+            _bagCurrentAabb.minZ,
+            Math.min(charPos.z, _bagCurrentAabb.maxZ),
+          );
+          const dx = charPos.x - px;
+          const dz = charPos.z - pz;
+          if (dx * dx + dz * dz < charR * charR && bagNudgeCooldown <= 0) {
+            const bagCx = (_bagCurrentAabb.minX + _bagCurrentAabb.maxX) * 0.5;
+            const bagCz = (_bagCurrentAabb.minZ + _bagCurrentAabb.maxZ) * 0.5;
+            let pushX = bagCx - charPos.x;
+            let pushZ = bagCz - charPos.z;
+            const len = Math.sqrt(pushX * pushX + pushZ * pushZ);
+            if (len > 1e-6) {
+              pushX /= len;
+              pushZ /= len;
+            } else {
+              pushX = 0;
+              pushZ = 1;
+            }
+            bagVelocityX += pushX * BAG_IMPULSE_STRENGTH;
+            bagVelocityZ += pushZ * BAG_IMPULSE_STRENGTH;
+            const speed = Math.sqrt(
+              bagVelocityX * bagVelocityX + bagVelocityZ * bagVelocityZ,
+            );
+            if (speed > BAG_MAX_SPEED) {
+              const inv = BAG_MAX_SPEED / speed;
+              bagVelocityX *= inv;
+              bagVelocityZ *= inv;
+            }
+            // 번갈아 사운드 재생
+            const sndIdx = bagTouchSoundIndex % 2;
+            bagTouchSoundIndex++;
+            if (!bagTouchAudios[sndIdx]) {
+              bagTouchAudios[sndIdx] = new window.Audio();
+              bagTouchAudios[sndIdx].preload = "auto";
+              bagTouchAudios[sndIdx].src = resolvePublicAssetUrl(
+                BAG_TOUCH_SOUNDS[sndIdx],
+              );
+            }
+            const snd = bagTouchAudios[sndIdx];
+            snd.volume = BAG_TOUCH_SOUND_VOLUME;
+            snd.currentTime = 0;
+            snd.play().catch(() => {});
+            bagNudgeCooldown = BAG_NUDGE_COOLDOWN_SEC;
+          }
+        }
+
+        const frictionFactor = Math.exp(-BAG_FRICTION * delta);
+        bagVelocityX *= frictionFactor;
+        bagVelocityZ *= frictionFactor;
+
+        const speed = Math.sqrt(
+          bagVelocityX * bagVelocityX + bagVelocityZ * bagVelocityZ,
+        );
+        if (speed > 1e-4) {
+          // 충돌 원의 중심 = 현재 AABB 센터 (origin ≠ AABB center 인 경우에도 정확한 충돌 보장)
+          const circleCX = (_bagCurrentAabb.minX + _bagCurrentAabb.maxX) * 0.5;
+          const circleCZ = (_bagCurrentAabb.minZ + _bagCurrentAabb.maxZ) * 0.5;
+          let targetCX = circleCX + bagVelocityX * delta;
+          let targetCZ = circleCZ + bagVelocityZ * delta;
+
+          // 최대 이동 범위 제한 (초기 AABB 센터 기준)
+          const driftX = targetCX - bagAabbCenterInitX;
+          const driftZ = targetCZ - bagAabbCenterInitZ;
+          const drift = Math.sqrt(driftX * driftX + driftZ * driftZ);
+          if (drift > BAG_MAX_DRIFT) {
+            const s = BAG_MAX_DRIFT / drift;
+            targetCX = bagAabbCenterInitX + driftX * s;
+            targetCZ = bagAabbCenterInitZ + driftZ * s;
+            bagVelocityX *= -0.3;
+            bagVelocityZ *= -0.3;
+          }
+
+          // 정적 오브젝트와 충돌 해소 (AABB 센터 기준 슬라이드)
+          const slid = slideMoveXZAgainstAABBs(
+            circleCX,
+            circleCZ,
+            targetCX,
+            targetCZ,
+            bagCollisionRadius,
+            bagStaticColliders,
+          );
+          if (Math.abs(slid.x - targetCX) > 1e-6) bagVelocityX *= -0.15;
+          if (Math.abs(slid.z - targetCZ) > 1e-6) bagVelocityZ *= -0.15;
+
+          // slid = 새 AABB 센터 → origin = 센터 - offset → 월드→로컬 변환 후 적용
+          bagObject.getWorldPosition(_bagWorldPos);
+          _bagWorldPos.x = slid.x - bagAabbOffsetX;
+          _bagWorldPos.z = slid.z - bagAabbOffsetZ;
+          if (bagObject.parent) bagObject.parent.worldToLocal(_bagWorldPos);
+          bagObject.position.x = _bagWorldPos.x;
+          bagObject.position.z = _bagWorldPos.z;
+
+          // AABB 업데이트 (센터 기준으로 halfW/halfD 유지)
+          const halfW2 = (_bagInitialAabb.maxX - _bagInitialAabb.minX) * 0.5;
+          const halfD2 = (_bagInitialAabb.maxZ - _bagInitialAabb.minZ) * 0.5;
+          _bagCurrentAabb.minX = slid.x - halfW2;
+          _bagCurrentAabb.maxX = slid.x + halfW2;
+          _bagCurrentAabb.minZ = slid.z - halfD2;
+          _bagCurrentAabb.maxZ = slid.z + halfD2;
+        }
       }
     },
 
@@ -1239,8 +1704,55 @@ export function Stage6() {
       atmEmissiveMaterials.length = 0;
       atmEmissiveProgress = 0;
       atmEmissiveTarget = 0;
+      if (telRingAgainTimeoutId) {
+        window.clearTimeout(telRingAgainTimeoutId);
+        telRingAgainTimeoutId = 0;
+      }
+      if (phoneRingAudio) {
+        phoneRingAudio.pause();
+        phoneRingAudio.src = "";
+        phoneRingAudio = null;
+      }
+      if (phoneHangupAudio) {
+        phoneHangupAudio.onended = null;
+        phoneHangupAudio.pause();
+        phoneHangupAudio.src = "";
+        phoneHangupAudio = null;
+      }
+      if (phoneCallAudio) {
+        phoneCallAudio.onended = null;
+        phoneCallAudio.pause();
+        phoneCallAudio.src = "";
+        phoneCallAudio = null;
+      }
+      isTelActivated = false;
+      isTelRinging = false;
+      telRootRef = null;
+      telEmissiveMaterials.length = 0;
+      telEmissiveProgress = 0;
+      telEmissiveTarget = 0;
+      telCallIndex = 0;
       isSceneInteractionLocked = false;
       intRaycastMeshes.length = 0;
+
+      bagObject = null;
+      bagVelocityX = 0;
+      bagVelocityZ = 0;
+      bagNudgeCooldown = 0;
+      bagStaticColliders = [];
+      bagCollisionRadius = 0.3;
+      bagAabbCenterInitX = 0;
+      bagAabbCenterInitZ = 0;
+      bagAabbOffsetX = 0;
+      bagAabbOffsetZ = 0;
+      for (let i = 0; i < bagTouchAudios.length; i++) {
+        if (bagTouchAudios[i]) {
+          bagTouchAudios[i].pause();
+          bagTouchAudios[i].src = "";
+          bagTouchAudios[i] = null;
+        }
+      }
+      bagTouchSoundIndex = 0;
 
       if (charMixer) {
         charMixer.stopAllAction();
@@ -1253,6 +1765,11 @@ export function Stage6() {
       if (charBubbleEl?.parentNode)
         charBubbleEl.parentNode.removeChild(charBubbleEl);
       charBubbleEl = null;
+
+      hideTelBubble();
+      if (telBubbleEl?.parentNode)
+        telBubbleEl.parentNode.removeChild(telBubbleEl);
+      telBubbleEl = null;
 
       // gltf.scene은 캐시에 유지 — remove만, dispose 금지
       const cachedScene = gltfSceneRef;
