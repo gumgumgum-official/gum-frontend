@@ -79,6 +79,11 @@ export async function rasterizeSvgToTexture(svgText) {
   if (!ctx) throw new Error("2d context unavailable");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  // SVG 패스 경계의 서브픽셀 투명 갭을 채워 TV(DPR=1)에서 금간 현상 제거.
+  // destination-over: 이미 그려진 불투명 픽셀은 유지하고 투명 픽셀 위치만 뒤에서 채운다.
+  ctx.globalCompositeOperation = "destination-over";
+  ctx.drawImage(img, -1, -1, canvas.width + 2, canvas.height + 2);
+  ctx.globalCompositeOperation = "source-over";
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
