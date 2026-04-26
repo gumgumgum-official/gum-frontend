@@ -33,7 +33,10 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
-import { slideMoveXZAgainstAABBs } from "../utils/stages/stage3/islandStaticColliders.js";
+import {
+  createBagPhysics,
+  BAG_OBJECT_NAME,
+} from "../utils/stages/stage6/bagPhysics.js";
 const INT_PREFIX = "INT_";
 const CHAR_ROOT_NAMES = [
   "INT_Gum_Cry",
@@ -95,47 +98,12 @@ const _floorRayOrigin = new THREE.Vector3();
 const _escWorld = new THREE.Vector3();
 const _toCam = new THREE.Vector3();
 
-// --- OBJ_Bag1 dynamic nudge physics ---
-const BAG_OBJECT_NAME = "OBJ_Bag1";
-const BAG_IMPULSE_STRENGTH = 5.5;
-const BAG_FRICTION = 3.5;
-const BAG_NUDGE_COOLDOWN_SEC = 0.22;
-const BAG_MAX_DRIFT = 3.5;
-const BAG_MAX_SPEED = 7.0;
-const BAG_TOUCH_SOUNDS = [
-  "/static/sounds/airport/bag_touch1.mp3",
-  "/static/sounds/airport/bag_touch2.mp3",
-];
-const BAG_TOUCH_SOUND_VOLUME = 0.55;
-
 /**
  * @param {THREE.Object3D} obj
  * @returns {obj is THREE.Mesh}
  */
 function isMeshObject3D(obj) {
   return "isMesh" in obj && obj.isMesh === true;
-}
-
-/**
- * @param {THREE.Object3D} obj
- * @returns {Array<{minX: number, maxX: number, minZ: number, maxZ: number}>}
- */
-function collectMeshAabbsXZ(obj) {
-  const out = [];
-  const tmp = new THREE.Box3();
-  obj.updateMatrixWorld(true);
-  obj.traverse((child) => {
-    if (!isMeshObject3D(child)) return;
-    tmp.setFromObject(child);
-    if (tmp.isEmpty()) return;
-    out.push({
-      minX: tmp.min.x,
-      maxX: tmp.max.x,
-      minZ: tmp.min.z,
-      maxZ: tmp.max.z,
-    });
-  });
-  return out;
 }
 
 function normalizeAnimToken(name) {
@@ -294,26 +262,7 @@ export function Stage6() {
   let phoneCallAudio = null;
   let isAirportChimeVisible = false;
 
-  /** @type {THREE.Object3D | null} */
-  let bagObject = null;
-  let bagVelocityX = 0;
-  let bagVelocityZ = 0;
-  let bagNudgeCooldown = 0;
-  const _bagInitialWorldPos = new THREE.Vector3();
-  const _bagWorldPos = new THREE.Vector3();
-  const _bagInitialAabb = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
-  const _bagCurrentAabb = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
-  // AABB 센터 기준 충돌 — origin ≠ AABB center 인 경우 올바른 충돌 보장
-  let bagAabbCenterInitX = 0;
-  let bagAabbCenterInitZ = 0;
-  let bagAabbOffsetX = 0; // world: AABB센터 - origin
-  let bagAabbOffsetZ = 0;
-  /** @type {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb[]} */
-  let bagStaticColliders = [];
-  let bagCollisionRadius = 0.3;
-  /** @type {[HTMLAudioElement | null, HTMLAudioElement | null]} */
-  const bagTouchAudios = [null, null];
-  let bagTouchSoundIndex = 0;
+  const bagPhysics = createBagPhysics();
 
   function isLoadingOverlayVisible() {
     const loadingOverlay = document.getElementById("loading-overlay");
@@ -1413,48 +1362,11 @@ export function Stage6() {
             }
           }
 
-          // Initialize dynamic bag before collider collection so it can be excluded
-          bagObject = model.getObjectByName(BAG_OBJECT_NAME) ?? null;
-          if (bagObject) {
-            bagObject.updateMatrixWorld(true);
-            bagObject.getWorldPosition(_bagInitialWorldPos);
-            const bagWorldBox = new THREE.Box3().setFromObject(bagObject);
-            _bagInitialAabb.minX = bagWorldBox.min.x;
-            _bagInitialAabb.maxX = bagWorldBox.max.x;
-            _bagInitialAabb.minZ = bagWorldBox.min.z;
-            _bagInitialAabb.maxZ = bagWorldBox.max.z;
-            Object.assign(_bagCurrentAabb, _bagInitialAabb);
-            bagVelocityX = 0;
-            bagVelocityZ = 0;
-            bagNudgeCooldown = 0;
-            const halfW = (_bagInitialAabb.maxX - _bagInitialAabb.minX) * 0.5;
-            const halfD = (_bagInitialAabb.maxZ - _bagInitialAabb.minZ) * 0.5;
-            bagAabbCenterInitX =
-              (_bagInitialAabb.minX + _bagInitialAabb.maxX) * 0.5;
-            bagAabbCenterInitZ =
-              (_bagInitialAabb.minZ + _bagInitialAabb.maxZ) * 0.5;
-            bagAabbOffsetX = bagAabbCenterInitX - _bagInitialWorldPos.x;
-            bagAabbOffsetZ = bagAabbCenterInitZ - _bagInitialWorldPos.z;
-            bagCollisionRadius = Math.max(halfW, halfD);
-          }
-
           const allStaticColliders = collectStage6StaticColliderBoxes(model);
-          const bagMeshBoxes = bagObject ? collectMeshAabbsXZ(bagObject) : [];
-          const staticColliderBoxes =
-            bagMeshBoxes.length > 0
-              ? allStaticColliders.filter(
-                  (box) =>
-                    !bagMeshBoxes.some(
-                      (b) =>
-                        Math.abs(box.minX - b.minX) < 0.01 &&
-                        Math.abs(box.maxX - b.maxX) < 0.01 &&
-                        Math.abs(box.minZ - b.minZ) < 0.01 &&
-                        Math.abs(box.maxZ - b.maxZ) < 0.01,
-                    ),
-                )
-              : allStaticColliders;
-
-          bagStaticColliders = staticColliderBoxes;
+          const staticColliderBoxes = bagPhysics.setup(
+            model.getObjectByName(BAG_OBJECT_NAME) ?? null,
+            allStaticColliders,
+          );
 
           const characterController = /** @type {any} */ (character);
           characterController?.setup(floorY, bounds, staticColliderBoxes, {
@@ -1498,22 +1410,7 @@ export function Stage6() {
             });
             objects.push(model);
             scene.add(model);
-            // bench 메쉬별 AABB를 캐리어 충돌체에 추가 (단일 AABB는 빈 공간 포함/실제 geometry 누락 발생)
-            model.updateMatrixWorld(true);
-            const _benchTmp = new THREE.Box3();
-            model.traverse((child) => {
-              if (!child.isMesh) return;
-              _benchTmp.setFromObject(child);
-              if (_benchTmp.isEmpty()) return;
-              bagStaticColliders.push({
-                minX: _benchTmp.min.x,
-                maxX: _benchTmp.max.x,
-                minZ: _benchTmp.min.z,
-                maxZ: _benchTmp.max.z,
-                minY: _benchTmp.min.y,
-                maxY: _benchTmp.max.y,
-              });
-            });
+            bagPhysics.addBenchColliders(model);
           },
           onError: (err) =>
             console.warn("❌ Stage6 bench 로드 실패:", benchConfig.path, err),
@@ -1598,117 +1495,12 @@ export function Stage6() {
         character.update(delta, this.camera, { skipCameraFollow: true });
       }
 
-      if (bagObject && character) {
-        bagNudgeCooldown = Math.max(0, bagNudgeCooldown - delta);
-        const charPos = character.getPosition();
-        if (charPos) {
-          const charR = config.character.collisionRadius ?? 0.22;
-          const px = Math.max(
-            _bagCurrentAabb.minX,
-            Math.min(charPos.x, _bagCurrentAabb.maxX),
-          );
-          const pz = Math.max(
-            _bagCurrentAabb.minZ,
-            Math.min(charPos.z, _bagCurrentAabb.maxZ),
-          );
-          const dx = charPos.x - px;
-          const dz = charPos.z - pz;
-          if (dx * dx + dz * dz < charR * charR && bagNudgeCooldown <= 0) {
-            const bagCx = (_bagCurrentAabb.minX + _bagCurrentAabb.maxX) * 0.5;
-            const bagCz = (_bagCurrentAabb.minZ + _bagCurrentAabb.maxZ) * 0.5;
-            let pushX = bagCx - charPos.x;
-            let pushZ = bagCz - charPos.z;
-            const len = Math.sqrt(pushX * pushX + pushZ * pushZ);
-            if (len > 1e-6) {
-              pushX /= len;
-              pushZ /= len;
-            } else {
-              pushX = 0;
-              pushZ = 1;
-            }
-            bagVelocityX += pushX * BAG_IMPULSE_STRENGTH;
-            bagVelocityZ += pushZ * BAG_IMPULSE_STRENGTH;
-            const speed = Math.sqrt(
-              bagVelocityX * bagVelocityX + bagVelocityZ * bagVelocityZ,
-            );
-            if (speed > BAG_MAX_SPEED) {
-              const inv = BAG_MAX_SPEED / speed;
-              bagVelocityX *= inv;
-              bagVelocityZ *= inv;
-            }
-            // 번갈아 사운드 재생
-            const sndIdx = bagTouchSoundIndex % 2;
-            bagTouchSoundIndex++;
-            if (!bagTouchAudios[sndIdx]) {
-              bagTouchAudios[sndIdx] = new window.Audio();
-              bagTouchAudios[sndIdx].preload = "auto";
-              bagTouchAudios[sndIdx].src = resolvePublicAssetUrl(
-                BAG_TOUCH_SOUNDS[sndIdx],
-              );
-            }
-            const snd = bagTouchAudios[sndIdx];
-            snd.volume = BAG_TOUCH_SOUND_VOLUME;
-            snd.currentTime = 0;
-            snd.play().catch(() => {});
-            bagNudgeCooldown = BAG_NUDGE_COOLDOWN_SEC;
-          }
-        }
-
-        const frictionFactor = Math.exp(-BAG_FRICTION * delta);
-        bagVelocityX *= frictionFactor;
-        bagVelocityZ *= frictionFactor;
-
-        const speed = Math.sqrt(
-          bagVelocityX * bagVelocityX + bagVelocityZ * bagVelocityZ,
-        );
-        if (speed > 1e-4) {
-          // 충돌 원의 중심 = 현재 AABB 센터 (origin ≠ AABB center 인 경우에도 정확한 충돌 보장)
-          const circleCX = (_bagCurrentAabb.minX + _bagCurrentAabb.maxX) * 0.5;
-          const circleCZ = (_bagCurrentAabb.minZ + _bagCurrentAabb.maxZ) * 0.5;
-          let targetCX = circleCX + bagVelocityX * delta;
-          let targetCZ = circleCZ + bagVelocityZ * delta;
-
-          // 최대 이동 범위 제한 (초기 AABB 센터 기준)
-          const driftX = targetCX - bagAabbCenterInitX;
-          const driftZ = targetCZ - bagAabbCenterInitZ;
-          const drift = Math.sqrt(driftX * driftX + driftZ * driftZ);
-          if (drift > BAG_MAX_DRIFT) {
-            const s = BAG_MAX_DRIFT / drift;
-            targetCX = bagAabbCenterInitX + driftX * s;
-            targetCZ = bagAabbCenterInitZ + driftZ * s;
-            bagVelocityX *= -0.3;
-            bagVelocityZ *= -0.3;
-          }
-
-          // 정적 오브젝트와 충돌 해소 (AABB 센터 기준 슬라이드)
-          const slid = slideMoveXZAgainstAABBs(
-            circleCX,
-            circleCZ,
-            targetCX,
-            targetCZ,
-            bagCollisionRadius,
-            bagStaticColliders,
-          );
-          if (Math.abs(slid.x - targetCX) > 1e-6) bagVelocityX *= -0.15;
-          if (Math.abs(slid.z - targetCZ) > 1e-6) bagVelocityZ *= -0.15;
-
-          // slid = 새 AABB 센터 → origin = 센터 - offset → 월드→로컬 변환 후 적용
-          bagObject.getWorldPosition(_bagWorldPos);
-          _bagWorldPos.x = slid.x - bagAabbOffsetX;
-          _bagWorldPos.z = slid.z - bagAabbOffsetZ;
-          if (bagObject.parent) bagObject.parent.worldToLocal(_bagWorldPos);
-          bagObject.position.x = _bagWorldPos.x;
-          bagObject.position.z = _bagWorldPos.z;
-
-          // AABB 업데이트 (센터 기준으로 halfW/halfD 유지)
-          const halfW2 = (_bagInitialAabb.maxX - _bagInitialAabb.minX) * 0.5;
-          const halfD2 = (_bagInitialAabb.maxZ - _bagInitialAabb.minZ) * 0.5;
-          _bagCurrentAabb.minX = slid.x - halfW2;
-          _bagCurrentAabb.maxX = slid.x + halfW2;
-          _bagCurrentAabb.minZ = slid.z - halfD2;
-          _bagCurrentAabb.maxZ = slid.z + halfD2;
-        }
-      }
+      bagPhysics.update(
+        character?.getPosition() ?? null,
+        config.character.collisionRadius ?? 0.22,
+        delta,
+        this.camera,
+      );
     },
 
     cleanup(scene) {
@@ -1797,24 +1589,7 @@ export function Stage6() {
       isSceneInteractionLocked = false;
       intRaycastMeshes.length = 0;
 
-      bagObject = null;
-      bagVelocityX = 0;
-      bagVelocityZ = 0;
-      bagNudgeCooldown = 0;
-      bagStaticColliders = [];
-      bagCollisionRadius = 0.3;
-      bagAabbCenterInitX = 0;
-      bagAabbCenterInitZ = 0;
-      bagAabbOffsetX = 0;
-      bagAabbOffsetZ = 0;
-      for (let i = 0; i < bagTouchAudios.length; i++) {
-        if (bagTouchAudios[i]) {
-          bagTouchAudios[i].pause();
-          bagTouchAudios[i].src = "";
-          bagTouchAudios[i] = null;
-        }
-      }
-      bagTouchSoundIndex = 0;
+      bagPhysics.cleanup();
 
       if (charMixer) {
         charMixer.stopAllAction();
