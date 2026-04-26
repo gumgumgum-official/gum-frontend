@@ -71,18 +71,18 @@ const TEL_EMISSIVE_DARK_STRENGTH = 0.06;
 const TEL_EMISSIVE_BRIGHT_STRENGTH = 1.25;
 const TEL_EMISSIVE_TWEEN_SPEED = 3.5;
 const PHONE_RING_SOUND_PATH = "/static/sounds/airport/phone_ring.mp3";
-const PHONE_RING_SOUND_VOLUME = 0.6;
+const PHONE_RING_SOUND_VOLUME = 0.42;
 const PHONE_HANGUP_SOUND_PATH = "/static/sounds/airport/phone_hangup.mp3";
-const PHONE_HANGUP_SOUND_VOLUME = 0.7;
+const PHONE_HANGUP_SOUND_VOLUME = 0.49;
 const PHONE_CALL_SOUNDS = [
-  "/static/sounds/airport/phone_prank.mp3",
   "/static/sounds/airport/phone_love.mp3",
+  "/static/sounds/airport/phone_prank.mp3",
 ];
-const PHONE_CALL_SUBTITLES = [
-  null,
-  "당신을 사랑하는 익명의 껌딱지에게 전화가 왔네요! 💌",
+const PHONE_CALL_RING_SUBTITLES = [
+  "당신을 사랑하는 익명의 껌딱지에게 전화가 왔네요!",
+  "어! 또 다시 전화가 온 것 같아요! 한번 받아볼까요?",
 ];
-const PHONE_CALL_SOUND_VOLUME = 0.7;
+const PHONE_CALL_SOUND_VOLUME = 0.49;
 const TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS = 5000;
 const TEL_RING_AGAIN_DELAY_MS = 10000;
 const TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS = 5000;
@@ -465,7 +465,43 @@ export function Stage6() {
     }
     airportAnnounceIntroAudio.volume = AIRPORT_ANNOUNCE_INTRO_VOLUME;
     airportAnnounceIntroAudio.currentTime = 0;
+
+    // Autoplay may be silently blocked (Promise stays pending forever on SPA nav).
+    // Use this flag to fire the fallback exactly once whether catch() or watchdog fires.
+    let announceFallbackFired = false;
+    const runAnnounceFallback = () => {
+      if (announceFallbackFired || !isStage6Active) return;
+      announceFallbackFired = true;
+      isSceneInteractionLocked = false;
+      const cues = STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES ?? [];
+      let cueIdx = 0;
+      const showNextCue = () => {
+        if (!isStage6Active || cueIdx >= cues.length) {
+          window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
+          telActivateTimeoutId = window.setTimeout(() => {
+            telActivateTimeoutId = 0;
+            activateTelRinging();
+          }, TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
+          return;
+        }
+        const cue = cues[cueIdx];
+        cueIdx++;
+        window.dispatchEvent(
+          new CustomEvent(AIRPORT_SUBTITLE_SHOW_EVENT, {
+            detail: { text: cue.text },
+          }),
+        );
+        const holdMs =
+          cueIdx < cues.length
+            ? (cues[cueIdx].startSec - cue.startSec) * 1000
+            : 2500;
+        window.setTimeout(showNextCue, Math.max(holdMs, 400));
+      };
+      showNextCue();
+    };
+
     airportAnnounceIntroAudio.onplay = () => {
+      announceFallbackFired = true; // audio is actually playing, suppress watchdog
       activeSubtitleCueIndex = -1;
       isAirportSubtitleVisible = false;
       dispatchAirportSubtitleTextByTime(0);
@@ -485,9 +521,15 @@ export function Stage6() {
         activateTelRinging();
       }, TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
     };
-    airportAnnounceIntroAudio.play().catch(() => {
-      isSceneInteractionLocked = false;
-    });
+    const announcePlayPromise = airportAnnounceIntroAudio.play();
+    if (
+      announcePlayPromise &&
+      typeof announcePlayPromise.catch === "function"
+    ) {
+      announcePlayPromise.catch(runAnnounceFallback);
+    }
+    // Watchdog: covers the case where play() returns a pending-forever Promise
+    window.setTimeout(runAnnounceFallback, 2500);
   }
 
   function playAtmClickSound() {
@@ -589,8 +631,27 @@ export function Stage6() {
       airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
       airplaneCallSignAudio.currentTime = 0;
       isAirportChimeVisible = false;
+
+      if (!isStage6Active) return;
+
+      // Watchdog: if ding audio never plays (Promise pending), skip to announcement
+      let chimeFallbackFired = false;
+      const runChimeFallback = () => {
+        if (chimeFallbackFired || !isStage6Active) return;
+        chimeFallbackFired = true;
+        if (isAirportChimeVisible) {
+          window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
+          isAirportChimeVisible = false;
+        }
+        airportAnnounceIntroTimeoutId = window.setTimeout(() => {
+          airportAnnounceIntroTimeoutId = 0;
+          if (isStage6Active) playAirportAnnounceIntro();
+        }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
+      };
+
       airplaneCallSignAudio.onplay = null;
       airplaneCallSignAudio.ontimeupdate = () => {
+        chimeFallbackFired = true; // audio is playing, suppress watchdog
         if (isAirportChimeVisible) return;
         if (
           Number(airplaneCallSignAudio?.currentTime ?? 0) <
@@ -608,15 +669,15 @@ export function Stage6() {
         }
         airportAnnounceIntroTimeoutId = window.setTimeout(() => {
           airportAnnounceIntroTimeoutId = 0;
-          playAirportAnnounceIntro();
+          if (isStage6Active) playAirportAnnounceIntro();
         }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
       };
-      airplaneCallSignAudio.play().catch(() => {
-        airportAnnounceIntroTimeoutId = window.setTimeout(() => {
-          airportAnnounceIntroTimeoutId = 0;
-          playAirportAnnounceIntro();
-        }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
-      });
+      const chimePlayPromise = airplaneCallSignAudio.play();
+      if (chimePlayPromise && typeof chimePlayPromise.catch === "function") {
+        chimePlayPromise.catch(runChimeFallback);
+      }
+      // Watchdog: covers pending-forever Promise (AudioContext suspended on SPA nav)
+      window.setTimeout(runChimeFallback, 2500);
     }, AIRPLANE_CALL_SIGN_DELAY_MS);
   }
 
@@ -910,12 +971,12 @@ export function Stage6() {
     telEmissiveTarget = 1;
     playPhoneRing();
     showTelBubble("click!");
-    dispatchStage6SubtitleSequence([
-      { text: "어! 전화가 온 것 같아요! 한번 받아볼까요? 📞", holdMs: 3000 },
-    ]);
+    const ringSubtitle =
+      PHONE_CALL_RING_SUBTITLES[telCallIndex] ?? PHONE_CALL_RING_SUBTITLES[0];
+    dispatchStage6SubtitleSequence([{ text: ringSubtitle, holdMs: 3000 }]);
   }
 
-  function startPhoneCallAfterHangup(callSrc, callSubtitle) {
+  function startPhoneCallAfterHangup(callSrc) {
     if (!phoneCallAudio) {
       phoneCallAudio = new window.Audio();
       phoneCallAudio.preload = "auto";
@@ -925,21 +986,22 @@ export function Stage6() {
     phoneCallAudio.currentTime = 0;
     phoneCallAudio.src = callSrc;
     phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
-    if (callSubtitle) {
-      dispatchStage6SubtitleSequence([{ text: callSubtitle, holdMs: 3500 }]);
-    }
     phoneCallAudio.onended = () => {
       if (telCallIndex < PHONE_CALL_SOUNDS.length && isStage6Active) {
+        telEmissiveTarget = 0;
+        isTelActivated = false;
         telRingAgainTimeoutId = window.setTimeout(() => {
           telRingAgainTimeoutId = 0;
           if (isStage6Active) {
+            isTelActivated = true;
+            telEmissiveTarget = 1;
             playPhoneRing();
             showTelBubble("click!");
+            const ringSubtitle =
+              PHONE_CALL_RING_SUBTITLES[telCallIndex] ??
+              PHONE_CALL_RING_SUBTITLES[PHONE_CALL_RING_SUBTITLES.length - 1];
             dispatchStage6SubtitleSequence([
-              {
-                text: "어! 전화가 온 것 같아요! 한번 받아볼까요? 📞",
-                holdMs: 3000,
-              },
+              { text: ringSubtitle, holdMs: 3000 },
             ]);
           }
         }, TEL_RING_AGAIN_DELAY_MS);
@@ -966,9 +1028,9 @@ export function Stage6() {
     if (telCallIndex >= PHONE_CALL_SOUNDS.length) return;
     stopPhoneRing();
     hideTelBubble();
+    isTelActivated = false;
     const callIdx = telCallIndex;
     const callSrc = resolvePublicAssetUrl(PHONE_CALL_SOUNDS[callIdx]);
-    const callSubtitle = PHONE_CALL_SUBTITLES[callIdx] ?? null;
     telCallIndex++;
     if (!phoneHangupAudio) {
       phoneHangupAudio = new window.Audio();
@@ -980,12 +1042,12 @@ export function Stage6() {
     phoneHangupAudio.currentTime = 0;
     phoneHangupAudio.volume = PHONE_HANGUP_SOUND_VOLUME;
     phoneHangupAudio.onended = () => {
-      if (isStage6Active) startPhoneCallAfterHangup(callSrc, callSubtitle);
+      if (isStage6Active) startPhoneCallAfterHangup(callSrc);
     };
     const p = phoneHangupAudio.play();
     if (p && typeof p.catch === "function") {
       p.catch(() => {
-        if (isStage6Active) startPhoneCallAfterHangup(callSrc, callSubtitle);
+        if (isStage6Active) startPhoneCallAfterHangup(callSrc);
       });
     }
   }
