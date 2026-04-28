@@ -11,6 +11,7 @@ import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
 import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
 import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
 import { BasicWhiteModal } from "./components/BasicWhiteModal.jsx";
+import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
@@ -99,8 +100,17 @@ export function App() {
         isOpen={showGameMachineModal}
         onClose={() => setShowGameMachineModal(false)}
         ariaLabel="게임기 기본 모달"
+        hideCloseButton
+        contentStyle={{
+          width: "min(860px, 100%)",
+          minHeight: "auto",
+          background: "transparent",
+          boxShadow: "none",
+          padding: 0,
+        }}
+        bodyStyle={{ marginTop: 0 }}
       >
-        <h2>게임기 모달</h2>
+        <GgumRunnerMinigame onClose={() => setShowGameMachineModal(false)} />
       </BasicWhiteModal>
       <Stage6PosterModal
         isOpen={showStage6PosterModal}

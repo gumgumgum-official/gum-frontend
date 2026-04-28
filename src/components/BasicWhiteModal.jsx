@@ -1,7 +1,15 @@
 import { useEffect } from "react";
 import "./BasicWhiteModal.css";
 
-export function BasicWhiteModal({ isOpen, onClose, children, ariaLabel }) {
+export function BasicWhiteModal({
+  isOpen,
+  onClose,
+  children,
+  ariaLabel,
+  contentStyle,
+  bodyStyle,
+  hideCloseButton = false,
+}) {
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -27,17 +35,22 @@ export function BasicWhiteModal({ isOpen, onClose, children, ariaLabel }) {
     >
       <div
         className="basic-white-modal-content"
+        style={contentStyle}
         onClick={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
-          className="basic-white-modal-close"
-          onClick={onClose}
-          aria-label="모달 닫기"
-        >
-          ×
-        </button>
-        <div className="basic-white-modal-body">{children}</div>
+        {!hideCloseButton && (
+          <button
+            type="button"
+            className="basic-white-modal-close"
+            onClick={onClose}
+            aria-label="모달 닫기"
+          >
+            ×
+          </button>
+        )}
+        <div className="basic-white-modal-body" style={bodyStyle}>
+          {children}
+        </div>
       </div>
     </div>
   );
