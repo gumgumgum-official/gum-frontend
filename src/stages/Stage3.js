@@ -360,6 +360,9 @@ export function Stage3() {
   let pendingEggDiscoverySubtitle = null;
   /** @type {(() => void) | null} */
   let unlistenGumCardsForEggSubtitle = null;
+  let isNoticeModalOpen = false;
+  let isGameMachineModalOpen = false;
+  let isTentModalOpen = false;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -660,6 +663,10 @@ export function Stage3() {
   }
 
   const handleStageKeyDown = (event) => {
+    if (hasBlockingOverlayOpen()) {
+      if (event.key === "Enter") event.preventDefault();
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       // punch 애니메이션 실행 중에는 다음 타격을 막는다 (한 번 부수고 애니 끝까지 대기)
@@ -910,7 +917,25 @@ export function Stage3() {
   }
 
   function handleNoticeModalClosedForEggSubtitle() {
+    isNoticeModalOpen = false;
+    hideStage3InteractionBubbles();
     flushPendingEggDiscoverySubtitle();
+  }
+
+  function hideStage3InteractionBubbles() {
+    userWorryEnterBubbleEl?.classList.remove("is-visible");
+    intClickHintBubbleEl?.classList.remove("is-visible");
+  }
+
+  function hasBlockingOverlayOpen() {
+    return isNoticeModalOpen || isGameMachineModalOpen || isTentModalOpen;
+  }
+
+  function clearStage3MovementInputs() {
+    const keys = keyboard.keys;
+    for (const k of Object.keys(keys)) {
+      keys[k] = false;
+    }
   }
 
   function runStage3EntrySubtitlesAndIntro() {
@@ -1187,6 +1212,8 @@ export function Stage3() {
 
     if (gameMachineRef) {
       unlistenMinigameClose = onMinigameClose(() => {
+        isGameMachineModalOpen = false;
+        hideStage3InteractionBubbles();
         closeMinigame({
           camera: cameraRef,
           orbitControls: debugControls?.getOrbitControls?.() ?? null,
@@ -1465,12 +1492,18 @@ export function Stage3() {
 
   /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
   function showNoticeModal() {
+    isNoticeModalOpen = true;
+    clearStage3MovementInputs();
+    hideStage3InteractionBubbles();
     playRandomNoticePaperSound(config.notice?.paperSoundPaths);
     window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
   }
 
   /** 게임기 클릭 시 기본 모달 표시 (React App에 커스텀 이벤트로 전달) */
   function showGameMachineModal() {
+    isGameMachineModalOpen = true;
+    clearStage3MovementInputs();
+    hideStage3InteractionBubbles();
     window.dispatchEvent(new CustomEvent("gum:showGameMachineModal"));
   }
 
@@ -1575,6 +1608,9 @@ export function Stage3() {
     }
     // INT_tent → 껌 카드(타로) 모달 (효과음은 openGumCardsModal 내부)
     if (target === "tent") {
+      isTentModalOpen = true;
+      clearStage3MovementInputs();
+      hideStage3InteractionBubbles();
       openGumCardsModal();
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
@@ -1645,6 +1681,10 @@ export function Stage3() {
 
   function updateIntClickHintBubble() {
     if (!intClickHintBubbleEl || !cameraRef || !canvasRef) return;
+    if (hasBlockingOverlayOpen()) {
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
     const charPos = character?.getPosition?.();
     if (!charPos || intProximityTargets.length === 0) {
       intClickHintBubbleEl.classList.remove("is-visible");
@@ -3266,6 +3306,8 @@ export function Stage3() {
         handleNoticeModalClosedForEggSubtitle,
       );
       unlistenGumCardsForEggSubtitle = onGumCardsModalClose(() => {
+        isTentModalOpen = false;
+        hideStage3InteractionBubbles();
         flushPendingEggDiscoverySubtitle();
       });
 
@@ -3459,6 +3501,9 @@ export function Stage3() {
         }
       }
       if (character) {
+        if (hasBlockingOverlayOpen()) {
+          clearStage3MovementInputs();
+        }
         character.update(delta, this.camera, {
           skipCameraFollow: cameraIntro.active || !cameraIntro.completed,
           cameraYawAssistRad,
@@ -3569,6 +3614,10 @@ export function Stage3() {
             gumFollowers?.getPrimaryFollowerBubbleAnchorWorld?.(_projWorry),
           );
         if (userWorryEnterBubbleEl) {
+          if (hasBlockingOverlayOpen()) {
+            userWorryEnterBubbleEl.classList.remove("is-visible");
+            return;
+          }
           if (nearLetter && gumBubbleAnchorOk) {
             if (userWorryEnterBubblePhase === "off") {
               userWorryEnterBubblePhase = "show";
@@ -3611,6 +3660,9 @@ export function Stage3() {
       stopStage3IntroAudio();
       gumCancelled = true;
       pendingEggDiscoverySubtitle = null;
+      isNoticeModalOpen = false;
+      isGameMachineModalOpen = false;
+      isTentModalOpen = false;
       if (stage3EntryStampRevealTimerId != null) {
         window.clearTimeout(stage3EntryStampRevealTimerId);
         stage3EntryStampRevealTimerId = null;
