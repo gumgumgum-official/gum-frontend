@@ -9,32 +9,45 @@ const DISPLAY_W = 48;
 const DISPLAY_H = 48;
 const TOTAL_RUN_FRAMES = 4;
 const SPRITE_PATH = "/assets/minigame/TOTAL_GGUM.png";
+const BG_PATH = "/assets/minigame/pixel_bg.png";
 const BASE_SPEED = 3;
 const MAX_SPEED = 8;
 const SPEED_GAIN_PER_SCORE = 0.0025;
+const WOOD = "oklch(0.62 0.09 60)";
+const WOOD_DARK = "oklch(0.45 0.08 55)";
+const CARD = "oklch(0.99 0.012 85)";
+const AMBER_50 = "#fffbeb";
+const LEAF_SOFT = "oklch(0.68 0.12 130)";
+const LEAF_DARK = "oklch(0.5 0.09 130)";
 
 export function GgumRunnerMinigame({ onClose }) {
   const canvasRef = useRef(null);
   const scoreRef = useRef(null);
   const msgRef = useRef(null);
   const startOverlayRef = useRef(null);
+  const startButtonRef = useRef(null);
   const gameOverOverlayRef = useRef(null);
   const gameOverScoreRef = useRef(null);
+  const gameOverButtonRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const scoreEl = scoreRef.current;
     const msgEl = msgRef.current;
     const startOverlayEl = startOverlayRef.current;
+    const startButtonEl = startButtonRef.current;
     const gameOverOverlayEl = gameOverOverlayRef.current;
     const gameOverScoreEl = gameOverScoreRef.current;
+    const gameOverButtonEl = gameOverButtonRef.current;
     if (
       !canvas ||
       !scoreEl ||
       !msgEl ||
       !startOverlayEl ||
+      !startButtonEl ||
       !gameOverOverlayEl ||
-      !gameOverScoreEl
+      !gameOverScoreEl ||
+      !gameOverButtonEl
     ) {
       return undefined;
     }
@@ -68,6 +81,8 @@ export function GgumRunnerMinigame({ onClose }) {
 
     const sprite = new Image();
     sprite.src = SPRITE_PATH;
+    const backgroundImage = new Image();
+    backgroundImage.src = BG_PATH;
 
     const drawCloud = (x, y, w) => {
       const ps = 4;
@@ -100,7 +115,7 @@ export function GgumRunnerMinigame({ onClose }) {
       ctx.fillRect(x + s - 3, y + 1, 2, 2);
     };
 
-    const drawBg = () => {
+    const drawFallbackBg = () => {
       ctx.fillStyle = "#5bbcd4";
       ctx.fillRect(0, 0, W, H * 0.65);
 
@@ -142,6 +157,23 @@ export function GgumRunnerMinigame({ onClose }) {
           ((((i * 52 - groundX * 0.3) % (W + 40)) + W + 40) % (W + 40)) - 20;
         drawStar(sx, GROUND_Y + 20, 6);
       }
+    };
+
+    const drawBg = () => {
+      if (!backgroundImage.complete || !backgroundImage.naturalWidth) {
+        drawFallbackBg();
+        return;
+      }
+      const imgW = backgroundImage.naturalWidth;
+      const imgH = backgroundImage.naturalHeight;
+      const scale = Math.max(W / imgW, H / imgH);
+      const drawW = imgW * scale;
+      const drawH = imgH * scale;
+      const y = H - drawH;
+      const loopW = drawW;
+      const x = -((bgX * 0.2) % loopW);
+      ctx.drawImage(backgroundImage, x, y, drawW, drawH);
+      ctx.drawImage(backgroundImage, x + loopW, y, drawW, drawH);
     };
 
     const drawPlayer = () => {
@@ -272,6 +304,8 @@ export function GgumRunnerMinigame({ onClose }) {
       jump();
     };
     const onCanvasClick = () => jump();
+    const onStartButtonClick = () => jump();
+    const onGameOverButtonClick = () => jump();
     const onTouchStart = (e) => {
       e.preventDefault();
       jump();
@@ -336,7 +370,7 @@ export function GgumRunnerMinigame({ onClose }) {
         ) {
           state = "dead";
           if (score > hiScore) hiScore = score;
-          msgEl.textContent = `게임 오버! 최고: ${hiScore} | 클릭/스페이스로 재시작`;
+          msgEl.textContent = `앗, 장애물에 닿았어요! 최고: ${hiScore}`;
           updateOverlayVisibility();
           break;
         }
@@ -362,6 +396,8 @@ export function GgumRunnerMinigame({ onClose }) {
     window.addEventListener("keydown", onKeyDown);
     canvas.addEventListener("click", onCanvasClick);
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    startButtonEl.addEventListener("click", onStartButtonClick);
+    gameOverButtonEl.addEventListener("click", onGameOverButtonClick);
     sprite.onload = () => {
       if (!rafId) loop();
     };
@@ -372,6 +408,8 @@ export function GgumRunnerMinigame({ onClose }) {
       window.removeEventListener("keydown", onKeyDown);
       canvas.removeEventListener("click", onCanvasClick);
       canvas.removeEventListener("touchstart", onTouchStart);
+      startButtonEl.removeEventListener("click", onStartButtonClick);
+      gameOverButtonEl.removeEventListener("click", onGameOverButtonClick);
     };
   }, []);
 
@@ -380,12 +418,13 @@ export function GgumRunnerMinigame({ onClose }) {
       style={{
         position: "relative",
         width: "min(92vw, 760px)",
-        fontFamily: "monospace",
+        fontFamily:
+          "'Noto Sans KR', 'Pretendard', 'Apple SD Gothic Neo', sans-serif",
         userSelect: "none",
         borderRadius: 16,
-        overflow: "hidden",
+        overflow: "visible",
         boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
-        background: "#f4f0e6",
+        background: CARD,
       }}
     >
       <button
@@ -394,18 +433,18 @@ export function GgumRunnerMinigame({ onClose }) {
         aria-label="모달 닫기"
         style={{
           position: "absolute",
-          top: 10,
-          right: 10,
+          top: -14,
+          right: -14,
           width: 28,
           height: 28,
           borderRadius: "50%",
           border: "none",
-          background: "rgba(0,0,0,0.25)",
-          color: "#fff",
-          fontSize: 18,
+          background: "rgba(255, 251, 235, 0.9)",
+          color: WOOD_DARK,
+          fontSize: 17,
           lineHeight: 1,
           cursor: "pointer",
-          zIndex: 2,
+          zIndex: 5,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -415,83 +454,165 @@ export function GgumRunnerMinigame({ onClose }) {
       </button>
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "6px 12px",
-          color: "#3f2d1b",
-          borderBottom: "1px solid rgba(0,0,0,0.08)",
-          fontSize: 12,
-        }}
-      >
-        <span ref={scoreRef}>점수: 0</span>
-        <span ref={msgRef}>스페이스바 또는 클릭으로 점프!</span>
-      </div>
-      <canvas
-        ref={canvasRef}
-        style={{
-          display: "block",
-          width: "100%",
-          imageRendering: "pixelated",
-          cursor: "pointer",
-          touchAction: "none",
-        }}
-      />
-      <div
-        ref={startOverlayRef}
-        style={{
-          position: "absolute",
-          inset: "39px 0 0 0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          pointerEvents: "none",
+          borderRadius: 16,
+          overflow: "hidden",
+          background: CARD,
         }}
       >
         <div
           style={{
-            background: "rgba(255,255,255,0.9)",
-            color: "#333",
-            borderRadius: 8,
-            padding: "10px 16px",
-            fontSize: 16,
-            fontWeight: 700,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 12px",
+            color: AMBER_50,
+            background: `linear-gradient(180deg, ${WOOD} 0%, ${WOOD_DARK} 100%)`,
+            borderBottom: "none",
+            fontSize: 12,
             letterSpacing: "0.01em",
+            textShadow: "0 1px 0 rgba(0,0,0,0.6)",
           }}
         >
-          클릭 또는 스페이스로 시작!
+          <span
+            ref={scoreRef}
+            style={{
+              padding: "4px 8px",
+              background: LEAF_DARK,
+              border: "none",
+              boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.3)",
+              whiteSpace: "nowrap",
+              borderRadius: 4,
+              fontWeight: 600,
+            }}
+          >
+            점수 0
+          </span>
+          <span
+            ref={msgRef}
+            style={{
+              opacity: 0.95,
+              textAlign: "right",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            스페이스 또는 클릭으로 점프
+          </span>
         </div>
-      </div>
-      <div
-        ref={gameOverOverlayRef}
-        style={{
-          position: "absolute",
-          inset: "39px 0 0 0",
-          display: "none",
-          alignItems: "center",
-          justifyContent: "center",
-          pointerEvents: "none",
-          background: "rgba(0,0,0,0.32)",
-        }}
-      >
-        <div
+        <canvas
+          ref={canvasRef}
           style={{
-            background: "rgba(32,32,32,0.82)",
-            color: "#fff",
-            borderRadius: 12,
-            padding: "14px 20px",
-            textAlign: "center",
-            boxShadow: "0 10px 22px rgba(0,0,0,0.35)",
+            display: "block",
+            width: "100%",
+            imageRendering: "pixelated",
+            cursor: "pointer",
+            touchAction: "none",
+          }}
+        />
+        <div
+          ref={startOverlayRef}
+          style={{
+            position: "absolute",
+            inset: "39px 0 0 0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "auto",
+            background:
+              "linear-gradient(180deg, rgba(54, 81, 42, 0.08), rgba(54, 81, 42, 0.2))",
           }}
         >
-          <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>
-            GAME OVER
-          </div>
-          <div ref={gameOverScoreRef} style={{ fontSize: 14, marginBottom: 4 }}>
-            점수: 0 최고: 0
-          </div>
-          <div style={{ fontSize: 13, opacity: 0.9 }}>
-            클릭 또는 스페이스로 재시작
+          <button
+            ref={startButtonRef}
+            type="button"
+            style={{
+              border: "none",
+              background: "#ecd6ad",
+              color: WOOD_DARK,
+              borderRadius: 8,
+              padding: "11px 20px",
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: "0.02em",
+              boxShadow:
+                "0 3px 0 rgba(120, 83, 43, 0.7), 0 8px 15px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.45)",
+              cursor: "pointer",
+            }}
+          >
+            산책 시작하기
+          </button>
+        </div>
+        <div
+          ref={gameOverOverlayRef}
+          style={{
+            position: "absolute",
+            inset: "39px 0 0 0",
+            display: "none",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "auto",
+            background: "rgba(24, 35, 19, 0.33)",
+          }}
+        >
+          <div
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(255,251,235,0.97) 0%, rgba(244,229,194,0.97) 100%)",
+              color: WOOD_DARK,
+              borderRadius: 10,
+              padding: "16px 20px",
+              textAlign: "center",
+              boxShadow:
+                "0 10px 24px rgba(0,0,0,0.28), inset 0 -2px 0 rgba(120, 83, 43, 0.25)",
+              minWidth: 280,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 24,
+                fontWeight: 700,
+                marginBottom: 8,
+                letterSpacing: "0.01em",
+                textShadow: "0 1px 0 rgba(255,255,255,0.45)",
+              }}
+            >
+              산책 종료
+            </div>
+            <div
+              ref={gameOverScoreRef}
+              style={{
+                fontSize: 14,
+                marginBottom: 10,
+                background: "rgba(139, 185, 104, 0.2)",
+                border: "none",
+                padding: "6px 10px",
+                borderRadius: 6,
+              }}
+            >
+              점수: 0 최고: 0
+            </div>
+            <button
+              ref={gameOverButtonRef}
+              type="button"
+              style={{
+                border: "none",
+                background:
+                  "linear-gradient(180deg, #d8efb8 0%, #b9dd8d 55%, #93be61 100%)",
+                color: "#2b3c1f",
+                borderRadius: 8,
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.01em",
+                cursor: "pointer",
+                boxShadow:
+                  "0 2px 0 rgba(84, 117, 52, 0.9), 0 6px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.45)",
+              }}
+            >
+              다시 시작
+            </button>
           </div>
         </div>
       </div>
