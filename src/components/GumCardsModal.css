@@ -254,11 +254,13 @@
 .gum-card-front-text .keywords {
   display: flex;
   gap: 5px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .gum-card-front-text .kw {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
   letter-spacing: 0.3px;
 }
 
