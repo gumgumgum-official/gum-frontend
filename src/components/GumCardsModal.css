@@ -255,13 +255,17 @@
   display: flex;
   gap: 5px;
   flex-wrap: nowrap;
-  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gum-card-front-text .kw {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.92);
   letter-spacing: 0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0; /* flex 아이템이 줄어들며 ellipsis 적용되도록 */
 }
 
 .gum-card-back {

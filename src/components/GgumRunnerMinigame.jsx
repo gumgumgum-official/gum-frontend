@@ -20,6 +20,7 @@ const NEW_HIGH_BLINK_PHASES = 6;
 export function GgumRunnerMinigame({ onClose }) {
   const canvasRef = useRef(null);
   const lastTouchAtRef = useRef(0);
+  const hiScoreValueRef = useRef(0);
   const currentScoreRef = useRef(null);
   const hiScoreRef = useRef(null);
   const msgRef = useRef(null);
@@ -31,6 +32,16 @@ export function GgumRunnerMinigame({ onClose }) {
   const jumpActionRef = useRef(() => {});
 
   useEffect(() => {
+    const readHiScore = () => {
+      try {
+        const raw = localStorage.getItem("ggumRunner_hiScore");
+        const v = Number(raw);
+        return Number.isFinite(v) && v >= 0 ? v : 0;
+      } catch (e) {
+        return 0;
+      }
+    };
+
     const canvas = canvasRef.current;
     const currentScoreEl = currentScoreRef.current;
     const hiScoreEl = hiScoreRef.current;
@@ -63,7 +74,8 @@ export function GgumRunnerMinigame({ onClose }) {
     let rafId = 0;
     let state = "idle";
     let score = 0;
-    let hiScore = 0;
+    let hiScore = readHiScore();
+    hiScoreValueRef.current = hiScore;
     let frame = 0;
     let speed = BASE_SPEED;
     let bgX = 0;
@@ -414,7 +426,15 @@ export function GgumRunnerMinigame({ onClose }) {
           pr.y + pr.h > or.y
         ) {
           state = "dead";
-          if (score > hiScore) hiScore = score;
+          if (score > hiScore) {
+            hiScore = score;
+            hiScoreValueRef.current = score;
+            try {
+              localStorage.setItem("ggumRunner_hiScore", String(score));
+            } catch (e) {
+              // If storage is blocked (private mode, quota, etc), game still works.
+            }
+          }
           msgEl.textContent = "앗 장애물에 닿았어요!";
           updateOverlayVisibility();
           break;
