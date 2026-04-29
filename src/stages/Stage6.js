@@ -33,6 +33,10 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
+import {
+  createBagPhysics,
+  BAG_OBJECT_NAME,
+} from "../utils/stages/stage6/bagPhysics.js";
 const INT_PREFIX = "INT_";
 const CHAR_ROOT_NAMES = [
   "INT_Gum_Cry",
@@ -63,8 +67,28 @@ const CHAR_ANIM_MAP = {
   INT_Gum_Airplane: ["Plane_Throw_Rig", "Plane_Throw_Prop"],
   INT_Gum_Lollipop: ["Lollipop_ArmShake_Rig", "Lollipop_Shake"],
 };
-const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM"]);
+const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM", "OBJ_Tel"]);
 const ATM_OBJECT_NAME = "OBJ_ATM";
+const TEL_OBJECT_NAME = "OBJ_Tel";
+const TEL_EMISSIVE_DARK_STRENGTH = 0.06;
+const TEL_EMISSIVE_BRIGHT_STRENGTH = 1.25;
+const TEL_EMISSIVE_TWEEN_SPEED = 3.5;
+const PHONE_RING_SOUND_PATH = "/static/sounds/airport/phone_ring.mp3";
+const PHONE_RING_SOUND_VOLUME = 0.42;
+const PHONE_HANGUP_SOUND_PATH = "/static/sounds/airport/phone_hangup.mp3";
+const PHONE_HANGUP_SOUND_VOLUME = 0.49;
+const PHONE_CALL_SOUNDS = [
+  "/static/sounds/airport/phone_love.mp3",
+  "/static/sounds/airport/phone_prank.mp3",
+];
+const PHONE_CALL_RING_SUBTITLES = [
+  "당신을 사랑하는 익명의 껌딱지에게 전화가 왔네요!",
+  "어! 또 다시 전화가 온 것 같아요! 한번 받아볼까요?",
+];
+const PHONE_CALL_SOUND_VOLUME = 0.49;
+const TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS = 5000;
+const TEL_RING_AGAIN_DELAY_MS = 10000;
+const TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS = 5000;
 const ATM_INTERACTION_REQUIRED_COUNT = 3;
 const ATM_EMISSIVE_DARK_STRENGTH = 0.06;
 const ATM_EMISSIVE_BRIGHT_STRENGTH = 1.25;
@@ -204,10 +228,21 @@ export function Stage6() {
   let isAtmActivated = false;
   /** @type {THREE.Object3D | null} */
   let atmRootRef = null;
+  let isTelActivated = false;
+  let isTelRinging = false;
+  let telEmissiveProgress = 0;
+  let telEmissiveTarget = 0;
+  let telCallIndex = 0;
+  let telActivateTimeoutId = 0;
+  let telRingAgainTimeoutId = 0;
+  /** @type {THREE.Object3D | null} */
+  let telRootRef = null;
   /** @type {Array<THREE.Material & { emissive?: THREE.Color, emissiveIntensity?: number, userData?: Record<string, any> }>} */
   const atmEmissiveMaterials = [];
   let atmEmissiveProgress = 0;
   let atmEmissiveTarget = 0;
+  /** @type {Array<THREE.Material & { emissive?: THREE.Color, emissiveIntensity?: number, userData?: Record<string, any> }>} */
+  const telEmissiveMaterials = [];
   let isSceneInteractionLocked = false;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
@@ -219,7 +254,15 @@ export function Stage6() {
   let photoboothCurtainAudio = null;
   /** @type {HTMLAudioElement | null} */
   let atmClickAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let phoneRingAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let phoneHangupAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let phoneCallAudio = null;
   let isAirportChimeVisible = false;
+
+  const bagPhysics = createBagPhysics();
 
   function isLoadingOverlayVisible() {
     const loadingOverlay = document.getElementById("loading-overlay");
@@ -285,6 +328,13 @@ export function Stage6() {
   const _charBubbleSize = new THREE.Vector3();
   const _charBubbleProjected = new THREE.Vector3();
 
+  // Tel 말풍선 상태 (int-click 스타일)
+  /** @type {HTMLDivElement | null} */
+  let telBubbleEl = null;
+  const _telBubbleBox = new THREE.Box3();
+  const _telBubbleSize = new THREE.Vector3();
+  const _telBubbleProjected = new THREE.Vector3();
+
   function dispatchAirportSubtitleTextByTime(currentSec) {
     const syncedSec = Math.max(0, currentSec + airportSubtitleLeadSec);
     const nextIdx = airportAnnouncementSubtitleCues.findIndex(
@@ -323,6 +373,10 @@ export function Stage6() {
       window.clearTimeout(airportAnnounceIntroTimeoutId);
       airportAnnounceIntroTimeoutId = 0;
     }
+    if (telActivateTimeoutId) {
+      window.clearTimeout(telActivateTimeoutId);
+      telActivateTimeoutId = 0;
+    }
     if (airplaneCallSignAudio) {
       airplaneCallSignAudio.onplay = null;
       airplaneCallSignAudio.ontimeupdate = null;
@@ -360,7 +414,43 @@ export function Stage6() {
     }
     airportAnnounceIntroAudio.volume = AIRPORT_ANNOUNCE_INTRO_VOLUME;
     airportAnnounceIntroAudio.currentTime = 0;
+
+    // Autoplay may be silently blocked (Promise stays pending forever on SPA nav).
+    // Use this flag to fire the fallback exactly once whether catch() or watchdog fires.
+    let announceFallbackFired = false;
+    const runAnnounceFallback = () => {
+      if (announceFallbackFired || !isStage6Active) return;
+      announceFallbackFired = true;
+      isSceneInteractionLocked = false;
+      const cues = STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES ?? [];
+      let cueIdx = 0;
+      const showNextCue = () => {
+        if (!isStage6Active || cueIdx >= cues.length) {
+          window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
+          telActivateTimeoutId = window.setTimeout(() => {
+            telActivateTimeoutId = 0;
+            activateTelRinging();
+          }, TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
+          return;
+        }
+        const cue = cues[cueIdx];
+        cueIdx++;
+        window.dispatchEvent(
+          new CustomEvent(AIRPORT_SUBTITLE_SHOW_EVENT, {
+            detail: { text: cue.text },
+          }),
+        );
+        const holdMs =
+          cueIdx < cues.length
+            ? (cues[cueIdx].startSec - cue.startSec) * 1000
+            : 2500;
+        window.setTimeout(showNextCue, Math.max(holdMs, 400));
+      };
+      showNextCue();
+    };
+
     airportAnnounceIntroAudio.onplay = () => {
+      announceFallbackFired = true; // audio is actually playing, suppress watchdog
       activeSubtitleCueIndex = -1;
       isAirportSubtitleVisible = false;
       dispatchAirportSubtitleTextByTime(0);
@@ -375,10 +465,20 @@ export function Stage6() {
       isAirportSubtitleVisible = false;
       window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
       isSceneInteractionLocked = false;
+      telActivateTimeoutId = window.setTimeout(() => {
+        telActivateTimeoutId = 0;
+        activateTelRinging();
+      }, TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
     };
-    airportAnnounceIntroAudio.play().catch(() => {
-      isSceneInteractionLocked = false;
-    });
+    const announcePlayPromise = airportAnnounceIntroAudio.play();
+    if (
+      announcePlayPromise &&
+      typeof announcePlayPromise.catch === "function"
+    ) {
+      announcePlayPromise.catch(runAnnounceFallback);
+    }
+    // Watchdog: covers the case where play() returns a pending-forever Promise
+    window.setTimeout(runAnnounceFallback, 2500);
   }
 
   function playAtmClickSound() {
@@ -480,8 +580,27 @@ export function Stage6() {
       airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
       airplaneCallSignAudio.currentTime = 0;
       isAirportChimeVisible = false;
+
+      if (!isStage6Active) return;
+
+      // Watchdog: if ding audio never plays (Promise pending), skip to announcement
+      let chimeFallbackFired = false;
+      const runChimeFallback = () => {
+        if (chimeFallbackFired || !isStage6Active) return;
+        chimeFallbackFired = true;
+        if (isAirportChimeVisible) {
+          window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
+          isAirportChimeVisible = false;
+        }
+        airportAnnounceIntroTimeoutId = window.setTimeout(() => {
+          airportAnnounceIntroTimeoutId = 0;
+          if (isStage6Active) playAirportAnnounceIntro();
+        }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
+      };
+
       airplaneCallSignAudio.onplay = null;
       airplaneCallSignAudio.ontimeupdate = () => {
+        chimeFallbackFired = true; // audio is playing, suppress watchdog
         if (isAirportChimeVisible) return;
         if (
           Number(airplaneCallSignAudio?.currentTime ?? 0) <
@@ -499,15 +618,15 @@ export function Stage6() {
         }
         airportAnnounceIntroTimeoutId = window.setTimeout(() => {
           airportAnnounceIntroTimeoutId = 0;
-          playAirportAnnounceIntro();
+          if (isStage6Active) playAirportAnnounceIntro();
         }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
       };
-      airplaneCallSignAudio.play().catch(() => {
-        airportAnnounceIntroTimeoutId = window.setTimeout(() => {
-          airportAnnounceIntroTimeoutId = 0;
-          playAirportAnnounceIntro();
-        }, AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS);
-      });
+      const chimePlayPromise = airplaneCallSignAudio.play();
+      if (chimePlayPromise && typeof chimePlayPromise.catch === "function") {
+        chimePlayPromise.catch(runChimeFallback);
+      }
+      // Watchdog: covers pending-forever Promise (AudioContext suspended on SPA nav)
+      window.setTimeout(runChimeFallback, 2500);
     }, AIRPLANE_CALL_SIGN_DELAY_MS);
   }
 
@@ -567,6 +686,48 @@ export function Stage6() {
     charBubbleEl.classList.remove("is-visible");
     charBubbleActiveChar = null;
     charBubbleRemaining = 0;
+  }
+
+  function createTelBubbleEl() {
+    const el = document.createElement("div");
+    el.className =
+      "speech-bubble-stage2 speech-bubble-stage3-user speech-bubble-stage3-int-click";
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function updateTelBubblePosition() {
+    if (!telBubbleEl || !canvasRef || !cameraRef || !telRootRef) return false;
+    _telBubbleBox.setFromObject(telRootRef);
+    if (_telBubbleBox.isEmpty()) return false;
+    _telBubbleBox.getCenter(_telBubbleProjected);
+    _telBubbleBox.getSize(_telBubbleSize);
+    _telBubbleProjected.y += _telBubbleSize.y * 0.85;
+    _telBubbleProjected.project(cameraRef);
+    const rect = canvasRef.getBoundingClientRect();
+    const rw = rect.width || 1;
+    const rh = rect.height || 1;
+    const x = rect.left + (_telBubbleProjected.x * 0.5 + 0.5) * rw;
+    const y = rect.top + (-_telBubbleProjected.y * 0.5 + 0.5) * rh;
+    telBubbleEl.style.left = `${x}px`;
+    telBubbleEl.style.top = `${y}px`;
+    return true;
+  }
+
+  function showTelBubble(text) {
+    if (!telBubbleEl) return;
+    if (!updateTelBubblePosition()) return;
+    telBubbleEl.classList.remove("is-visible");
+    telBubbleEl.textContent = text;
+    requestAnimationFrame(() => {
+      if (telBubbleEl) telBubbleEl.classList.add("is-visible");
+    });
+  }
+
+  function hideTelBubble() {
+    if (!telBubbleEl) return;
+    telBubbleEl.classList.remove("is-visible");
   }
 
   function playCharacter(charName) {
@@ -672,6 +833,174 @@ export function Stage6() {
     });
   }
 
+  function collectTelInteractiveRoot(rootModel) {
+    telRootRef = null;
+    rootModel.traverse((obj) => {
+      if (telRootRef || obj?.name !== TEL_OBJECT_NAME) return;
+      telRootRef = obj;
+    });
+  }
+
+  function registerTelEmissiveMaterials() {
+    telEmissiveMaterials.length = 0;
+    if (!telRootRef) return;
+    telRootRef.traverse((child) => {
+      const mesh = /** @type {THREE.Mesh} */ (child);
+      if (!mesh?.isMesh || !mesh.material) return;
+      const materials = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material];
+      materials.forEach((rawMaterial) => {
+        const material = /** @type {typeof telEmissiveMaterials[number]} */ (
+          rawMaterial
+        );
+        if (!material?.emissive) return;
+        const hasVisibleEmissive = material.emissive.getHex() !== 0x000000;
+        material.userData = material.userData ?? {};
+        if (!material.userData.stage6TelBaseEmissive) {
+          material.userData.stage6TelBaseEmissive = hasVisibleEmissive
+            ? material.emissive.clone()
+            : new THREE.Color(0x7fd6ff);
+        }
+        telEmissiveMaterials.push(material);
+      });
+    });
+  }
+
+  function applyTelEmissive(progress) {
+    const strength = THREE.MathUtils.lerp(
+      TEL_EMISSIVE_DARK_STRENGTH,
+      TEL_EMISSIVE_BRIGHT_STRENGTH,
+      progress,
+    );
+    telEmissiveMaterials.forEach((material) => {
+      const baseColor = material.userData?.stage6TelBaseEmissive;
+      if (!baseColor || !material.emissive) return;
+      material.emissive.copy(baseColor).multiplyScalar(strength);
+      if (typeof material.emissiveIntensity === "number") {
+        material.emissiveIntensity = 1;
+      }
+      material.needsUpdate = true;
+    });
+  }
+
+  function isTelHitTarget(hit) {
+    return (
+      hit?.intName === TEL_OBJECT_NAME ||
+      normalizeIntNameToken(hit?.target) ===
+        normalizeIntNameToken(TEL_OBJECT_NAME)
+    );
+  }
+
+  function playPhoneRing() {
+    if (!phoneRingAudio) {
+      phoneRingAudio = new window.Audio();
+      phoneRingAudio.preload = "auto";
+      phoneRingAudio.loop = true;
+      phoneRingAudio.src = resolvePublicAssetUrl(PHONE_RING_SOUND_PATH);
+    }
+    phoneRingAudio.volume = PHONE_RING_SOUND_VOLUME;
+    phoneRingAudio.currentTime = 0;
+    const p = phoneRingAudio.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    isTelRinging = true;
+  }
+
+  function stopPhoneRing() {
+    if (phoneRingAudio) {
+      phoneRingAudio.pause();
+      phoneRingAudio.currentTime = 0;
+    }
+    isTelRinging = false;
+  }
+
+  function activateTelRinging() {
+    if (!isStage6Active) return;
+    isTelActivated = true;
+    telEmissiveTarget = 1;
+    playPhoneRing();
+    showTelBubble("click!");
+    const ringSubtitle =
+      PHONE_CALL_RING_SUBTITLES[telCallIndex] ?? PHONE_CALL_RING_SUBTITLES[0];
+    dispatchStage6SubtitleSequence([{ text: ringSubtitle, holdMs: 3000 }]);
+  }
+
+  function startPhoneCallAfterHangup(callSrc) {
+    if (!phoneCallAudio) {
+      phoneCallAudio = new window.Audio();
+      phoneCallAudio.preload = "auto";
+    }
+    phoneCallAudio.onended = null;
+    phoneCallAudio.pause();
+    phoneCallAudio.currentTime = 0;
+    phoneCallAudio.src = callSrc;
+    phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
+    phoneCallAudio.onended = () => {
+      if (telCallIndex < PHONE_CALL_SOUNDS.length && isStage6Active) {
+        telEmissiveTarget = 0;
+        isTelActivated = false;
+        telRingAgainTimeoutId = window.setTimeout(() => {
+          telRingAgainTimeoutId = 0;
+          if (isStage6Active) {
+            isTelActivated = true;
+            telEmissiveTarget = 1;
+            playPhoneRing();
+            showTelBubble("click!");
+            const ringSubtitle =
+              PHONE_CALL_RING_SUBTITLES[telCallIndex] ??
+              PHONE_CALL_RING_SUBTITLES[PHONE_CALL_RING_SUBTITLES.length - 1];
+            dispatchStage6SubtitleSequence([
+              { text: ringSubtitle, holdMs: 3000 },
+            ]);
+          }
+        }, TEL_RING_AGAIN_DELAY_MS);
+      } else {
+        telEmissiveTarget = 0;
+        telRingAgainTimeoutId = window.setTimeout(() => {
+          telRingAgainTimeoutId = 0;
+          if (isStage6Active && !isAtmActivated) {
+            activateAtmKiosk();
+          }
+        }, TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS);
+      }
+    };
+    try {
+      phoneCallAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = phoneCallAudio.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  }
+
+  function playCurrentPhoneCall() {
+    if (telCallIndex >= PHONE_CALL_SOUNDS.length) return;
+    stopPhoneRing();
+    hideTelBubble();
+    isTelActivated = false;
+    const callIdx = telCallIndex;
+    const callSrc = resolvePublicAssetUrl(PHONE_CALL_SOUNDS[callIdx]);
+    telCallIndex++;
+    if (!phoneHangupAudio) {
+      phoneHangupAudio = new window.Audio();
+      phoneHangupAudio.preload = "auto";
+      phoneHangupAudio.src = resolvePublicAssetUrl(PHONE_HANGUP_SOUND_PATH);
+    }
+    phoneHangupAudio.onended = null;
+    phoneHangupAudio.pause();
+    phoneHangupAudio.currentTime = 0;
+    phoneHangupAudio.volume = PHONE_HANGUP_SOUND_VOLUME;
+    phoneHangupAudio.onended = () => {
+      if (isStage6Active) startPhoneCallAfterHangup(callSrc);
+    };
+    const p = phoneHangupAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {
+        if (isStage6Active) startPhoneCallAfterHangup(callSrc);
+      });
+    }
+  }
+
   function activateAtmKiosk() {
     if (isAtmActivated) return;
     isAtmActivated = true;
@@ -691,66 +1020,14 @@ export function Stage6() {
   }
 
   function registerNonAtmInteraction(hit) {
-    if (!hit || isAtmHitTarget(hit) || isAtmActivated) return;
+    if (!hit || isAtmHitTarget(hit) || isTelHitTarget(hit) || isAtmActivated)
+      return;
     const interactionKey = hit.intName || hit.target;
     if (!interactionKey || interactedTargets.has(interactionKey)) return;
     interactedTargets.add(interactionKey);
     if (interactedTargets.size >= ATM_INTERACTION_REQUIRED_COUNT) {
       activateAtmKiosk();
     }
-  }
-
-  /**
-   * 템플릿 씬과 분리된 인스턴스 (cleanup 시 dispose 안전)
-   * @param {import("three").Object3D} source
-   */
-  function cloneStage6ModelInstance(source) {
-    const root = source.clone(true);
-    root.traverse((obj) => {
-      const mesh = /** @type {any} */ (obj);
-      if (!mesh.isMesh) return;
-      if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
-      const mat = mesh.material;
-      if (Array.isArray(mat)) {
-        mesh.material = mat.map((m) => (m?.clone ? m.clone() : m));
-      } else if (mat?.clone) {
-        mesh.material = mat.clone();
-      }
-
-      const materials = Array.isArray(mesh.material)
-        ? mesh.material
-        : [mesh.material];
-      for (const material of materials) {
-        if (!material) continue;
-        // 외부 Chrome에서는 transmission 유리를 유지하고,
-        // Cursor/Electron 웹뷰에서만 fallback glass로 치환한다.
-        if (
-          isElectronLike &&
-          typeof material.transmission === "number" &&
-          material.transmission > 0
-        ) {
-          const originalOpacity =
-            typeof material.opacity === "number" ? material.opacity : 1;
-          material.transmission = 0;
-          material.transparent = true;
-          material.opacity = Math.min(originalOpacity, 0.42);
-          if (typeof material.roughness === "number") {
-            material.roughness = Math.max(material.roughness, 0.08);
-          }
-          if (typeof material.metalness === "number") {
-            material.metalness = Math.min(material.metalness, 0.05);
-          }
-          if (typeof material.envMapIntensity === "number") {
-            material.envMapIntensity = Math.max(material.envMapIntensity, 1.15);
-          }
-          if ("depthWrite" in material) {
-            material.depthWrite = false;
-          }
-          material.needsUpdate = true;
-        }
-      }
-    });
-    return root;
   }
 
   function registerIntInteractions(rootModel) {
@@ -771,8 +1048,11 @@ export function Stage6() {
       });
     });
     intRaycastMeshes.push(...meshSet);
+    collectTelInteractiveRoot(rootModel);
     registerAtmEmissiveMaterials();
+    registerTelEmissiveMaterials();
     applyAtmEmissive(atmEmissiveProgress);
+    applyTelEmissive(telEmissiveProgress);
     if (import.meta.env.DEV) {
       console.log(
         `[Stage6] INT_ clickable mesh count: ${intRaycastMeshes.length}`,
@@ -864,6 +1144,13 @@ export function Stage6() {
       atmEmissiveProgress = 0;
       atmRootRef = null;
       atmEmissiveMaterials.length = 0;
+      isTelActivated = false;
+      isTelRinging = false;
+      telEmissiveTarget = 0;
+      telEmissiveProgress = 0;
+      telCallIndex = 0;
+      telRootRef = null;
+      telEmissiveMaterials.length = 0;
       isSceneInteractionLocked = false;
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
       onInteractionLock = () => {
@@ -887,7 +1174,12 @@ export function Stage6() {
           playPhotoboothCurtainSound();
         }
         const isAtmHit = isAtmHitTarget(hit);
-        if (isAtmHit) {
+        const isTelHit = isTelHitTarget(hit);
+        if (isTelHit) {
+          if (isTelActivated) {
+            playCurrentPhoneCall();
+          }
+        } else if (isAtmHit) {
           playAtmClickSound();
           if (!isAtmActivated) {
             dispatchStage6SubtitleSequence([
@@ -943,6 +1235,7 @@ export function Stage6() {
       canvas.addEventListener("pointermove", onPointerMove);
 
       charBubbleEl = createCharBubbleEl();
+      telBubbleEl = createTelBubbleEl();
 
       isSceneInteractionLocked = true;
 
@@ -1069,7 +1362,12 @@ export function Stage6() {
             }
           }
 
-          const staticColliderBoxes = collectStage6StaticColliderBoxes(model);
+          const allStaticColliders = collectStage6StaticColliderBoxes(model);
+          const staticColliderBoxes = bagPhysics.setup(
+            model.getObjectByName(BAG_OBJECT_NAME) ?? null,
+            allStaticColliders,
+          );
+
           const characterController = /** @type {any} */ (character);
           characterController?.setup(floorY, bounds, staticColliderBoxes, {
             worldSpawnXZ: { x: spawnX, z: spawnZ },
@@ -1112,6 +1410,7 @@ export function Stage6() {
             });
             objects.push(model);
             scene.add(model);
+            bagPhysics.addBenchColliders(model);
           },
           onError: (err) =>
             console.warn("❌ Stage6 bench 로드 실패:", benchConfig.path, err),
@@ -1168,6 +1467,15 @@ export function Stage6() {
       if (atmEmissiveMaterials.length > 0) {
         applyAtmEmissive(atmEmissiveProgress);
       }
+      telEmissiveProgress = THREE.MathUtils.damp(
+        telEmissiveProgress,
+        telEmissiveTarget,
+        TEL_EMISSIVE_TWEEN_SPEED,
+        delta,
+      );
+      if (telEmissiveMaterials.length > 0) {
+        applyTelEmissive(telEmissiveProgress);
+      }
 
       if (charMixer) charMixer.update(delta);
 
@@ -1179,9 +1487,20 @@ export function Stage6() {
         }
       }
 
+      if (isTelRinging && telBubbleEl) {
+        updateTelBubblePosition();
+      }
+
       if (character) {
         character.update(delta, this.camera, { skipCameraFollow: true });
       }
+
+      bagPhysics.update(
+        character?.getPosition() ?? null,
+        config.character.collisionRadius ?? 0.22,
+        delta,
+        this.camera,
+      );
     },
 
     cleanup(scene) {
@@ -1239,8 +1558,38 @@ export function Stage6() {
       atmEmissiveMaterials.length = 0;
       atmEmissiveProgress = 0;
       atmEmissiveTarget = 0;
+      if (telRingAgainTimeoutId) {
+        window.clearTimeout(telRingAgainTimeoutId);
+        telRingAgainTimeoutId = 0;
+      }
+      if (phoneRingAudio) {
+        phoneRingAudio.pause();
+        phoneRingAudio.src = "";
+        phoneRingAudio = null;
+      }
+      if (phoneHangupAudio) {
+        phoneHangupAudio.onended = null;
+        phoneHangupAudio.pause();
+        phoneHangupAudio.src = "";
+        phoneHangupAudio = null;
+      }
+      if (phoneCallAudio) {
+        phoneCallAudio.onended = null;
+        phoneCallAudio.pause();
+        phoneCallAudio.src = "";
+        phoneCallAudio = null;
+      }
+      isTelActivated = false;
+      isTelRinging = false;
+      telRootRef = null;
+      telEmissiveMaterials.length = 0;
+      telEmissiveProgress = 0;
+      telEmissiveTarget = 0;
+      telCallIndex = 0;
       isSceneInteractionLocked = false;
       intRaycastMeshes.length = 0;
+
+      bagPhysics.cleanup();
 
       if (charMixer) {
         charMixer.stopAllAction();
@@ -1253,6 +1602,11 @@ export function Stage6() {
       if (charBubbleEl?.parentNode)
         charBubbleEl.parentNode.removeChild(charBubbleEl);
       charBubbleEl = null;
+
+      hideTelBubble();
+      if (telBubbleEl?.parentNode)
+        telBubbleEl.parentNode.removeChild(telBubbleEl);
+      telBubbleEl = null;
 
       // gltf.scene은 캐시에 유지 — remove만, dispose 금지
       const cachedScene = gltfSceneRef;
