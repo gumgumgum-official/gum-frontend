@@ -46,46 +46,10 @@ function normalizeAggregate(payload) {
  */
 export async function fetchVoteResults() {
   const base = getGumServerBaseUrl();
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "pre-fix",
-      hypothesisId: "H1",
-      location: "src/lib/voteApi.js:fetchVoteResults",
-      message: "fetch vote results start",
-      data: { baseUrlExists: Boolean(base) },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   const res = await fetch(`${base}/api/votes/results`, {
     method: "GET",
     headers: { Accept: "application/json" },
   });
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "pre-fix",
-      hypothesisId: "H1",
-      location: "src/lib/voteApi.js:fetchVoteResults",
-      message: "fetch vote results response",
-      data: { ok: res.ok, status: res.status },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   if (!res.ok) {
     throw new Error(`투표 집계 조회 실패 (HTTP ${res.status})`);
   }
@@ -104,28 +68,6 @@ export async function postVote(candidate, opts = {}) {
   const sessionId = opts.sessionId ?? getSessionId();
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "pre-fix",
-      hypothesisId: "H2",
-      location: "src/lib/voteApi.js:postVote",
-      message: "post vote request",
-      data: {
-        candidate,
-        hasSessionId: Boolean(sessionId),
-        hasClientId: Boolean(opts.clientId),
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
 
   const res = await fetch(`${base}/api/votes`, {
     method: "POST",
@@ -141,27 +83,6 @@ export async function postVote(candidate, opts = {}) {
   }
 
   if (!res.ok) {
-    // #region agent log
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "230420",
-      },
-      body: JSON.stringify({
-        sessionId: "230420",
-        runId: "pre-fix",
-        hypothesisId: "H2",
-        location: "src/lib/voteApi.js:postVote",
-        message: "post vote failed response",
-        data: {
-          status: res.status,
-          errorMessage: typeof json?.error === "string" ? json.error : null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     const message =
       typeof json?.error === "string" && json.error.trim()
         ? json.error
@@ -173,29 +94,6 @@ export async function postVote(candidate, opts = {}) {
   }
 
   const aggregate = normalizeAggregate(json);
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "pre-fix",
-      hypothesisId: "H2",
-      location: "src/lib/voteApi.js:postVote",
-      message: "post vote success aggregate",
-      data: {
-        totalVotes: aggregate.totalVotes,
-        c1: aggregate.votes[1],
-        c2: aggregate.votes[2],
-        c3: aggregate.votes[3],
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   const selectedCandidate =
     json?.selectedCandidate === 1 ||
     json?.selectedCandidate === 2 ||
@@ -215,27 +113,6 @@ export async function deleteMyVote(opts = {}) {
   const sessionId = opts.sessionId ?? getSessionId();
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "post-fix",
-      hypothesisId: "H11",
-      location: "src/lib/voteApi.js:deleteMyVote",
-      message: "delete vote request",
-      data: {
-        hasSessionId: Boolean(sessionId),
-        hasClientId: Boolean(opts.clientId),
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   const res = await fetch(`${base}/api/votes/my`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -248,27 +125,6 @@ export async function deleteMyVote(opts = {}) {
     json = null;
   }
   if (!res.ok) {
-    // #region agent log
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "230420",
-      },
-      body: JSON.stringify({
-        sessionId: "230420",
-        runId: "post-fix",
-        hypothesisId: "H11",
-        location: "src/lib/voteApi.js:deleteMyVote",
-        message: "delete vote failed response",
-        data: {
-          status: res.status,
-          errorMessage: typeof json?.error === "string" ? json.error : null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     const message =
       typeof json?.error === "string" && json.error.trim()
         ? json.error
@@ -276,29 +132,6 @@ export async function deleteMyVote(opts = {}) {
     throw new Error(message);
   }
   const aggregate = normalizeAggregate(json);
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "post-fix",
-      hypothesisId: "H11",
-      location: "src/lib/voteApi.js:deleteMyVote",
-      message: "delete vote success aggregate",
-      data: {
-        totalVotes: aggregate.totalVotes,
-        c1: aggregate.votes[1],
-        c2: aggregate.votes[2],
-        c3: aggregate.votes[3],
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   return aggregate;
 }
 
@@ -313,28 +146,6 @@ export async function updateMyVote(candidate, opts = {}) {
   const sessionId = opts.sessionId ?? getSessionId();
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "post-fix",
-      hypothesisId: "H12",
-      location: "src/lib/voteApi.js:updateMyVote",
-      message: "update vote request",
-      data: {
-        candidate,
-        hasSessionId: Boolean(sessionId),
-        hasClientId: Boolean(opts.clientId),
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   const res = await fetch(`${base}/api/votes/my`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -347,27 +158,6 @@ export async function updateMyVote(candidate, opts = {}) {
     json = null;
   }
   if (!res.ok) {
-    // #region agent log
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "230420",
-      },
-      body: JSON.stringify({
-        sessionId: "230420",
-        runId: "post-fix",
-        hypothesisId: "H12",
-        location: "src/lib/voteApi.js:updateMyVote",
-        message: "update vote failed response",
-        data: {
-          status: res.status,
-          errorMessage: typeof json?.error === "string" ? json.error : null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     const message =
       typeof json?.error === "string" && json.error.trim()
         ? json.error
@@ -381,29 +171,5 @@ export async function updateMyVote(candidate, opts = {}) {
     json?.selectedCandidate === 3
       ? json.selectedCandidate
       : null;
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "230420",
-    },
-    body: JSON.stringify({
-      sessionId: "230420",
-      runId: "post-fix",
-      hypothesisId: "H12",
-      location: "src/lib/voteApi.js:updateMyVote",
-      message: "update vote success aggregate",
-      data: {
-        totalVotes: aggregate.totalVotes,
-        c1: aggregate.votes[1],
-        c2: aggregate.votes[2],
-        c3: aggregate.votes[3],
-        selectedCandidate,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   return { ...aggregate, selectedCandidate };
 }

@@ -8,7 +8,6 @@
 
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
@@ -326,7 +325,6 @@ function getSafeIslandBounds(bounds) {
 
 export function Stage2() {
   const config = STAGE2_CONFIG;
-  const glbLoader = getGLBLoader();
 
   const objects = [];
   const propRoots = [];
@@ -504,7 +502,6 @@ export function Stage2() {
 
       const onReady = () => {
         loadCharacters(
-          glbLoader,
           config,
           scene,
           objects,
@@ -677,20 +674,13 @@ export function Stage2() {
 
         if (config.props?.length) {
           const tPropsStart = mark("props:loadAll");
-          loadPropsFromConfig(
-            glbLoader,
-            config.props,
-            scene,
-            objects,
-            propRoots,
-            () => {
-              logDuration("props:loadAll", tPropsStart);
-              debugControls.setDraggableObjects(propRoots);
-              ensureFinalIslandBounds();
-              refreshCharacterObstacleBoxes();
-              onReady();
-            },
-          );
+          loadPropsFromConfig(config.props, scene, objects, propRoots, () => {
+            logDuration("props:loadAll", tPropsStart);
+            debugControls.setDraggableObjects(propRoots);
+            ensureFinalIslandBounds();
+            refreshCharacterObstacleBoxes();
+            onReady();
+          });
         } else {
           ensureFinalIslandBounds();
           refreshCharacterObstacleBoxes();
@@ -922,7 +912,6 @@ function buildStage2CharacterObstacleBoxes(roots, backgroundBounds) {
 
 /**
  * 캐릭터 GLB 로드 후 자율 이동 컨트롤러 생성 (자유의지 랜덤 걷기, 걸을 때만 애니메이션)
- * @param {{ load: function(string, { onLoad: function, onError?: function }): void }} loader
  * @param {object} config - STAGE2_CONFIG
  * @param {import("three").Scene} scene
  * @param {import("three").Object3D[]} objects
@@ -933,7 +922,6 @@ function buildStage2CharacterObstacleBoxes(roots, backgroundBounds) {
  * @param {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb[]} [obstacleBoxes] - 통과 불가 오브제 AABB
  */
 function loadCharacters(
-  loader,
   config,
   scene,
   objects,
@@ -1292,7 +1280,6 @@ function loadCharacters(
 
 /**
  * config.props 배열 기준으로 GLB 로드 후 scene에 추가
- * @param {{ load: function(string, { onLoad: function, onError?: function }): void }} loader - GLB 로더
  * @param {import("../types.js").Stage2PropConfig[]} propsConfig
  * @param {import("three").Scene} scene
  * @param {import("three").Object3D[]} objects - dispose용
@@ -1300,7 +1287,6 @@ function loadCharacters(
  * @param {() => void} onAllDone
  */
 function loadPropsFromConfig(
-  loader,
   propsConfig,
   scene,
   objects,

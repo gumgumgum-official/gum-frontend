@@ -80,7 +80,6 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const [errorMessage, setErrorMessage] = useState("");
 
   const posterWrapRef = useRef<HTMLDivElement>(null);
-  const voteAttemptSeqRef = useRef(0);
 
   useEffect(() => {
     let alive = true;
@@ -88,24 +87,6 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
     fetchVoteResults()
       .then((aggregate) => {
         if (!alive) return;
-        // #region agent log
-        fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "230420",
-          },
-          body: JSON.stringify({
-            sessionId: "230420",
-            runId: "pre-fix",
-            hypothesisId: "H3",
-            location: "src/components/GgumddiVoteSection.tsx:useEffect(fetchVoteResults)",
-            message: "initial aggregate applied",
-            data: { totalVotes: aggregate.totalVotes, c1: aggregate.votes[1], c2: aggregate.votes[2], c3: aggregate.votes[3] },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         setBundle((prev) => ({
           votes: aggregate.votes,
           myVote: prev.myVote,
@@ -115,24 +96,6 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
       })
       .catch((err) => {
         if (!alive) return;
-        // #region agent log
-        fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "230420",
-          },
-          body: JSON.stringify({
-            sessionId: "230420",
-            runId: "pre-fix",
-            hypothesisId: "H3",
-            location: "src/components/GgumddiVoteSection.tsx:useEffect(fetchVoteResults)",
-            message: "initial aggregate failed",
-            data: { error: err instanceof Error ? err.message : String(err) },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         setErrorMessage(
           err instanceof Error
             ? err.message
@@ -161,36 +124,6 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
     }
   }, [myVote]);
 
-  useEffect(() => {
-    // #region agent log
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "230420",
-      },
-      body: JSON.stringify({
-        sessionId: "230420",
-        runId: "pre-fix",
-        hypothesisId: "H8",
-        location: "src/components/GgumddiVoteSection.tsx:render-state",
-        message: "render snapshot",
-        data: {
-          totalVotes,
-          c1: votes[1],
-          c2: votes[2],
-          c3: votes[3],
-          myVote,
-          popupOpen,
-          isVoting,
-          hasError: Boolean(errorMessage),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }, [totalVotes, votes, myVote, popupOpen, isVoting, errorMessage]);
-
   useLayoutEffect(() => {
     if (justVotedId === null) return;
     const t = window.setTimeout(() => setJustVotedId(null), 450);
@@ -199,45 +132,8 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
 
   const onVote = useCallback(
     async (id: VoteId) => {
-      const attemptSeq = ++voteAttemptSeqRef.current;
-      // #region agent log
-      fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "230420",
-        },
-        body: JSON.stringify({
-          sessionId: "230420",
-          runId: "pre-fix",
-          hypothesisId: "H6",
-          location: "src/components/GgumddiVoteSection.tsx:onVote",
-          message: "onVote entered",
-          data: { votedId: id, isVotingSnapshot: isVoting, attemptSeq },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (isVoting) return;
       if (myVote !== null) {
-        // #region agent log
-        fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "230420",
-          },
-          body: JSON.stringify({
-            sessionId: "230420",
-            runId: "post-fix",
-            hypothesisId: "H13",
-            location: "src/components/GgumddiVoteSection.tsx:onVote",
-            message: "revote blocked by fallback mode",
-            data: { votedId: id, existingVote: myVote },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         setErrorMessage(
           "후보 변경/취소 기능은 준비 중입니다. 지금은 1회 투표만 가능합니다.",
         );
@@ -246,24 +142,6 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
       setIsVoting(true);
       try {
         const response = await postVote(id);
-        // #region agent log
-        fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "230420",
-          },
-          body: JSON.stringify({
-            sessionId: "230420",
-            runId: "pre-fix",
-            hypothesisId: "H4",
-            location: "src/components/GgumddiVoteSection.tsx:onVote",
-            message: "vote applied to UI",
-            data: { votedId: id, prevMyVote: myVote, totalVotes: response.totalVotes, selectedCandidate: response.selectedCandidate },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         setBundle({
           votes: response.votes,
           myVote: id,
@@ -272,24 +150,6 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
         setJustVotedId(id);
         setErrorMessage("");
       } catch (err) {
-        // #region agent log
-        fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "230420",
-          },
-          body: JSON.stringify({
-            sessionId: "230420",
-            runId: "pre-fix",
-            hypothesisId: "H4",
-            location: "src/components/GgumddiVoteSection.tsx:onVote",
-            message: "vote failed in UI handler",
-            data: { votedId: id, error: err instanceof Error ? err.message : String(err) },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         setErrorMessage(
           err instanceof Error ? err.message : "투표 등록에 실패했습니다.",
         );
@@ -330,24 +190,6 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const onSubPosterClick = useCallback(
     (e: MouseEvent, id: VoteId) => {
       e.stopPropagation();
-      // #region agent log
-      fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "230420",
-        },
-        body: JSON.stringify({
-          sessionId: "230420",
-          runId: "pre-fix",
-          hypothesisId: "H7",
-          location: "src/components/GgumddiVoteSection.tsx:onSubPosterClick",
-          message: "candidate button click",
-          data: { votedId: id, isVotingSnapshot: isVoting },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (isVoting) return;
       playRandomNoticePaperSound(NOTICE.paperSoundPaths);
       void onVote(id);
