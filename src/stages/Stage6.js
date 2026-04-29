@@ -1144,6 +1144,14 @@ export function Stage6() {
       atmEmissiveProgress = 0;
       atmRootRef = null;
       atmEmissiveMaterials.length = 0;
+      if (telRingAgainTimeoutId) {
+        window.clearTimeout(telRingAgainTimeoutId);
+        telRingAgainTimeoutId = 0;
+      }
+      if (telActivateTimeoutId) {
+        window.clearTimeout(telActivateTimeoutId);
+        telActivateTimeoutId = 0;
+      }
       isTelActivated = false;
       isTelRinging = false;
       telEmissiveTarget = 0;

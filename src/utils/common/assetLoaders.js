@@ -84,6 +84,16 @@ export function createGLBLoader(options = {}) {
         gltfLoader.load(path, resolve, undefined, reject);
       });
     },
+
+    /**
+     * 이미 가져온 ArrayBuffer를 파싱 (binary patch 등 전처리가 필요한 경우)
+     * @param {ArrayBuffer} buffer
+     * @param {string} basePath - 상대 URI 해석 기준 경로
+     * @returns {Promise<import('three/examples/jsm/loaders/GLTFLoader').GLTF>}
+     */
+    parseBufferAsync(buffer, basePath) {
+      return gltfLoader.parseAsync(buffer, basePath);
+    },
   };
 }
 
