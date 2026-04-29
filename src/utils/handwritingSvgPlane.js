@@ -10,6 +10,8 @@
  * @deprecated Planned removal — delete this file and strip Stage2/Stage3 call sites together.
  */
 
+/* global Worker */
+
 import * as THREE from "three";
 import { fetchSVG } from "../lib/svg-loader.js";
 
@@ -44,15 +46,26 @@ export async function rasterizeSvgToTexture(svgText) {
     }
   }
 
+  const perfEnabled =
+    typeof window !== "undefined" &&
+    (window.STAGE2_PROFILE || localStorage.getItem("STAGE2_PROFILE") === "1");
+  const mark = () => (perfEnabled ? window.performance.now() : 0);
+  const logDuration = (label, start) => {
+    if (!perfEnabled) return;
+    const end = window.performance.now();
+    console.log("[Stage2Perf]", label, "ms=", (end - start).toFixed(1));
+  };
   const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
   const objUrl = URL.createObjectURL(blob);
   const img = new Image();
   try {
+    const tDecodeStart = mark();
     await new Promise((resolve, reject) => {
       img.onload = resolve;
       img.onerror = () => reject(new Error("SVG image decode failed"));
       img.src = objUrl;
     });
+    logDuration("svg:imageDecode", tDecodeStart);
   } finally {
     URL.revokeObjectURL(objUrl);
   }
@@ -72,20 +85,61 @@ export async function rasterizeSvgToTexture(svgText) {
     ch = Math.max(2, Math.round(ch * r));
   }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(2, cw);
-  canvas.height = Math.max(2, ch);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("2d context unavailable");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  // SVG 패스 경계의 서브픽셀 투명 갭을 채워 TV(DPR=1)에서 금간 현상 제거.
-  // destination-over: 이미 그려진 불투명 픽셀은 유지하고 투명 픽셀 위치만 뒤에서 채운다.
-  ctx.globalCompositeOperation = "destination-over";
-  ctx.drawImage(img, -1, -1, canvas.width + 2, canvas.height + 2);
-  ctx.globalCompositeOperation = "source-over";
+  const tCanvasStart = mark();
+  let bitmap = null;
+  if (
+    typeof window !== "undefined" &&
+    "OffscreenCanvas" in window &&
+    "Worker" in window
+  ) {
+    try {
+      const workerStart = mark();
+      bitmap = await new Promise((resolve, reject) => {
+        const worker = new Worker(
+          new URL("../workers/svgRasterWorker.js", import.meta.url),
+          { type: "module" },
+        );
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const handleMessage = (event) => {
+          if (!event.data || event.data.id !== id) return;
+          worker.removeEventListener("message", handleMessage);
+          worker.terminate();
+          if (event.data.error) {
+            reject(new Error(event.data.error));
+          } else {
+            resolve(event.data.bitmap);
+          }
+        };
+        worker.addEventListener("message", handleMessage);
+        worker.postMessage({ id, svgText, width: cw, height: ch });
+      });
+      logDuration("svg:workerRaster", workerStart);
+    } catch (_err) {
+      // 워커 실패 시 아래 캔버스 경로로 폴백
+      bitmap = null;
+    }
+  }
 
-  const texture = new THREE.CanvasTexture(canvas);
+  let texture;
+  if (bitmap) {
+    texture = new THREE.CanvasTexture(bitmap);
+  } else {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(2, cw);
+    canvas.height = Math.max(2, ch);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("2d context unavailable");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // SVG 패스 경계의 서브픽셀 투명 갭을 채워 TV(DPR=1)에서 금간 현상 제거.
+    // destination-over: 이미 그려진 불투명 픽셀은 유지하고 투명 픽셀 위치만 뒤에서 채운다.
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.drawImage(img, -1, -1, canvas.width + 2, canvas.height + 2);
+    ctx.globalCompositeOperation = "source-over";
+    logDuration("svg:canvasDraw", tCanvasStart);
+
+    texture = new THREE.CanvasTexture(canvas);
+  }
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.generateMipmaps = false;
   texture.minFilter = THREE.LinearFilter;

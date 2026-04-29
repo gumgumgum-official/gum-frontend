@@ -468,6 +468,18 @@ export function Stage2() {
         },
       });
 
+      const perfEnabled =
+        typeof window !== "undefined" &&
+        (window.STAGE2_PROFILE ||
+          localStorage.getItem("STAGE2_PROFILE") === "1");
+      const mark = (label) => (perfEnabled ? window.performance.now() : 0);
+      const logDuration = (label, start) => {
+        if (!perfEnabled) return;
+        const end = window.performance.now();
+
+        console.log("[Stage2Perf]", label, "ms=", (end - start).toFixed(1));
+      };
+
       // 배경 GLB 로드 (단일 path 또는 island/sea/sky 분리)
       const pos = config.model.position ?? { x: 0, y: 0, z: 0 };
       const applyModel = (model) => {
@@ -521,6 +533,7 @@ export function Stage2() {
           islandValidator,
           characterObstacleBoxes,
         );
+        const tHandwritingStart = mark("loadInitialHandwritings:start");
         loadInitialHandwritings(
           scene,
           this.camera,
@@ -530,6 +543,7 @@ export function Stage2() {
           characterWalkGroundY,
           islandValidator,
         );
+        logDuration("loadInitialHandwritings", tHandwritingStart);
       };
 
       const finishBackground = (allModels, islandModel) => {
@@ -658,6 +672,7 @@ export function Stage2() {
         };
 
         if (config.props?.length) {
+          const tPropsStart = mark("props:loadAll");
           loadPropsFromConfig(
             glbLoader,
             config.props,
@@ -665,6 +680,7 @@ export function Stage2() {
             objects,
             propRoots,
             () => {
+              logDuration("props:loadAll", tPropsStart);
               debugControls.setDraggableObjects(propRoots);
               ensureFinalIslandBounds();
               refreshCharacterObstacleBoxes();
@@ -679,6 +695,7 @@ export function Stage2() {
       };
 
       if (config.model.island || config.model.sea || config.model.sky) {
+        const tBgStart = mark("background:loadAll");
         const parts = [
           config.model.island && "island",
           config.model.sea && "sea",
@@ -691,6 +708,7 @@ export function Stage2() {
         ].filter(Boolean);
         Promise.all(urls.map((url) => glbLoader.loadAsync(url)))
           .then((gltfs) => {
+            logDuration("background:loadAll", tBgStart);
             let islandModel = null;
             gltfs.forEach((gltf, i) => {
               const model = gltf.scene;
@@ -704,8 +722,10 @@ export function Stage2() {
           })
           .catch((err) => console.error("❌ Stage2 배경 로드 에러:", err));
       } else {
+        const tBgStart = mark("background:loadSingle");
         glbLoader.load(config.model.path, {
           onLoad: (gltf) => {
+            logDuration("background:loadSingle", tBgStart);
             const model = gltf.scene;
             applyModel(model);
             finishBackground([model], null);
@@ -1192,26 +1212,43 @@ function loadCharacters(
     );
   };
 
-  loader.load(characterPath, {
-    onLoad: (walkGltf) => {
-      loader.load(characterIdlePath, {
-        onLoad: (idleGltf) => {
-          buildCharacters(walkGltf, idleGltf);
-        },
-        onError: (err) => {
-          console.warn(
-            `[Stage2] idle GLB 로드 실패(${characterIdlePath}) — walk 모델 idle 클립으로 fallback`,
-            err,
-          );
-          buildCharacters(walkGltf, null);
-        },
-      });
-    },
-    onError: (err) => {
+  const perfEnabled =
+    typeof window !== "undefined" &&
+    (window.STAGE2_PROFILE || localStorage.getItem("STAGE2_PROFILE") === "1");
+  const mark = (label) => (perfEnabled ? window.performance.now() : 0);
+  const logDuration = (label, start) => {
+    if (!perfEnabled) return;
+    const end = window.performance.now();
+
+    console.log("[Stage2Perf]", label, "ms=", (end - start).toFixed(1));
+  };
+
+  const tCharsStart = mark("characters:loadWalk+Idle");
+  Promise.allSettled([
+    loader.loadAsync(characterPath),
+    loader.loadAsync(characterIdlePath),
+  ])
+    .then(([walkRes, idleRes]) => {
+      if (walkRes.status !== "fulfilled") {
+        console.error("❌ Stage2 캐릭터 로드 에러:", walkRes.reason);
+        onControllerReady(null, []);
+        return;
+      }
+      logDuration("characters:loadWalk+Idle", tCharsStart);
+      const walkGltf = walkRes.value;
+      const idleGltf = idleRes.status === "fulfilled" ? idleRes.value : null;
+      if (idleRes.status === "rejected") {
+        console.warn(
+          `[Stage2] idle GLB 로드 실패(${characterIdlePath}) — walk 모델 idle 클립으로 fallback`,
+          idleRes.reason,
+        );
+      }
+      buildCharacters(walkGltf, idleGltf);
+    })
+    .catch((err) => {
       console.error("❌ Stage2 캐릭터 로드 에러:", err);
       onControllerReady(null, []);
-    },
-  });
+    });
 }
 
 /**
@@ -1282,7 +1319,7 @@ function loadPropsFromConfig(
  */
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files"; // session_id, storage_path, created_at, client_id
-const STAGGER_MS = 90; // 첫 글자 즉시, 이후 글자는 이 간격으로 순차 스폰
+const STAGGER_MS = 90; // 기본 간격 (동적 스케줄에서 기준값으로 사용)
 
 // ------------------------------------------------------------
 // 글씨 스케일 정규화 (Stage3 방식)
@@ -1311,9 +1348,33 @@ async function loadInitialHandwritings(
   const sessionId = getSessionId();
 
   try {
-    let pathsToLoad = await listStoragePaths(sessionId);
-    if (pathsToLoad.length === 0) {
-      pathsToLoad = await loadPathsFromTable(sessionId);
+    const tPathsStart =
+      typeof window !== "undefined" &&
+      (window.STAGE2_PROFILE || localStorage.getItem("STAGE2_PROFILE") === "1")
+        ? window.performance.now()
+        : 0;
+    const [storageRes, tableRes] = await Promise.allSettled([
+      listStoragePaths(sessionId),
+      loadPathsFromTable(sessionId),
+    ]);
+    let pathsToLoad = [];
+    if (storageRes.status === "fulfilled" && storageRes.value.length > 0) {
+      pathsToLoad = storageRes.value;
+    } else if (tableRes.status === "fulfilled" && tableRes.value.length > 0) {
+      pathsToLoad = tableRes.value;
+    }
+    if (tPathsStart) {
+      const end = window.performance.now();
+
+      console.log(
+        "[Stage2Perf]",
+        "handwriting:list+table ms=",
+        (end - tPathsStart).toFixed(1),
+        "storageCount=",
+        storageRes.status === "fulfilled" ? storageRes.value.length : -1,
+        "tableCount=",
+        tableRes.status === "fulfilled" ? tableRes.value.length : -1,
+      );
     }
     if (pathsToLoad.length === 0) {
       console.log(
@@ -1322,14 +1383,20 @@ async function loadInitialHandwritings(
       return;
     }
 
+    const count = pathsToLoad.length;
     console.log(
-      `[Stage2] 누적 로드: ${sessionId} 에서 ${pathsToLoad.length}개 SVG → 공중에서 순차 낙하`,
+      `[Stage2] 누적 로드: ${sessionId} 에서 ${count}개 SVG → 공중에서 순차 낙하`,
     );
 
     const bucket = HANDWRITING_BUCKET;
+    // SVG 수에 따라 전체 스폰 시간을 제한하는 동적 간격(ms)
+    const totalTargetMs = 4000; // 누적 스폰을 대략 4초 안에 끝내기
+    const dynamicStagger =
+      count > 1 ? Math.min(STAGGER_MS, totalTargetMs / (count - 1)) : 0;
+
     for (let i = 0; i < pathsToLoad.length; i++) {
       if (i > 0) {
-        await new Promise((r) => setTimeout(r, STAGGER_MS));
+        await new Promise((r) => setTimeout(r, dynamicStagger));
       }
       const { path, id, createdAt, clientId } = pathsToLoad[i];
       const { data: urlData } = supabase.storage
