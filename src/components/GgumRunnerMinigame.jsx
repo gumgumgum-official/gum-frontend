@@ -13,6 +13,8 @@ const BG_PATH = "/assets/minigame/pixel_bg.png";
 const BASE_SPEED = 3;
 const MAX_SPEED = 8;
 const SPEED_GAIN_PER_SCORE = 0.0025;
+const NEW_HIGH_BLINK_INTERVAL = 8;
+const NEW_HIGH_BLINK_PHASES = 6;
 const WOOD = "oklch(0.62 0.09 60)";
 const WOOD_DARK = "oklch(0.45 0.08 55)";
 const CARD = "oklch(0.99 0.012 85)";
@@ -69,6 +71,8 @@ export function GgumRunnerMinigame({ onClose }) {
     let obstacleTimer = 0;
     let nextObstacleIn = 90;
     let obstacles = [];
+    let newHighBlinkPhase = NEW_HIGH_BLINK_PHASES;
+    let hasTriggeredNewHighBlink = false;
 
     const player = {
       x: 80,
@@ -263,13 +267,16 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const updateScoreText = () => {
-      scoreEl.textContent = `점수: ${score}  최고: ${hiScore}`;
+      const isBlinking = newHighBlinkPhase < NEW_HIGH_BLINK_PHASES;
+      const blinkOpacity = isBlinking && newHighBlinkPhase % 2 === 1 ? 0.3 : 1;
+
+      scoreEl.innerHTML = `<span style="opacity:${blinkOpacity};">현재점수: ${score}</span>  <span>최고 점수: ${hiScore}</span>`;
     };
 
     const updateOverlayVisibility = () => {
       startOverlayEl.style.display = state === "idle" ? "flex" : "none";
       gameOverOverlayEl.style.display = state === "dead" ? "flex" : "none";
-      gameOverScoreEl.textContent = `점수: ${score}  최고: ${hiScore}`;
+      gameOverScoreEl.textContent = `현재 점수: ${score}\n최고 점수: ${hiScore}`;
     };
 
     const jump = () => {
@@ -283,6 +290,8 @@ export function GgumRunnerMinigame({ onClose }) {
         obstacles = [];
         obstacleTimer = 0;
         nextObstacleIn = 90;
+        newHighBlinkPhase = NEW_HIGH_BLINK_PHASES;
+        hasTriggeredNewHighBlink = false;
         player.y = GROUND_Y - DISPLAY_H;
         player.vy = 0;
         player.onGround = true;
@@ -316,6 +325,16 @@ export function GgumRunnerMinigame({ onClose }) {
 
       frame += 1;
       score += 1;
+      if (!hasTriggeredNewHighBlink && score > hiScore) {
+        hasTriggeredNewHighBlink = true;
+        newHighBlinkPhase = 0;
+      }
+      if (
+        newHighBlinkPhase < NEW_HIGH_BLINK_PHASES &&
+        frame % NEW_HIGH_BLINK_INTERVAL === 0
+      ) {
+        newHighBlinkPhase += 1;
+      }
       speed = Math.min(MAX_SPEED, BASE_SPEED + score * SPEED_GAIN_PER_SCORE);
       bgX += speed * 0.4;
       groundX += speed;
@@ -370,7 +389,7 @@ export function GgumRunnerMinigame({ onClose }) {
         ) {
           state = "dead";
           if (score > hiScore) hiScore = score;
-          msgEl.textContent = `앗, 장애물에 닿았어요! 최고: ${hiScore}`;
+          msgEl.textContent = "앗 장애물에 닿았어요!";
           updateOverlayVisibility();
           break;
         }
@@ -419,7 +438,7 @@ export function GgumRunnerMinigame({ onClose }) {
         position: "relative",
         width: "min(92vw, 760px)",
         fontFamily:
-          "'Noto Sans KR', 'Pretendard', 'Apple SD Gothic Neo', sans-serif",
+          "'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
         userSelect: "none",
         borderRadius: 16,
         overflow: "visible",
@@ -483,10 +502,10 @@ export function GgumRunnerMinigame({ onClose }) {
               boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.3)",
               whiteSpace: "nowrap",
               borderRadius: 4,
-              fontWeight: 600,
+              fontWeight: 400,
             }}
           >
-            점수 0
+            현재점수: 0 최고 점수: 0
           </span>
           <span
             ref={msgRef}
@@ -589,26 +608,26 @@ export function GgumRunnerMinigame({ onClose }) {
                 border: "none",
                 padding: "6px 10px",
                 borderRadius: 6,
+                whiteSpace: "pre-line",
               }}
             >
-              점수: 0 최고: 0
+              현재 점수: 0
+              <br />
+              최고 점수: 0
             </div>
             <button
               ref={gameOverButtonRef}
               type="button"
               style={{
                 border: "none",
-                background:
-                  "linear-gradient(180deg, #d8efb8 0%, #b9dd8d 55%, #93be61 100%)",
-                color: "#2b3c1f",
+                background: "#2b3c1f",
+                color: "#b9dd8d",
                 borderRadius: 8,
                 padding: "8px 14px",
                 fontSize: 13,
                 fontWeight: 700,
                 letterSpacing: "0.01em",
                 cursor: "pointer",
-                boxShadow:
-                  "0 2px 0 rgba(84, 117, 52, 0.9), 0 6px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.45)",
               }}
             >
               다시 시작
