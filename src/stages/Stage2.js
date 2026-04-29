@@ -992,6 +992,13 @@ function loadCharacters(
     const spanZ = maxZ - minZ;
     /** @type {{ x: number, z: number }[]} */
     const scatterPlaced = [];
+    const centerX = minX + spanX * 0.5;
+    const centerZ = minZ + spanZ * 0.5;
+    const fiveDirectionBaseRadius = Math.max(
+      2.2,
+      Math.min(spanX, spanZ) * 0.32,
+    );
+    const fiveDirectionDiagRadius = fiveDirectionBaseRadius * 0.86;
 
     function randomXZ() {
       return {
@@ -1052,6 +1059,23 @@ function loadCharacters(
         }
       }
       return { x: minX + spanX * 0.5, z: minZ + spanZ * 0.5 };
+    }
+    function getFiveDirectionTarget(index) {
+      switch (index) {
+        case 0:
+          return { x: centerX, z: centerZ - fiveDirectionBaseRadius }; // 북
+        case 1:
+          return { x: centerX + fiveDirectionBaseRadius, z: centerZ }; // 동
+        case 2:
+          return { x: centerX, z: centerZ + fiveDirectionBaseRadius }; // 남
+        case 3:
+          return { x: centerX - fiveDirectionBaseRadius, z: centerZ }; // 서
+        default:
+          return {
+            x: centerX + fiveDirectionDiagRadius,
+            z: centerZ - fiveDirectionDiagRadius,
+          }; // 북동
+      }
     }
 
     function tooClose(x, z) {
@@ -1120,8 +1144,9 @@ function loadCharacters(
         }
         scatterPlaced.push({ x, z });
       } else {
-        x = pos.x ?? 0;
-        z = pos.z ?? 0;
+        const target = getFiveDirectionTarget(i);
+        x = target.x;
+        z = target.z;
         const resolved = resolveNearestValidSpawn(x, z);
         x = resolved.x;
         z = resolved.z;
