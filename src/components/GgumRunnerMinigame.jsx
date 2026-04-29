@@ -409,20 +409,20 @@ export function GgumRunnerMinigame({ onClose }) {
 
       if (player.onGround) {
         player.animTimer += scale;
-        if (player.animTimer >= 8) {
+        while (player.animTimer >= 8) {
           player.animFrame = (player.animFrame + 1) % TOTAL_RUN_FRAMES;
-          player.animTimer = 0;
+          player.animTimer -= 8;
         }
       }
 
       obstacleTimer += scale;
-      if (obstacleTimer >= nextObstacleIn) {
+      while (obstacleTimer >= nextObstacleIn) {
         obstacles.push({
           x: W + 10,
           y: GROUND_Y - 34,
           type: Math.floor(Math.random() * 3),
         });
-        obstacleTimer = 0;
+        obstacleTimer -= nextObstacleIn;
         nextObstacleIn = Math.max(
           42,
           Math.floor(96 - speed * 6 + Math.random() * 42),
@@ -523,16 +523,11 @@ export function GgumRunnerMinigame({ onClose }) {
             스페이스바 또는 클릭으로 점프!
           </span>
         </div>
-        <canvas
-          ref={canvasRef}
-          onClick={() => jumpActionRef.current()}
-          className="ggum-runner-canvas"
-        />
+        <canvas ref={canvasRef} className="ggum-runner-canvas" />
         <div ref={startOverlayRef} className="ggum-runner-start-overlay">
           <button
             ref={startButtonRef}
             type="button"
-            onClick={() => jumpActionRef.current()}
             className="ggum-runner-start-button"
           >
             산책 시작하기
@@ -549,7 +544,6 @@ export function GgumRunnerMinigame({ onClose }) {
             <button
               ref={gameOverButtonRef}
               type="button"
-              onClick={() => jumpActionRef.current()}
               className="ggum-runner-gameover-button"
             >
               다시 시작

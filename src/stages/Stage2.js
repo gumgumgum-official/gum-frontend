@@ -1255,8 +1255,8 @@ function loadCharacters(
 
   const tCharsStart = mark("characters:loadWalk+Idle");
   Promise.allSettled([
-    loader.loadAsync(characterPath),
-    loader.loadAsync(characterIdlePath),
+    loadGltfTemplateCached(resolvePublicAssetUrl(characterPath)),
+    loadGltfTemplateCached(resolvePublicAssetUrl(characterIdlePath)),
   ])
     .then(([walkRes, idleRes]) => {
       if (walkRes.status !== "fulfilled") {
@@ -1265,8 +1265,17 @@ function loadCharacters(
         return;
       }
       logDuration("characters:loadWalk+Idle", tCharsStart);
-      const walkGltf = walkRes.value;
-      const idleGltf = idleRes.status === "fulfilled" ? idleRes.value : null;
+      const walkGltf = {
+        ...walkRes.value,
+        scene: walkRes.value.scene.clone(true),
+      };
+      const idleGltf =
+        idleRes.status === "fulfilled"
+          ? {
+              ...idleRes.value,
+              scene: idleRes.value.scene.clone(true),
+            }
+          : null;
       if (idleRes.status === "rejected") {
         console.warn(
           `[Stage2] idle GLB 로드 실패(${characterIdlePath}) — walk 모델 idle 클립으로 fallback`,
@@ -1298,47 +1307,47 @@ function loadPropsFromConfig(
   propRoots,
   onAllDone,
 ) {
-  let done = 0;
-  const total = propsConfig.length;
-
-  propsConfig.forEach((propConfig) => {
-    loader.load(propConfig.path, {
-      onLoad: (gltf) => {
-        const root = gltf.scene;
-        root.position.set(
-          propConfig.position?.x ?? 0,
-          propConfig.position?.y ?? 0,
-          propConfig.position?.z ?? 0,
-        );
-        root.rotation.set(
-          THREE.MathUtils.degToRad(propConfig.rotation?.x ?? 0),
-          THREE.MathUtils.degToRad(propConfig.rotation?.y ?? 0),
-          THREE.MathUtils.degToRad(propConfig.rotation?.z ?? 0),
-        );
-        root.scale.set(
-          propConfig.scale?.x ?? 1,
-          propConfig.scale?.y ?? 1,
-          propConfig.scale?.z ?? 1,
-        );
-        root.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-        scene.add(root);
-        objects.push(root);
-        propRoots.push(root);
-        console.log(`✅ 오브제 로드: ${propConfig.path}`);
-        done++;
-        if (done === total) onAllDone();
-      },
-      onError: (err) => {
-        console.error(`❌ 오브제 로드 실패: ${propConfig.path}`, err);
-        done++;
-        if (done === total) onAllDone();
-      },
+  Promise.allSettled(
+    propsConfig.map((propConfig) =>
+      loadGltfTemplateCached(resolvePublicAssetUrl(propConfig.path)).then(
+        (gltf) => ({ propConfig, gltf }),
+      ),
+    ),
+  ).then((results) => {
+    results.forEach((result) => {
+      if (result.status !== "fulfilled") {
+        console.error("❌ 오브제 로드 실패:", result.reason);
+        return;
+      }
+      const { propConfig, gltf } = result.value;
+      const root = gltf.scene.clone(true);
+      root.position.set(
+        propConfig.position?.x ?? 0,
+        propConfig.position?.y ?? 0,
+        propConfig.position?.z ?? 0,
+      );
+      root.rotation.set(
+        THREE.MathUtils.degToRad(propConfig.rotation?.x ?? 0),
+        THREE.MathUtils.degToRad(propConfig.rotation?.y ?? 0),
+        THREE.MathUtils.degToRad(propConfig.rotation?.z ?? 0),
+      );
+      root.scale.set(
+        propConfig.scale?.x ?? 1,
+        propConfig.scale?.y ?? 1,
+        propConfig.scale?.z ?? 1,
+      );
+      root.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(root);
+      objects.push(root);
+      propRoots.push(root);
+      console.log(`✅ 오브제 로드: ${propConfig.path}`);
     });
+    onAllDone();
   });
 }
 
