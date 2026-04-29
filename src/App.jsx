@@ -12,6 +12,7 @@ import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
 import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
 import { BasicWhiteModal } from "./components/BasicWhiteModal.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
+import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
@@ -27,6 +28,11 @@ export function App() {
     "/assets/poster/stamp_poster.png",
   );
   const [showAirportChime, setShowAirportChime] = useState(false);
+
+  const closeGameMachineModal = () => {
+    setShowGameMachineModal(false);
+    dispatchMinigameClose();
+  };
 
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
@@ -98,7 +104,7 @@ export function App() {
       />
       <BasicWhiteModal
         isOpen={showGameMachineModal}
-        onClose={() => setShowGameMachineModal(false)}
+        onClose={closeGameMachineModal}
         ariaLabel="게임기 기본 모달"
         hideCloseButton
         contentStyle={{
@@ -110,7 +116,7 @@ export function App() {
         }}
         bodyStyle={{ marginTop: 0 }}
       >
-        <GgumRunnerMinigame onClose={() => setShowGameMachineModal(false)} />
+        <GgumRunnerMinigame onClose={closeGameMachineModal} />
       </BasicWhiteModal>
       <Stage6PosterModal
         isOpen={showStage6PosterModal}

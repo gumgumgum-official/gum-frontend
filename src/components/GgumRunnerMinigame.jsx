@@ -24,17 +24,20 @@ const LEAF_DARK = "oklch(0.5 0.09 130)";
 
 export function GgumRunnerMinigame({ onClose }) {
   const canvasRef = useRef(null);
-  const scoreRef = useRef(null);
+  const currentScoreRef = useRef(null);
+  const hiScoreRef = useRef(null);
   const msgRef = useRef(null);
   const startOverlayRef = useRef(null);
   const startButtonRef = useRef(null);
   const gameOverOverlayRef = useRef(null);
   const gameOverScoreRef = useRef(null);
   const gameOverButtonRef = useRef(null);
+  const jumpActionRef = useRef(() => {});
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const scoreEl = scoreRef.current;
+    const currentScoreEl = currentScoreRef.current;
+    const hiScoreEl = hiScoreRef.current;
     const msgEl = msgRef.current;
     const startOverlayEl = startOverlayRef.current;
     const startButtonEl = startButtonRef.current;
@@ -43,7 +46,8 @@ export function GgumRunnerMinigame({ onClose }) {
     const gameOverButtonEl = gameOverButtonRef.current;
     if (
       !canvas ||
-      !scoreEl ||
+      !currentScoreEl ||
+      !hiScoreEl ||
       !msgEl ||
       !startOverlayEl ||
       !startButtonEl ||
@@ -269,8 +273,9 @@ export function GgumRunnerMinigame({ onClose }) {
     const updateScoreText = () => {
       const isBlinking = newHighBlinkPhase < NEW_HIGH_BLINK_PHASES;
       const blinkOpacity = isBlinking && newHighBlinkPhase % 2 === 1 ? 0.3 : 1;
-
-      scoreEl.innerHTML = `<span style="opacity:${blinkOpacity};">현재점수: ${score}</span>  <span>최고 점수: ${hiScore}</span>`;
+      currentScoreEl.textContent = `현재점수: ${score}`;
+      currentScoreEl.style.opacity = `${blinkOpacity}`;
+      hiScoreEl.textContent = `최고 점수: ${hiScore}`;
     };
 
     const updateOverlayVisibility = () => {
@@ -306,6 +311,7 @@ export function GgumRunnerMinigame({ onClose }) {
         player.onGround = false;
       }
     };
+    jumpActionRef.current = jump;
 
     const onKeyDown = (e) => {
       if (e.code !== "Space") return;
@@ -417,10 +423,7 @@ export function GgumRunnerMinigame({ onClose }) {
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
     startButtonEl.addEventListener("click", onStartButtonClick);
     gameOverButtonEl.addEventListener("click", onGameOverButtonClick);
-    sprite.onload = () => {
-      if (!rafId) loop();
-    };
-    if (sprite.complete) loop();
+    loop();
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
@@ -429,6 +432,7 @@ export function GgumRunnerMinigame({ onClose }) {
       canvas.removeEventListener("touchstart", onTouchStart);
       startButtonEl.removeEventListener("click", onStartButtonClick);
       gameOverButtonEl.removeEventListener("click", onGameOverButtonClick);
+      jumpActionRef.current = () => {};
     };
   }, []);
 
@@ -493,8 +497,7 @@ export function GgumRunnerMinigame({ onClose }) {
             textShadow: "0 1px 0 rgba(0,0,0,0.6)",
           }}
         >
-          <span
-            ref={scoreRef}
+          <div
             style={{
               padding: "4px 8px",
               background: LEAF_DARK,
@@ -503,10 +506,14 @@ export function GgumRunnerMinigame({ onClose }) {
               whiteSpace: "nowrap",
               borderRadius: 4,
               fontWeight: 400,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
             }}
           >
-            현재점수: 0 최고 점수: 0
-          </span>
+            <span ref={currentScoreRef}>현재점수: 0</span>
+            <span ref={hiScoreRef}>최고 점수: 0</span>
+          </div>
           <span
             ref={msgRef}
             style={{
@@ -522,6 +529,7 @@ export function GgumRunnerMinigame({ onClose }) {
         </div>
         <canvas
           ref={canvasRef}
+          onClick={() => jumpActionRef.current()}
           style={{
             display: "block",
             width: "100%",
@@ -546,6 +554,7 @@ export function GgumRunnerMinigame({ onClose }) {
           <button
             ref={startButtonRef}
             type="button"
+            onClick={() => jumpActionRef.current()}
             style={{
               border: "none",
               background: "#ecd6ad",
@@ -618,6 +627,7 @@ export function GgumRunnerMinigame({ onClose }) {
             <button
               ref={gameOverButtonRef}
               type="button"
+              onClick={() => jumpActionRef.current()}
               style={{
                 border: "none",
                 background: "#2b3c1f",
