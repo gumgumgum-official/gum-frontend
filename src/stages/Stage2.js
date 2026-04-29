@@ -41,8 +41,6 @@ const LEGACY_ISLAND_BOUNDS = {
   maxZ: 6.89,
 };
 const GROUND_Y = 0.7;
-/** 글자끼리 최소 거리(m). 이 값보다 가깝게 스폰되지 않음. */
-const MIN_DISTANCE_BETWEEN = 10;
 // island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
 const ISLAND_BOUNDS_INSET_RATIO = 0.08;
@@ -88,23 +86,15 @@ function findIslandNamedObject(model) {
   return found;
 }
 
-/** 울타리 경계용 — 이름이 Fence / fence / FenceBounds / 울타리 등인 첫 오브젝트 */
+/** 울타리 경계용 — 이름에 fence 또는 울타리가 포함된 첫 오브젝트 (OBJ_Fence 포함) */
 function findFenceNamedObject(model) {
   if (!model) return null;
-  const byExact = findChildByName(model, "Fence");
-  if (byExact) return byExact;
   let found = null;
   model.traverse((obj) => {
     if (found) return;
     const n = typeof obj.name === "string" ? obj.name.trim() : "";
     const lower = n.toLowerCase();
-    if (
-      lower === "fence" ||
-      lower === "fencearea" ||
-      lower === "fence_bounds" ||
-      lower === "fencebounds" ||
-      lower.includes("울타리")
-    ) {
+    if (lower.includes("fence") || lower.includes("울타리")) {
       found = obj;
     }
   });
@@ -353,6 +343,10 @@ export function Stage2() {
   let characterObstacleBoxes = [];
   /** 위 두 배열로 만든 "이 XZ가 섬 울타리 안 유효 지점인가" 검증 함수 */
   let islandValidator = null;
+  /** 글자 스폰 금지 구역 (오브젝트 가시성 보호) */
+  let spawnExclusionZones = [];
+  /** beam2.glb 내 OBJ_Fire 애니메이션 믹서 */
+  let fireMixer = null;
 
   function updateIslandBoundsFromRoots(roots) {
     if (!roots || roots.length === 0) {
@@ -420,6 +414,7 @@ export function Stage2() {
             initial: false,
             groundY: characterWalkGroundY,
             islandValidator,
+            spawnExclusionZones,
           },
           () => characterMoveBounds ?? islandBounds,
         );
@@ -543,6 +538,7 @@ export function Stage2() {
           (metadata) => ingestHandwriting(metadata, "initial"),
           characterWalkGroundY,
           islandValidator,
+          spawnExclusionZones,
         );
         logDuration("loadInitialHandwritings", tHandwritingStart);
       };
@@ -566,6 +562,7 @@ export function Stage2() {
             }
           }),
         );
+        spawnExclusionZones = buildSpawnExclusionZones(allModels);
         const box = new THREE.Box3();
         allModels.forEach((m) => box.expandByObject(m));
         const center = box.getCenter(new THREE.Vector3());
@@ -724,6 +721,38 @@ export function Stage2() {
             logDuration("background:loadSingle", tBgStart);
             const model = gltf.scene.clone(true);
             applyModel(model);
+
+            // 불꽃 메시 투명 처리 (셰이프 키 모프 타겟 기반)
+            model.traverse((obj) => {
+              if (!obj.isMesh) return;
+              const n = obj.name ?? "";
+              if (n.includes("Fire") || n.includes("fire")) {
+                obj.material.transparent = true;
+                obj.material.depthWrite = false;
+                obj.material.alphaTest = 0.01;
+              }
+            });
+
+            // 전체 애니메이션 클립 무한 재생 (이름 필터 없이 전부)
+            const clips = gltf.animations ?? [];
+            console.log(
+              "[Stage2] beam2 animations:",
+              clips.map((c) => c.name),
+            );
+            if (clips.length > 0) {
+              fireMixer = new THREE.AnimationMixer(model);
+              clips.forEach((clip) => {
+                const action = fireMixer.clipAction(clip);
+                action.setLoop(THREE.LoopRepeat, Infinity);
+                action.clampWhenFinished = false;
+                action.play();
+              });
+            } else {
+              console.warn(
+                "[Stage2] beam2.glb에 애니메이션 클립 없음 — Blender export 확인 필요",
+              );
+            }
+
             finishBackground([model], null);
           })
           .catch((err) => console.error("❌ Stage2 배경 로드 에러:", err));
@@ -795,6 +824,7 @@ export function Stage2() {
       if (debugControls) debugControls.update(delta);
       if (autonomousCharacters) autonomousCharacters.update(delta);
       if (gumSpeechBubbles) gumSpeechBubbles.update(delta);
+      if (fireMixer) fireMixer.update(delta);
 
       // 떨어지는 텍스트 애니메이션 업데이트
       updateFallingTexts(delta, cameraRef, fallingTexts);
@@ -816,6 +846,7 @@ export function Stage2() {
       });
       fallingTexts.length = 0;
       processedHandwritingKeys.clear();
+      spawnExclusionZones = [];
 
       if (gumSpeechBubbles) {
         gumSpeechBubbles.cleanup();
@@ -850,6 +881,11 @@ export function Stage2() {
       characterMoveBounds = null;
       islandGroundMeshes = [];
       islandFenceMeshes = [];
+      if (fireMixer) {
+        fireMixer.stopAllAction();
+        fireMixer.uncacheRoot(fireMixer.getRoot());
+        fireMixer = null;
+      }
       characterObstacleBoxes = [];
       islandValidator = null;
     },
@@ -1350,11 +1386,11 @@ const STAGGER_MS = 90; // 기본 간격 (동적 스케줄에서 기준값으로 
 // 글씨 스케일 정규화 (Stage3 방식)
 // - 입력 SVG 크기와 무관하게 "최종 월드 높이(Y)"를 목표치로 고정
 // - 각 글자마다 randomFactor를 곱해 크기 편차 부여
-// - 최대 크기 ≈ 4.14m (TARGET * RANDOM_MAX), 최소 ≈ 1.38m (TARGET * RANDOM_MIN)
+// - 최대 크기 ≈ 3.0m (TARGET * RANDOM_MAX), 최소 ≈ 1.38m (TARGET * RANDOM_MIN)
 // ------------------------------------------------------------
 const LETTER_TARGET_HEIGHT = 2.3;
-const LETTER_HEIGHT_RANDOM_MIN = 0.6;
-const LETTER_HEIGHT_RANDOM_MAX = 1.8;
+const LETTER_HEIGHT_RANDOM_MIN = 0.826; // 2.3 * 0.826 ≈ 1.9m
+const LETTER_HEIGHT_RANDOM_MAX = 1.304; // 2.3 * 1.304 ≈ 3.0m
 
 async function loadInitialHandwritings(
   scene,
@@ -1364,6 +1400,7 @@ async function loadInitialHandwritings(
   onMetadata,
   groundY = GROUND_Y,
   islandValidator = null,
+  spawnExclusionZones = [],
 ) {
   if (!supabase) {
     console.warn("[Stage2] Supabase 없음, 누적 로드 스킵");
@@ -1444,7 +1481,7 @@ async function loadInitialHandwritings(
           scene,
           camera,
           fallingTextsArr,
-          { initial: false, groundY, islandValidator },
+          { initial: false, groundY, islandValidator, spawnExclusionZones },
           getIslandBounds,
         );
       }
@@ -1549,16 +1586,24 @@ async function createFallingText(
   options = {},
   getIslandBounds,
 ) {
-  const { initial = false, groundY: optGroundY, islandValidator } = options;
+  const {
+    initial = false,
+    groundY: optGroundY,
+    islandValidator,
+    spawnExclusionZones = [],
+  } = options;
   const groundY =
     typeof optGroundY === "number" && Number.isFinite(optGroundY)
       ? optGroundY
       : GROUND_Y;
 
   try {
+    // 50% 확률로 최솟값, 나머지 50%는 전체 범위 내 균일 랜덤
     const randomFactor =
-      LETTER_HEIGHT_RANDOM_MIN +
-      Math.random() * (LETTER_HEIGHT_RANDOM_MAX - LETTER_HEIGHT_RANDOM_MIN);
+      Math.random() < 0.5
+        ? LETTER_HEIGHT_RANDOM_MIN
+        : LETTER_HEIGHT_RANDOM_MIN +
+          Math.random() * (LETTER_HEIGHT_RANDOM_MAX - LETTER_HEIGHT_RANDOM_MIN);
     const targetH = LETTER_TARGET_HEIGHT * randomFactor;
 
     const built = await createHandwritingSvgPlaneGroup(metadata.url, {
@@ -1572,11 +1617,13 @@ async function createFallingText(
     const { group, planeW, planeH } = built;
     group.updateMatrixWorld(true);
 
-    // 글자의 세로 절반(half-height)을 최종 스케일 적용 후에 계산해
-    // bottom이 groundY에 정확히 닿도록 한다.
+    // 낙하 중 X/Z 회전으로 코너가 중심보다 아래로 내려갈 수 있음.
+    // 최악의 경우(코너가 완전히 아래를 향할 때) = 대각선 절반 = hypot(halfW, halfH).
+    // 이 값을 landingY 기준으로 써야 회전 중 땅을 파고드는 현상이 사라진다.
     const preBox = new THREE.Box3().setFromObject(group);
-    const letterHalfHeight = Math.max(0, (preBox.max.y - preBox.min.y) / 2);
-    const landingY = groundY + letterHalfHeight;
+    const halfH = Math.max(0, (preBox.max.y - preBox.min.y) / 2);
+    const halfW = Math.max(0, (preBox.max.x - preBox.min.x) / 2);
+    const landingY = groundY + Math.hypot(halfW, halfH);
 
     const bounds =
       typeof getIslandBounds === "function" ? getIslandBounds() : null;
@@ -1586,6 +1633,8 @@ async function createFallingText(
       bounds,
       islandValidator ?? null,
       planeW,
+      spawnExclusionZones,
+      planeH,
     );
     const startY = initial
       ? landingY
@@ -1608,6 +1657,7 @@ async function createFallingText(
 
     const fallingText = {
       group,
+      radius: Math.hypot(planeW / 2, planeH / 2), // XZ 바운딩 원 반경 (겹침 계산용)
       velocity: {
         y: initial ? 0 : initialVy,
         rotationX: rotationVelocity.x,
@@ -1616,45 +1666,12 @@ async function createFallingText(
       },
       gravity,
       groundY: landingY,
+      baseGroundY: groundY, // 섬 지면 실제 Y (landing 후 위치 보정용)
       bounces: 0,
       landed: initial,
     };
 
     fallingTextsArr.push(fallingText);
-
-    // #region agent log
-    fetch("http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "dbbf7d",
-      },
-      body: JSON.stringify({
-        sessionId: "dbbf7d",
-        location: "Stage2.js:createFallingText",
-        message: "spawn",
-        hypothesisId: "A,B,D",
-        data: {
-          id: metadata.id,
-          initial,
-          startX,
-          startY,
-          startZ,
-          groundY,
-          landingY,
-          halfH: letterHalfHeight,
-          planeW,
-          planeH,
-          targetH,
-          randomFactor,
-          initialVy,
-          gravity,
-          total: fallingTextsArr.length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     console.log(
       `[Stage2] ${initial ? "\ub204\uc801" : "Realtime"} SVG \u2192 ${metadata.id}, \uc704\uce58 (${startX.toFixed(2)}, ${startY.toFixed(2)}, ${startZ.toFixed(2)})`,
@@ -1680,27 +1697,6 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
   // "승천" 버그 발생. 물리 안정성을 위해 상한을 둔다.
   const d = Math.min(delta, 0.05);
 
-  // #region agent log
-  if (delta > 0.3) {
-    fetch("http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "dbbf7d",
-      },
-      body: JSON.stringify({
-        sessionId: "dbbf7d",
-        location: "Stage2.js:updateFallingTexts",
-        message: "large delta clamped",
-        hypothesisId: "A",
-        data: { delta, clamped: d, count: fallingTextsArr.length },
-        runId: "post-fix",
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
-
   for (let i = 0; i < fallingTextsArr.length; i++) {
     const ft = fallingTextsArr[i];
     if (ft.landed) continue;
@@ -1708,81 +1704,19 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
     const { group, velocity, gravity, groundY } = ft;
     const nextY = group.position.y + velocity.y * d;
 
-    // #region agent log
-    if (
-      nextY > groundY + 50 ||
-      !Number.isFinite(nextY) ||
-      !Number.isFinite(velocity.y)
-    ) {
-      fetch(
-        "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "dbbf7d",
-          },
-          body: JSON.stringify({
-            sessionId: "dbbf7d",
-            location: "Stage2.js:updateFallingTexts",
-            message: "ASCENSION detected",
-            hypothesisId: "A,B,D",
-            data: {
-              i,
-              posY: group.position.y,
-              nextY,
-              vy: velocity.y,
-              gravity,
-              groundY,
-              bounces: ft.bounces,
-              landed: ft.landed,
-              delta,
-              d,
-            },
-            runId: "post-fix",
-            timestamp: Date.now(),
-          }),
-        },
-      ).catch(() => {});
-    }
-    // #endregion
-
     if (nextY <= groundY) {
       // Stage3처럼 첫 충돌 시 한 번만 가볍게 바운스해서 "통통" 무게감 표현
       if ((ft.bounces ?? 0) < LETTER_MAX_BOUNCES && Math.abs(velocity.y) > 2) {
-        // #region agent log
-        fetch(
-          "http://127.0.0.1:7321/ingest/bf2c154e-c9bc-44a2-86c1-b069dc0f8bab",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Debug-Session-Id": "dbbf7d",
-            },
-            body: JSON.stringify({
-              sessionId: "dbbf7d",
-              location: "Stage2.js:updateFallingTexts",
-              message: "bounce",
-              hypothesisId: "A,B",
-              data: {
-                i,
-                posY: group.position.y,
-                nextY,
-                vyBefore: velocity.y,
-                vyUp: -velocity.y * LETTER_BOUNCE_RESTITUTION,
-                gravity,
-                groundY,
-                bouncesBefore: ft.bounces,
-                delta,
-                d,
-              },
-              runId: "post-fix",
-              timestamp: Date.now(),
-            }),
-          },
-        ).catch(() => {});
-        // #endregion
-        group.position.y = groundY;
+        // X/Z 회전을 초기화하고 실제 바닥 Y 기준으로 위치 보정
+        group.rotation.set(0, group.rotation.y, 0);
+        const baseY = ft.baseGroundY ?? GROUND_Y;
+        group.position.y = baseY;
+        group.updateMatrixWorld(true);
+        const bounceBox = new THREE.Box3().setFromObject(group);
+        const bounceHalfH = (bounceBox.max.y - bounceBox.min.y) / 2;
+        group.position.y = baseY + bounceHalfH; // bottom이 baseY에 닿도록
+        ft.groundY = baseY + bounceHalfH; // 이후 재착지 기준 갱신 (Y회전만 남으므로 halfH면 충분)
+
         const vyUp = -velocity.y * LETTER_BOUNCE_RESTITUTION; // 위로 튀는 속도(양수)
         velocity.y = vyUp;
         ft.bounces = (ft.bounces ?? 0) + 1;
@@ -1797,12 +1731,18 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
         continue;
       }
 
-      group.position.y = groundY;
       velocity.y = 0;
       velocity.rotationX = 0;
       velocity.rotationY = 0;
       velocity.rotationZ = 0;
-      setReadableRotationTowardCamera(group, camera, groundY);
+      // 회전 초기화 후 카메라 방향으로 정렬, 그 다음 실제 바닥 Y 기준으로 보정
+      group.rotation.set(0, 0, 0);
+      const baseY = ft.baseGroundY ?? GROUND_Y;
+      group.position.y = baseY;
+      setReadableRotationTowardCamera(group, camera, baseY);
+      group.updateMatrixWorld(true);
+      const landedBox = new THREE.Box3().setFromObject(group);
+      group.position.y += baseY - landedBox.min.y; // bottom이 baseY에 닿도록
       ft.landed = true;
       continue;
     }
@@ -2043,7 +1983,7 @@ function getSpawnBounds(bounds) {
 }
 
 /**
- * 글자끼리 겹치지 않도록 x,z 선택. 이미 착지한 글자 + 떨어지는 글자 전부와 MIN_DISTANCE_BETWEEN 이상 유지.
+ * 글자끼리 겹치지 않도록 x,z 선택. 각 글자의 바운딩 원 반경 기반으로 가장자리 간격 확보.
  * islandValidator가 있으면 섬 지면 위 유효 지점만 허용 (바다·울타리 밖 제외).
  * validator가 있을 때는 inset 없이 전체 bounds를 탐색 범위로 사용 (validator가 실제 경계를 담당).
  * 자리가 없으면 랜덤 겹침 반환하지 않고, "가장 가까운 글자와의 거리가 최대인" 지점을 반환.
@@ -2052,15 +1992,67 @@ function getSpawnBounds(bounds) {
  * @param {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} _bounds
  * @param {((x: number, z: number) => boolean) | null} [islandValidator]
  */
+/**
+ * 로드된 모델에서 이름이 지정된 오브젝트를 찾아 글자 스폰 제외 구역을 생성한다.
+ *
+ * 카메라 기준 (position: 107.7, 70.2, -44.4 → lookAt: -14.9, 5.6, -11.1):
+ * - 화면 오른쪽 ≈ 월드 +Z 방향
+ * - 화면 위쪽   ≈ 월드 -X 방향 (카메라가 +X에서 바라봄)
+ *
+ * 규칙:
+ * - OBJ_Swing, OBJ_Tree1: 해당 오브젝트보다 Z가 큰 영역(화면 우측)에 글자 스폰 금지
+ *
+ * 주의:
+ * - setFromObject 대신 getWorldPosition 사용: 자식 트리 전체 bbox가 반환되면
+ *   임계값이 엉뚱해질 수 있음.
+ * - 같은 방향 규칙이 여러 개면 가장 관대한 값(제외 영역 최소화)으로 합산:
+ *   z_gt는 MAX(임계값)
+ */
+function buildSpawnExclusionZones(allModels) {
+  const MARGIN = 1.5;
+  const collected = { z_gt: [] };
+  const found = new Set();
+
+  allModels.forEach((m) => {
+    m.traverse((obj) => {
+      if (found.has(obj.name)) return;
+      if (obj.name === "OBJ_Swing" || obj.name === "OBJ_Tree1") {
+        found.add(obj.name);
+        const pos = new THREE.Vector3();
+        obj.getWorldPosition(pos);
+        collected.z_gt.push(pos.z - MARGIN);
+        console.log(
+          `[Stage2] ${obj.name} 발견 z=${pos.z.toFixed(2)} → 제외 기준 Z > ${(pos.z - MARGIN).toFixed(2)}`,
+        );
+      }
+    });
+  });
+
+  const zones = [];
+  if (collected.z_gt.length > 0) {
+    const threshold = Math.max(...collected.z_gt); // 제일 오른쪽 오브젝트 기준
+    zones.push({ axis: "z", op: "gt", threshold });
+    console.log(
+      `[Stage2] 글자 스폰 제외 확정 (화면 우측): Z > ${threshold.toFixed(2)}`,
+    );
+  }
+  return zones;
+}
+
 function pickSpawnXZ(
   fallingTextsArr,
   _isInitial,
   _bounds,
   islandValidator,
   letterWidth = 0,
+  exclusionZones = [],
+  letterHeight = 0,
 ) {
-  // 글자 가장자리가 울타리를 벗어나지 않도록 halfExtent만큼 추가 inset
-  const halfExtent = letterWidth / 2;
+  // 글자 바운딩 원 반경: 어떤 회전각에서도 코너가 울타리를 벗어나지 않으려면
+  // half-width/half-height 중 큰 값이 아니라 대각선(hypot)을 써야 함.
+  // 섬 울타리가 원형이라 cardinal 4방향 체크만으론 대각 코너가 울타리를 뚫을 수 있음.
+  const newR = Math.hypot(letterWidth / 2, letterHeight / 2);
+  const halfExtent = newR; // bounds inset + 8방향 fence 체크 모두 동일 반경 사용
   const base = islandValidator
     ? getSafeIslandBounds(_bounds)
     : getSpawnBounds(_bounds);
@@ -2080,56 +2072,70 @@ function pickSpawnXZ(
   const { minX, maxX, minZ, maxZ } = spawn;
   const allTexts = fallingTextsArr || [];
 
-  // validator가 있으면 center + 4방향 가장자리 점 모두 통과해야 유효
+  // 오브젝트 가시성 보호 제외구역 + validator 검사
   const isValidPos = (x, z) => {
+    for (const zone of exclusionZones) {
+      const val = zone.axis === "x" ? x : z;
+      if (zone.op === "gt" ? val > zone.threshold : val < zone.threshold) {
+        return false;
+      }
+    }
     if (!islandValidator) return true;
     if (!islandValidator(x, z)) return false;
     if (halfExtent > 0) {
-      if (!islandValidator(x + halfExtent, z)) return false;
-      if (!islandValidator(x - halfExtent, z)) return false;
-      if (!islandValidator(x, z + halfExtent)) return false;
-      if (!islandValidator(x, z - halfExtent)) return false;
+      // 8방향 체크: 바운딩 원 + 울타리 시각적 여유(1.2m)로 가려짐 방지
+      const s = 0.7071067811865476; // sin/cos 45°
+      const R = halfExtent + 1.2;
+      if (!islandValidator(x + R, z)) return false;
+      if (!islandValidator(x - R, z)) return false;
+      if (!islandValidator(x, z + R)) return false;
+      if (!islandValidator(x, z - R)) return false;
+      if (!islandValidator(x + R * s, z + R * s)) return false;
+      if (!islandValidator(x + R * s, z - R * s)) return false;
+      if (!islandValidator(x - R * s, z + R * s)) return false;
+      if (!islandValidator(x - R * s, z - R * s)) return false;
     }
     return true;
   };
 
-  const minDist = (x, z) => {
+  // 바운딩 원 기반 간격: dist - r_new - r_existing = 실제 가장자리 간격
+  // 양수 = 떨어져 있음, 음수 = 겹침
+  const edgeGap = (x, z) => {
     if (allTexts.length === 0) return Infinity;
-    let d = Infinity;
+    let minGap = Infinity;
     for (const f of allTexts) {
       const dx = f.group.position.x - x;
       const dz = f.group.position.z - z;
-      d = Math.min(d, Math.sqrt(dx * dx + dz * dz));
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const fR = typeof f.radius === "number" ? f.radius : 0;
+      minGap = Math.min(minGap, dist - newR - fR);
     }
-    return d;
+    return minGap;
   };
 
-  // 스폰 영역이 좁아지면 MIN_DISTANCE_BETWEEN 고정값 때문에 자리가 안 나서 겹침이 급증할 수 있음.
-  // -> 영역/상황에 맞게 최소거리를 단계적으로 완화하면서 "최대한 안 겹치게" 배치한다.
-  const MIN_DIST_FLOOR = 4.0;
-  let required = MIN_DISTANCE_BETWEEN;
-  for (let pass = 0; pass < 4; pass++) {
+  // 1단계: 충분한 간격(0.3m) → 2단계: 아주 살짝(0.05m) → 3단계: 거의 맞닿음(0) → 4단계: 약간 겹침 허용
+  const gapLevels = [0.3, 0.05, 0.0, -0.5];
+  for (const minGap of gapLevels) {
     for (let tryCount = 0; tryCount < 150; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
       const z = minZ + Math.random() * (maxZ - minZ);
       if (!isValidPos(x, z)) continue;
-      if (minDist(x, z) >= required) return { x, z };
+      if (edgeGap(x, z) >= minGap) return { x, z };
     }
-    required = Math.max(MIN_DIST_FLOOR, required * 0.82);
   }
 
-  // 실패 시: 그리드 후보 중 "가장 가까운 글자와의 거리"가 최대인 점 선택 (겹침 최소화)
-  const steps = 14;
+  // 실패 시: 그리드 후보 중 가장자리 간격이 최대인 점 선택 (겹침 최소화)
+  const steps = 18;
   let best = { x: minX + (maxX - minX) / 2, z: minZ + (maxZ - minZ) / 2 };
-  let bestD = minDist(best.x, best.z);
+  let bestGap = edgeGap(best.x, best.z);
   for (let i = 0; i <= steps; i++) {
     for (let j = 0; j <= steps; j++) {
       const x = minX + (i / steps) * (maxX - minX);
       const z = minZ + (j / steps) * (maxZ - minZ);
       if (!isValidPos(x, z)) continue;
-      const d = minDist(x, z);
-      if (d > bestD) {
-        bestD = d;
+      const g = edgeGap(x, z);
+      if (g > bestGap) {
+        bestGap = g;
         best = { x, z };
       }
     }

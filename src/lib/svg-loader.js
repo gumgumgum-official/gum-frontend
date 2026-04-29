@@ -86,7 +86,7 @@ export function parseSVGToExtrudeShapesForVolume(svgString) {
         continue;
       }
     }
-    const pathShapes = path.toShapes(false);
+    const pathShapes = SVGLoader.createShapes(path);
     for (const sh of pathShapes) {
       out.push(sh);
     }

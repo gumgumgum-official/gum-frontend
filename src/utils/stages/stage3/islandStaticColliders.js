@@ -54,6 +54,24 @@ function isUnderPortalRoot(mesh) {
   return false;
 }
 
+const FENCE_NAME_RE = /fence|울타리/i;
+
+/**
+ * 울타리 서브트리 내 메시는 캐릭터 장애물 AABB에서 제외한다.
+ * islandValidator 가 이미 울타리 안/밖을 처리하므로 이중 차단 불필요.
+ * @param {import("three").Object3D} mesh
+ * @returns {boolean}
+ */
+function isUnderFenceSubtree(mesh) {
+  let p = mesh;
+  while (p) {
+    if (FENCE_NAME_RE.test(typeof p.name === "string" ? p.name : ""))
+      return true;
+    p = p.parent;
+  }
+  return false;
+}
+
 /**
  * 우물 주변의 "울타리 없는 안쪽" 진입을 허용하기 위한 통과 존 생성.
  * @param {import("three").Object3D} islandRoot
@@ -122,6 +140,7 @@ export function collectIslandStaticColliderBoxes(islandRoot) {
     if (!obj.isMesh) return;
     if (!isUnderCollidableSubtree(obj)) return;
     if (isUnderPortalRoot(obj)) return;
+    if (isUnderFenceSubtree(obj)) return;
 
     tmp.setFromObject(obj);
     if (tmp.isEmpty()) return;

@@ -73,6 +73,11 @@ import {
   playFlowerMagicSound,
   disposeStage3CrackSound,
 } from "../utils/stages/stage3/playCrackSound.js";
+import {
+  setupFountainFromModel,
+  updateFountain,
+  disposeFountain,
+} from "../utils/stages/stage3/fountainEffect.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -202,6 +207,9 @@ export function Stage3() {
   let gumtoongjiActions = [];
   /** ANIM_Gumtoongji 레이캐스트용 메시 목록 */
   const gumtoongjiRaycastMeshes = [];
+  /** 분수대 물 효과 상태 (셰이프 키 믹서 + UV 스크롤) */
+  /** @type {import("../utils/stages/stage3/fountainEffect.js").FountainState | null} */
+  let fountainState = null;
   /** 스테이지 전환 시 비동기 로드 완료 후 scene.add 방지용 */
   let isStage3Active = true;
   /** @type {{ toneMappingExposure: number, environmentIntensity: number, renderer: import("three").WebGLRenderer } | null} */
@@ -3378,6 +3386,7 @@ export function Stage3() {
         onReady: (payload) => {
           const { model, center, backgroundMaxY, backgroundBounds } = payload;
           const animations = /** @type {any} */ (payload).animations ?? [];
+          fountainState = setupFountainFromModel(model, animations);
           backgroundModel = model;
           ensureStage3UiMounted();
           updateStampSlotsFilled(0);
@@ -3508,6 +3517,7 @@ export function Stage3() {
       if (portalVortexMaterial) {
         portalVortexMaterial.uniforms.uTime.value += delta;
       }
+      if (fountainState) updateFountain(fountainState, delta);
       updateCameraIntro(delta);
       updateLetter(delta, this.camera);
       updateFragments(delta);
@@ -3862,6 +3872,11 @@ export function Stage3() {
       }
       gumtoongjiActions = [];
       gumtoongjiRaycastMeshes.length = 0;
+
+      if (fountainState) {
+        disposeFountain(fountainState);
+        fountainState = null;
+      }
 
       if (backgroundModel) {
         scene.remove(backgroundModel);

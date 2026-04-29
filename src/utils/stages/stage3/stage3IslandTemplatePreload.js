@@ -8,13 +8,21 @@ import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
+// TODO: scene_with_fountain_v6.glb 재익스포트 후 아래 import와 분기 제거
+import { loadFountainGltfPatched } from "./fountainGlbPatch.js";
 
 export { resolvePublicAssetUrl as resolveStage3PublicModelUrl };
+
+const FOUNTAIN_GLB_PATH = "scene_with_fountain_v6.glb";
 
 /**
  * @param {string} modelPathFromConfig - config.model.path
  */
 export function preloadStage3IslandTemplate(modelPathFromConfig) {
+  // TODO: 재익스포트 후 이 분기 제거 (항상 loadGltfTemplateCached 사용)
+  if (modelPathFromConfig.includes(FOUNTAIN_GLB_PATH)) {
+    return loadFountainGltfPatched(modelPathFromConfig);
+  }
   return loadGltfTemplateCached(resolvePublicAssetUrl(modelPathFromConfig));
 }
 
