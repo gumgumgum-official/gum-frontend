@@ -9,6 +9,10 @@
 import * as THREE from "three";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../utils/common/gltfTemplateCache.js";
 import { createAutonomousCharacters } from "../utils/stages/stage2/autonomousCharacters.js";
 import {
   circleOverlapsAny,
@@ -472,7 +476,7 @@ export function Stage2() {
         typeof window !== "undefined" &&
         (window.STAGE2_PROFILE ||
           localStorage.getItem("STAGE2_PROFILE") === "1");
-      const mark = (label) => (perfEnabled ? window.performance.now() : 0);
+      const mark = (_label) => (perfEnabled ? window.performance.now() : 0);
       const logDuration = (label, start) => {
         if (!perfEnabled) return;
         const end = window.performance.now();
@@ -706,32 +710,33 @@ export function Stage2() {
           config.model.sea,
           config.model.sky,
         ].filter(Boolean);
-        Promise.all(urls.map((url) => glbLoader.loadAsync(url)))
+        Promise.all(
+          urls.map((url) =>
+            loadGltfTemplateCached(resolvePublicAssetUrl(url)).then((gltf) =>
+              gltf.scene.clone(true),
+            ),
+          ),
+        )
           .then((gltfs) => {
             logDuration("background:loadAll", tBgStart);
             let islandModel = null;
-            gltfs.forEach((gltf, i) => {
-              const model = gltf.scene;
+            gltfs.forEach((model, i) => {
               applyModel(model);
               if (parts[i] === "island") islandModel = model;
             });
-            finishBackground(
-              gltfs.map((g) => g.scene),
-              islandModel,
-            );
+            finishBackground(gltfs, islandModel);
           })
           .catch((err) => console.error("❌ Stage2 배경 로드 에러:", err));
       } else {
         const tBgStart = mark("background:loadSingle");
-        glbLoader.load(config.model.path, {
-          onLoad: (gltf) => {
+        loadGltfTemplateCached(resolvePublicAssetUrl(config.model.path))
+          .then((gltf) => {
             logDuration("background:loadSingle", tBgStart);
-            const model = gltf.scene;
+            const model = gltf.scene.clone(true);
             applyModel(model);
             finishBackground([model], null);
-          },
-          onError: (err) => console.error("❌ Stage2 배경 로드 에러:", err),
-        });
+          })
+          .catch((err) => console.error("❌ Stage2 배경 로드 에러:", err));
       }
 
       // Handwriting: 실시간 수신 (누적 로드는 GLB 로드 후 섬 땅 높이 적용 뒤 호출)
@@ -1215,7 +1220,7 @@ function loadCharacters(
   const perfEnabled =
     typeof window !== "undefined" &&
     (window.STAGE2_PROFILE || localStorage.getItem("STAGE2_PROFILE") === "1");
-  const mark = (label) => (perfEnabled ? window.performance.now() : 0);
+  const mark = (_label) => (perfEnabled ? window.performance.now() : 0);
   const logDuration = (label, start) => {
     if (!perfEnabled) return;
     const end = window.performance.now();
@@ -1433,40 +1438,34 @@ async function loadInitialHandwritings(
 async function listStoragePaths(sessionId) {
   const bucket = HANDWRITING_BUCKET;
   const paths = [];
+  const folder = String(sessionId ?? "").replace(/\/$/, "");
+  const { data: files, error } = await supabase.storage
+    .from(bucket)
+    .list(folder, { limit: 500 });
 
-  for (const folder of [sessionId, sessionId + "/"]) {
-    const { data: files, error } = await supabase.storage
-      .from(bucket)
-      .list(folder.replace(/\/$/, ""), { limit: 500 });
+  console.log(
+    "[Stage2] Storage list:",
+    "path=",
+    folder,
+    "error=",
+    error?.message ?? null,
+    "items=",
+    (files || []).length,
+  );
 
-    console.log(
-      "[Stage2] Storage list:",
-      "path=",
-      folder,
-      "error=",
-      error?.message ?? null,
-      "items=",
-      (files || []).length,
-    );
+  if (error) return paths;
 
-    if (error) continue;
-
-    const svgFiles = (files || []).filter(
-      (f) => f.name && String(f.name).toLowerCase().endsWith(".svg"),
-    );
-    const prefix = folder.replace(/\/$/, "")
-      ? folder.replace(/\/$/, "") + "/"
-      : "";
-
-    for (const f of svgFiles) {
-      paths.push({
-        path: prefix + f.name,
-        id: f.name.replace(/\.svg$/i, ""),
-        createdAt: f.created_at ?? null,
-        clientId: "",
-      });
-    }
-    if (paths.length > 0) break;
+  const svgFiles = (files || []).filter(
+    (f) => f.name && String(f.name).toLowerCase().endsWith(".svg"),
+  );
+  const prefix = folder ? `${folder}/` : "";
+  for (const f of svgFiles) {
+    paths.push({
+      path: prefix + f.name,
+      id: f.name.replace(/\.svg$/i, ""),
+      createdAt: f.created_at ?? null,
+      clientId: "",
+    });
   }
 
   return paths;

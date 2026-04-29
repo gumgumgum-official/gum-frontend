@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { BeamPage } from "./pages/BeamPage.jsx";
 import { KioskPage } from "./pages/KioskPage.jsx";
@@ -29,10 +29,10 @@ export function App() {
   );
   const [showAirportChime, setShowAirportChime] = useState(false);
 
-  const closeGameMachineModal = () => {
+  const closeGameMachineModal = useCallback(() => {
     setShowGameMachineModal(false);
     dispatchMinigameClose();
-  };
+  }, []);
 
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
@@ -54,7 +54,7 @@ export function App() {
       window.removeEventListener("gum:showGameMachineModal", showHandler);
       window.removeEventListener("gum:closeGameMachineModal", closeHandler);
     };
-  }, []);
+  }, [closeGameMachineModal]);
 
   useEffect(() => {
     const showStage6Poster = (event) => {

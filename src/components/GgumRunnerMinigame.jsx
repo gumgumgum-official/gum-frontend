@@ -16,6 +16,8 @@ const MAX_SPEED = 8;
 const SPEED_GAIN_PER_SCORE = 0.0025;
 const NEW_HIGH_BLINK_INTERVAL = 8;
 const NEW_HIGH_BLINK_PHASES = 6;
+const TARGET_FPS = 60;
+const FRAME_MS = 1000 / TARGET_FPS;
 
 export function GgumRunnerMinigame({ onClose }) {
   const canvasRef = useRef(null);
@@ -37,7 +39,7 @@ export function GgumRunnerMinigame({ onClose }) {
         const raw = localStorage.getItem("ggumRunner_hiScore");
         const v = Number(raw);
         return Number.isFinite(v) && v >= 0 ? v : 0;
-      } catch (e) {
+      } catch {
         return 0;
       }
     };
@@ -76,7 +78,6 @@ export function GgumRunnerMinigame({ onClose }) {
     let score = 0;
     let hiScore = readHiScore();
     hiScoreValueRef.current = hiScore;
-    let frame = 0;
     let speed = BASE_SPEED;
     let bgX = 0;
     let groundX = 0;
@@ -85,6 +86,11 @@ export function GgumRunnerMinigame({ onClose }) {
     let obstacles = [];
     let newHighBlinkPhase = NEW_HIGH_BLINK_PHASES;
     let hasTriggeredNewHighBlink = false;
+    let blinkTimer = 0;
+    let lastRenderedScore = -1;
+    let lastRenderedHiScore = -1;
+    let lastRenderedOpacity = "";
+    let lastTimestamp = 0;
 
     const player = {
       x: 80,
@@ -297,25 +303,35 @@ export function GgumRunnerMinigame({ onClose }) {
       return { x: obs.x + 8, y: obs.y + 2, w: 16, h: 30 };
     };
 
-    const updateScoreText = () => {
+    const updateScoreText = (force = false) => {
+      const displayScore = Math.floor(score);
       const isBlinking = newHighBlinkPhase < NEW_HIGH_BLINK_PHASES;
       const blinkOpacity = isBlinking && newHighBlinkPhase % 2 === 1 ? 0.3 : 1;
-      currentScoreEl.textContent = `현재점수: ${score}`;
-      currentScoreEl.style.opacity = `${blinkOpacity}`;
+      const opacityText = `${blinkOpacity}`;
+      const shouldRender =
+        force ||
+        displayScore !== lastRenderedScore ||
+        hiScore !== lastRenderedHiScore ||
+        opacityText !== lastRenderedOpacity;
+      if (!shouldRender) return;
+      lastRenderedScore = displayScore;
+      lastRenderedHiScore = hiScore;
+      lastRenderedOpacity = opacityText;
+      currentScoreEl.textContent = `현재점수: ${displayScore}`;
+      currentScoreEl.style.opacity = opacityText;
       hiScoreEl.textContent = `최고 점수: ${hiScore}`;
     };
 
     const updateOverlayVisibility = () => {
       startOverlayEl.style.display = state === "idle" ? "flex" : "none";
       gameOverOverlayEl.style.display = state === "dead" ? "flex" : "none";
-      gameOverScoreEl.textContent = `현재 점수: ${score}\n최고 점수: ${hiScore}`;
+      gameOverScoreEl.textContent = `현재 점수: ${Math.floor(score)}\n최고 점수: ${hiScore}`;
     };
 
     const jump = () => {
       if (state === "idle" || state === "dead") {
         state = "running";
         score = 0;
-        frame = 0;
         speed = BASE_SPEED;
         bgX = 0;
         groundX = 0;
@@ -324,6 +340,7 @@ export function GgumRunnerMinigame({ onClose }) {
         nextObstacleIn = 90;
         newHighBlinkPhase = NEW_HIGH_BLINK_PHASES;
         hasTriggeredNewHighBlink = false;
+        blinkTimer = 0;
         player.y = GROUND_Y - DISPLAY_H;
         player.vy = 0;
         player.onGround = true;
@@ -358,27 +375,32 @@ export function GgumRunnerMinigame({ onClose }) {
     };
     const onTouchEnd = (e) => e.preventDefault();
 
-    const update = () => {
+    const update = (scale = 1) => {
       if (state !== "running") return;
 
-      frame += 1;
-      score += 1;
+      score += scale;
+      const displayScore = Math.floor(score);
       if (!hasTriggeredNewHighBlink && score > hiScore) {
         hasTriggeredNewHighBlink = true;
         newHighBlinkPhase = 0;
+        blinkTimer = 0;
       }
-      if (
-        newHighBlinkPhase < NEW_HIGH_BLINK_PHASES &&
-        frame % NEW_HIGH_BLINK_INTERVAL === 0
-      ) {
-        newHighBlinkPhase += 1;
+      if (newHighBlinkPhase < NEW_HIGH_BLINK_PHASES) {
+        blinkTimer += scale;
+        while (
+          newHighBlinkPhase < NEW_HIGH_BLINK_PHASES &&
+          blinkTimer >= NEW_HIGH_BLINK_INTERVAL
+        ) {
+          newHighBlinkPhase += 1;
+          blinkTimer -= NEW_HIGH_BLINK_INTERVAL;
+        }
       }
       speed = Math.min(MAX_SPEED, BASE_SPEED + score * SPEED_GAIN_PER_SCORE);
-      bgX += speed * 0.4;
-      groundX += speed;
+      bgX += speed * 0.4 * scale;
+      groundX += speed * scale;
 
-      player.vy += 0.6;
-      player.y += player.vy;
+      player.vy += 0.6 * scale;
+      player.y += player.vy * scale;
       if (player.y >= GROUND_Y - DISPLAY_H) {
         player.y = GROUND_Y - DISPLAY_H;
         player.vy = 0;
@@ -386,14 +408,14 @@ export function GgumRunnerMinigame({ onClose }) {
       }
 
       if (player.onGround) {
-        player.animTimer += 1;
+        player.animTimer += scale;
         if (player.animTimer >= 8) {
           player.animFrame = (player.animFrame + 1) % TOTAL_RUN_FRAMES;
           player.animTimer = 0;
         }
       }
 
-      obstacleTimer += 1;
+      obstacleTimer += scale;
       if (obstacleTimer >= nextObstacleIn) {
         obstacles.push({
           x: W + 10,
@@ -407,7 +429,7 @@ export function GgumRunnerMinigame({ onClose }) {
         );
       }
       obstacles.forEach((obs) => {
-        obs.x -= speed;
+        obs.x -= speed * scale;
       });
       obstacles = obstacles.filter((obs) => obs.x > -60);
 
@@ -426,12 +448,12 @@ export function GgumRunnerMinigame({ onClose }) {
           pr.y + pr.h > or.y
         ) {
           state = "dead";
-          if (score > hiScore) {
-            hiScore = score;
-            hiScoreValueRef.current = score;
+          if (displayScore > hiScore) {
+            hiScore = displayScore;
+            hiScoreValueRef.current = displayScore;
             try {
-              localStorage.setItem("ggumRunner_hiScore", String(score));
-            } catch (e) {
+              localStorage.setItem("ggumRunner_hiScore", String(displayScore));
+            } catch {
               // If storage is blocked (private mode, quota, etc), game still works.
             }
           }
@@ -450,8 +472,11 @@ export function GgumRunnerMinigame({ onClose }) {
       drawPlayer();
     };
 
-    const loop = () => {
-      update();
+    const loop = (timestamp) => {
+      if (lastTimestamp === 0) lastTimestamp = timestamp;
+      const scale = Math.min((timestamp - lastTimestamp) / FRAME_MS, 3);
+      lastTimestamp = timestamp;
+      update(scale);
       render();
       rafId = requestAnimationFrame(loop);
     };
@@ -464,7 +489,7 @@ export function GgumRunnerMinigame({ onClose }) {
     canvas.addEventListener("touchend", onTouchEnd, { passive: false });
     startButtonEl.addEventListener("click", onStartButtonClick);
     gameOverButtonEl.addEventListener("click", onGameOverButtonClick);
-    loop();
+    loop(window.performance.now());
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);

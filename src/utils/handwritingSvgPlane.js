@@ -16,6 +16,68 @@ import * as THREE from "three";
 import { fetchSVG } from "../lib/svg-loader.js";
 
 const MAX_TEXTURE_PIXEL = 2048;
+let sharedRasterWorker = null;
+const pendingRasterRequests = new Map();
+
+function rejectAllWorkerRequests(error) {
+  for (const req of pendingRasterRequests.values()) {
+    req.reject(error);
+  }
+  pendingRasterRequests.clear();
+}
+
+function resetSharedWorkerWithError(message) {
+  const err = new Error(message);
+  rejectAllWorkerRequests(err);
+  if (sharedRasterWorker) {
+    try {
+      sharedRasterWorker.terminate();
+    } catch {
+      // Ignore terminate errors while resetting worker state.
+    }
+  }
+  sharedRasterWorker = null;
+}
+
+function getSharedRasterWorker() {
+  if (sharedRasterWorker) return sharedRasterWorker;
+  const worker = new Worker(
+    new URL("../workers/svgRasterWorker.js", import.meta.url),
+    { type: "module" },
+  );
+  worker.addEventListener("message", (event) => {
+    const data = event.data;
+    const id = data?.id;
+    if (!id) return;
+    const req = pendingRasterRequests.get(id);
+    if (!req) return;
+    pendingRasterRequests.delete(id);
+    if (data.error) req.reject(new Error(data.error));
+    else req.resolve(data.bitmap ?? null);
+  });
+  worker.addEventListener("error", () => {
+    resetSharedWorkerWithError("SVG raster worker crashed");
+  });
+  worker.addEventListener("messageerror", () => {
+    resetSharedWorkerWithError("SVG raster worker message error");
+  });
+  sharedRasterWorker = worker;
+  return worker;
+}
+
+function rasterizeViaSharedWorker(svgText, width, height) {
+  return new Promise((resolve, reject) => {
+    const worker = getSharedRasterWorker();
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    pendingRasterRequests.set(id, { resolve, reject });
+    try {
+      worker.postMessage({ id, svgText, width, height });
+    } catch (err) {
+      pendingRasterRequests.delete(id);
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
 
 /**
  * @param {string} svgText
@@ -45,6 +107,7 @@ export async function rasterizeSvgToTexture(svgText) {
       fallbackH = ph;
     }
   }
+  const hasParsedSvgSize = fallbackW > 0 && fallbackH > 0;
 
   const perfEnabled =
     typeof window !== "undefined" &&
@@ -55,26 +118,38 @@ export async function rasterizeSvgToTexture(svgText) {
     const end = window.performance.now();
     console.log("[Stage2Perf]", label, "ms=", (end - start).toFixed(1));
   };
-  const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
-  const objUrl = URL.createObjectURL(blob);
-  const img = new Image();
-  try {
-    const tDecodeStart = mark();
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = () => reject(new Error("SVG image decode failed"));
-      img.src = objUrl;
-    });
-    logDuration("svg:imageDecode", tDecodeStart);
-  } finally {
-    URL.revokeObjectURL(objUrl);
-  }
+  let srcW = fallbackW;
+  let srcH = fallbackH;
+  let img = null;
+  const decodeImage = async () => {
+    if (img) return img;
+    const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+    const objUrl = URL.createObjectURL(blob);
+    const decoded = new Image();
+    try {
+      const tDecodeStart = mark();
+      await new Promise((resolve, reject) => {
+        decoded.onload = resolve;
+        decoded.onerror = () => reject(new Error("SVG image decode failed"));
+        decoded.src = objUrl;
+      });
+      logDuration("svg:imageDecode", tDecodeStart);
+      img = decoded;
+      return decoded;
+    } finally {
+      URL.revokeObjectURL(objUrl);
+    }
+  };
 
-  let srcW = img.naturalWidth || fallbackW;
-  let srcH = img.naturalHeight || fallbackH;
+  if (!hasParsedSvgSize) {
+    const decoded = await decodeImage();
+    srcW = decoded.naturalWidth || fallbackW;
+    srcH = decoded.naturalHeight || fallbackH;
+  }
   if (srcW <= 0 || srcH <= 0) {
-    srcW = fallbackW;
-    srcH = fallbackH;
+    const decoded = await decodeImage();
+    srcW = decoded.naturalWidth || fallbackW;
+    srcH = decoded.naturalHeight || fallbackH;
   }
 
   let cw = srcW;
@@ -94,27 +169,9 @@ export async function rasterizeSvgToTexture(svgText) {
   ) {
     try {
       const workerStart = mark();
-      bitmap = await new Promise((resolve, reject) => {
-        const worker = new Worker(
-          new URL("../workers/svgRasterWorker.js", import.meta.url),
-          { type: "module" },
-        );
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        const handleMessage = (event) => {
-          if (!event.data || event.data.id !== id) return;
-          worker.removeEventListener("message", handleMessage);
-          worker.terminate();
-          if (event.data.error) {
-            reject(new Error(event.data.error));
-          } else {
-            resolve(event.data.bitmap);
-          }
-        };
-        worker.addEventListener("message", handleMessage);
-        worker.postMessage({ id, svgText, width: cw, height: ch });
-      });
+      bitmap = await rasterizeViaSharedWorker(svgText, cw, ch);
       logDuration("svg:workerRaster", workerStart);
-    } catch (_err) {
+    } catch {
       // 워커 실패 시 아래 캔버스 경로로 폴백
       bitmap = null;
     }
@@ -122,19 +179,22 @@ export async function rasterizeSvgToTexture(svgText) {
 
   let texture;
   if (bitmap) {
+    srcW = bitmap.width || srcW;
+    srcH = bitmap.height || srcH;
     texture = new THREE.CanvasTexture(bitmap);
   } else {
+    const decoded = await decodeImage();
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(2, cw);
     canvas.height = Math.max(2, ch);
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2d context unavailable");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(decoded, 0, 0, canvas.width, canvas.height);
     // SVG 패스 경계의 서브픽셀 투명 갭을 채워 TV(DPR=1)에서 금간 현상 제거.
     // destination-over: 이미 그려진 불투명 픽셀은 유지하고 투명 픽셀 위치만 뒤에서 채운다.
     ctx.globalCompositeOperation = "destination-over";
-    ctx.drawImage(img, -1, -1, canvas.width + 2, canvas.height + 2);
+    ctx.drawImage(decoded, -1, -1, canvas.width + 2, canvas.height + 2);
     ctx.globalCompositeOperation = "source-over";
     logDuration("svg:canvasDraw", tCanvasStart);
 

@@ -12,7 +12,12 @@ import {
 function getStage2PrewarmAbsoluteUrls() {
   /** @type {string[]} */
   const urls = [];
-  urls.push(resolvePublicAssetUrl(STAGE2_CONFIG.model.path));
+  const model = STAGE2_CONFIG.model ?? {};
+  [model.path, model.island, model.sea, model.sky].forEach((path) => {
+    if (!path) return;
+    const rel = String(path);
+    urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
+  });
 
   const props = STAGE2_CONFIG.props ?? [];
   for (const prop of props) {
