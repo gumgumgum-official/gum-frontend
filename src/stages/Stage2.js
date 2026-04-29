@@ -1000,6 +1000,34 @@ function loadCharacters(
         ? circleOverlapsAny(x, z, padding, obstacleBoxes)
         : false;
     }
+    function resolveNearestValidSpawn(targetX, targetZ) {
+      const clampedX = THREE.MathUtils.clamp(targetX, minX, maxX);
+      const clampedZ = THREE.MathUtils.clamp(targetZ, minZ, maxZ);
+      const isValid = (x, z) =>
+        isInsideFence(x, z) && !isBlockedByObstacle(x, z);
+      if (isValid(clampedX, clampedZ)) return { x: clampedX, z: clampedZ };
+
+      const maxRadius = Math.max(spanX, spanZ);
+      const ringStep = 0.6;
+      const samplesPerRing = 24;
+      for (let radius = ringStep; radius <= maxRadius; radius += ringStep) {
+        for (let i = 0; i < samplesPerRing; i++) {
+          const t = (i / samplesPerRing) * Math.PI * 2;
+          const candX = THREE.MathUtils.clamp(
+            clampedX + Math.cos(t) * radius,
+            minX,
+            maxX,
+          );
+          const candZ = THREE.MathUtils.clamp(
+            clampedZ + Math.sin(t) * radius,
+            minZ,
+            maxZ,
+          );
+          if (isValid(candX, candZ)) return { x: candX, z: candZ };
+        }
+      }
+      return { x: minX + spanX * 0.5, z: minZ + spanZ * 0.5 };
+    }
 
     function tooClose(x, z) {
       if (minSep <= 0 || scatterPlaced.length === 0) return false;
@@ -1069,12 +1097,9 @@ function loadCharacters(
       } else {
         x = pos.x ?? 0;
         z = pos.z ?? 0;
-        x = THREE.MathUtils.clamp(x, minX, maxX);
-        z = THREE.MathUtils.clamp(z, minZ, maxZ);
-        if (!hasFenceClearance(x, z) || isBlockedByObstacle(x, z)) {
-          x = minX + spanX * 0.5;
-          z = minZ + spanZ * 0.5;
-        }
+        const resolved = resolveNearestValidSpawn(x, z);
+        x = resolved.x;
+        z = resolved.z;
       }
       if (pos.y != null && Number.isFinite(pos.y)) {
         model.position.set(x, pos.y, z);
