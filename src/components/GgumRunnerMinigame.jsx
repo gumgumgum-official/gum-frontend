@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import "./GgumRunnerMinigame.css";
 
 const W = 700;
 const H = 200;
@@ -15,15 +16,10 @@ const MAX_SPEED = 8;
 const SPEED_GAIN_PER_SCORE = 0.0025;
 const NEW_HIGH_BLINK_INTERVAL = 8;
 const NEW_HIGH_BLINK_PHASES = 6;
-const WOOD = "oklch(0.62 0.09 60)";
-const WOOD_DARK = "oklch(0.45 0.08 55)";
-const CARD = "oklch(0.99 0.012 85)";
-const AMBER_50 = "#fffbeb";
-const LEAF_SOFT = "oklch(0.68 0.12 130)";
-const LEAF_DARK = "oklch(0.5 0.09 130)";
 
 export function GgumRunnerMinigame({ onClose }) {
   const canvasRef = useRef(null);
+  const lastTouchAtRef = useRef(0);
   const currentScoreRef = useRef(null);
   const hiScoreRef = useRef(null);
   const msgRef = useRef(null);
@@ -89,6 +85,14 @@ export function GgumRunnerMinigame({ onClose }) {
 
     const sprite = new Image();
     sprite.src = SPRITE_PATH;
+    let isSpriteLoadFailed = false;
+    sprite.onerror = () => {
+      isSpriteLoadFailed = true;
+      // Keep the game playable even when sprite asset fails.
+      console.warn(
+        "[GgumRunner] Failed to load sprite, using fallback player.",
+      );
+    };
     const backgroundImage = new Image();
     backgroundImage.src = BG_PATH;
 
@@ -185,6 +189,17 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawPlayer = () => {
+      if (isSpriteLoadFailed) {
+        ctx.fillStyle = "rgba(0,0,0,0.12)";
+        ctx.fillRect(player.x + 4, GROUND_Y + 2, DISPLAY_W - 8, 5);
+        ctx.fillStyle = "#2f241d";
+        ctx.fillRect(player.x + 14, player.y + 8, 20, 28);
+        ctx.fillStyle = "#f2dfca";
+        ctx.fillRect(player.x + 18, player.y + 4, 12, 10);
+        ctx.fillStyle = "#1f7a3b";
+        ctx.fillRect(player.x + 16, player.y + 18, 16, 6);
+        return;
+      }
       if (!sprite.complete) return;
 
       let frameIndex;
@@ -318,13 +333,18 @@ export function GgumRunnerMinigame({ onClose }) {
       e.preventDefault();
       jump();
     };
-    const onCanvasClick = () => jump();
+    const onCanvasClick = () => {
+      if (Date.now() - lastTouchAtRef.current < 450) return;
+      jump();
+    };
     const onStartButtonClick = () => jump();
     const onGameOverButtonClick = () => jump();
     const onTouchStart = (e) => {
       e.preventDefault();
+      lastTouchAtRef.current = Date.now();
       jump();
     };
+    const onTouchEnd = (e) => e.preventDefault();
 
     const update = () => {
       if (state !== "running") return;
@@ -421,6 +441,7 @@ export function GgumRunnerMinigame({ onClose }) {
     window.addEventListener("keydown", onKeyDown);
     canvas.addEventListener("click", onCanvasClick);
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
     startButtonEl.addEventListener("click", onStartButtonClick);
     gameOverButtonEl.addEventListener("click", onGameOverButtonClick);
     loop();
@@ -430,6 +451,7 @@ export function GgumRunnerMinigame({ onClose }) {
       window.removeEventListener("keydown", onKeyDown);
       canvas.removeEventListener("click", onCanvasClick);
       canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchend", onTouchEnd);
       startButtonEl.removeEventListener("click", onStartButtonClick);
       gameOverButtonEl.removeEventListener("click", onGameOverButtonClick);
       jumpActionRef.current = () => {};
@@ -437,189 +459,44 @@ export function GgumRunnerMinigame({ onClose }) {
   }, []);
 
   return (
-    <div
-      style={{
-        position: "relative",
-        width: "min(92vw, 760px)",
-        fontFamily:
-          "'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif",
-        userSelect: "none",
-        borderRadius: 16,
-        overflow: "visible",
-        boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
-        background: CARD,
-      }}
-    >
+    <div className="ggum-runner">
       <button
         type="button"
         onClick={() => onClose?.()}
         aria-label="모달 닫기"
-        style={{
-          position: "absolute",
-          top: -14,
-          right: -14,
-          width: 28,
-          height: 28,
-          borderRadius: "50%",
-          border: "none",
-          background: "rgba(255, 251, 235, 0.9)",
-          color: WOOD_DARK,
-          fontSize: 17,
-          lineHeight: 1,
-          cursor: "pointer",
-          zIndex: 5,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
+        className="ggum-runner-close"
       >
         ×
       </button>
-      <div
-        style={{
-          borderRadius: 16,
-          overflow: "hidden",
-          background: CARD,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 12px",
-            color: AMBER_50,
-            background: `linear-gradient(180deg, ${WOOD} 0%, ${WOOD_DARK} 100%)`,
-            borderBottom: "none",
-            fontSize: 12,
-            letterSpacing: "0.01em",
-            textShadow: "0 1px 0 rgba(0,0,0,0.6)",
-          }}
-        >
-          <div
-            style={{
-              padding: "4px 8px",
-              background: LEAF_DARK,
-              border: "none",
-              boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.3)",
-              whiteSpace: "nowrap",
-              borderRadius: 4,
-              fontWeight: 400,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
+      <div className="ggum-runner-inner">
+        <div className="ggum-runner-header">
+          <div className="ggum-runner-score-box">
             <span ref={currentScoreRef}>현재점수: 0</span>
             <span ref={hiScoreRef}>최고 점수: 0</span>
           </div>
-          <span
-            ref={msgRef}
-            style={{
-              opacity: 0.95,
-              textAlign: "right",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            스페이스 또는 클릭으로 점프
+          <span ref={msgRef} className="ggum-runner-message">
+            스페이스바 또는 클릭으로 점프!
           </span>
         </div>
         <canvas
           ref={canvasRef}
           onClick={() => jumpActionRef.current()}
-          style={{
-            display: "block",
-            width: "100%",
-            imageRendering: "pixelated",
-            cursor: "pointer",
-            touchAction: "none",
-          }}
+          className="ggum-runner-canvas"
         />
-        <div
-          ref={startOverlayRef}
-          style={{
-            position: "absolute",
-            inset: "39px 0 0 0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "auto",
-            background:
-              "linear-gradient(180deg, rgba(54, 81, 42, 0.08), rgba(54, 81, 42, 0.2))",
-          }}
-        >
+        <div ref={startOverlayRef} className="ggum-runner-start-overlay">
           <button
             ref={startButtonRef}
             type="button"
             onClick={() => jumpActionRef.current()}
-            style={{
-              border: "none",
-              background: "#ecd6ad",
-              color: WOOD_DARK,
-              borderRadius: 8,
-              padding: "11px 20px",
-              fontSize: 16,
-              fontWeight: 700,
-              letterSpacing: "0.02em",
-              boxShadow:
-                "0 3px 0 rgba(120, 83, 43, 0.7), 0 8px 15px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.45)",
-              cursor: "pointer",
-            }}
+            className="ggum-runner-start-button"
           >
             산책 시작하기
           </button>
         </div>
-        <div
-          ref={gameOverOverlayRef}
-          style={{
-            position: "absolute",
-            inset: "39px 0 0 0",
-            display: "none",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "auto",
-            background: "rgba(24, 35, 19, 0.33)",
-          }}
-        >
-          <div
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(255,251,235,0.97) 0%, rgba(244,229,194,0.97) 100%)",
-              color: WOOD_DARK,
-              borderRadius: 10,
-              padding: "16px 20px",
-              textAlign: "center",
-              boxShadow:
-                "0 10px 24px rgba(0,0,0,0.28), inset 0 -2px 0 rgba(120, 83, 43, 0.25)",
-              minWidth: 280,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 24,
-                fontWeight: 700,
-                marginBottom: 8,
-                letterSpacing: "0.01em",
-                textShadow: "0 1px 0 rgba(255,255,255,0.45)",
-              }}
-            >
-              산책 종료
-            </div>
-            <div
-              ref={gameOverScoreRef}
-              style={{
-                fontSize: 14,
-                marginBottom: 10,
-                background: "rgba(139, 185, 104, 0.2)",
-                border: "none",
-                padding: "6px 10px",
-                borderRadius: 6,
-                whiteSpace: "pre-line",
-              }}
-            >
+        <div ref={gameOverOverlayRef} className="ggum-runner-gameover-overlay">
+          <div className="ggum-runner-gameover-card">
+            <div className="ggum-runner-gameover-title">산책 종료</div>
+            <div ref={gameOverScoreRef} className="ggum-runner-gameover-score">
               현재 점수: 0
               <br />
               최고 점수: 0
@@ -628,17 +505,7 @@ export function GgumRunnerMinigame({ onClose }) {
               ref={gameOverButtonRef}
               type="button"
               onClick={() => jumpActionRef.current()}
-              style={{
-                border: "none",
-                background: "#2b3c1f",
-                color: "#b9dd8d",
-                borderRadius: 8,
-                padding: "8px 14px",
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.01em",
-                cursor: "pointer",
-              }}
+              className="ggum-runner-gameover-button"
             >
               다시 시작
             </button>

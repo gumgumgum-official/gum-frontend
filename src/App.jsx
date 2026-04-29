@@ -47,7 +47,7 @@ export function App() {
 
   useEffect(() => {
     const showHandler = () => setShowGameMachineModal(true);
-    const closeHandler = () => setShowGameMachineModal(false);
+    const closeHandler = () => closeGameMachineModal();
     window.addEventListener("gum:showGameMachineModal", showHandler);
     window.addEventListener("gum:closeGameMachineModal", closeHandler);
     return () => {

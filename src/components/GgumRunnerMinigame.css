@@ -1,0 +1,168 @@
+.ggum-runner {
+  position: relative;
+  width: min(92vw, 760px);
+  font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  user-select: none;
+  border-radius: 16px;
+  overflow: visible;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  background: oklch(0.99 0.012 85);
+}
+
+.ggum-runner-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 251, 235, 0.9);
+  color: oklch(0.45 0.08 55);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ggum-runner-inner {
+  border-radius: 16px;
+  overflow: hidden;
+  background: oklch(0.99 0.012 85);
+}
+
+.ggum-runner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #fffbeb;
+  background: linear-gradient(
+    180deg,
+    oklch(0.62 0.09 60) 0%,
+    oklch(0.45 0.08 55) 100%
+  );
+  border-bottom: none;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+.ggum-runner-score-box {
+  padding: 4px 8px;
+  background: oklch(0.5 0.09 130);
+  border: none;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  border-radius: 4px;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ggum-runner-message {
+  opacity: 0.95;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ggum-runner-canvas {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ggum-runner-start-overlay {
+  position: absolute;
+  inset: 39px 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: linear-gradient(
+    180deg,
+    rgba(54, 81, 42, 0.08),
+    rgba(54, 81, 42, 0.2)
+  );
+}
+
+.ggum-runner-start-button {
+  border: none;
+  background: #ecd6ad;
+  color: oklch(0.45 0.08 55);
+  border-radius: 8px;
+  padding: 11px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow:
+    0 3px 0 rgba(120, 83, 43, 0.7),
+    0 8px 15px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+}
+
+.ggum-runner-gameover-overlay {
+  position: absolute;
+  inset: 39px 0 0 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: rgba(24, 35, 19, 0.33);
+}
+
+.ggum-runner-gameover-card {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 251, 235, 0.97) 0%,
+    rgba(244, 229, 194, 0.97) 100%
+  );
+  color: oklch(0.45 0.08 55);
+  border-radius: 10px;
+  padding: 16px 20px;
+  text-align: center;
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.28),
+    inset 0 -2px 0 rgba(120, 83, 43, 0.25);
+  min-width: 280px;
+}
+
+.ggum-runner-gameover-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.ggum-runner-gameover-score {
+  font-size: 14px;
+  margin-bottom: 10px;
+  background: rgba(139, 185, 104, 0.2);
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: pre-line;
+}
+
+.ggum-runner-gameover-button {
+  border: none;
+  background: #2b3c1f;
+  color: #b9dd8d;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
