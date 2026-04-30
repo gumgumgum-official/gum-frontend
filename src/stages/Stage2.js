@@ -1669,9 +1669,19 @@ async function createFallingText(
         SPAWN_HEIGHT_MIN +
         Math.random() * (SPAWN_HEIGHT_MAX - SPAWN_HEIGHT_MIN);
 
+    // 착지 후 고정될 글자별 고유 방향 — 카메라 정면에서 좌우로 약간씩 틀어져 자유분방한 느낌
+    const yawJitter = (Math.random() - 0.5) * THREE.MathUtils.degToRad(64); // ±32°
+    const pitchJitter = 0; // 글자 자체를 앞뒤로 눕히지 않음 — 기울어지면 가독성 저하
+
     group.position.set(startX, startY, startZ);
     group.rotation.set(0, 0, 0);
-    setReadableRotationTowardCamera(group, camera, landingY);
+    setReadableRotationTowardCamera(
+      group,
+      camera,
+      landingY,
+      yawJitter,
+      pitchJitter,
+    );
 
     const speedFactor = 0.25 + Math.random() * 0.75;
     const gravity = FALL_GRAVITY_MAX * speedFactor;
@@ -1696,6 +1706,8 @@ async function createFallingText(
       baseGroundY: groundY, // 섬 지면 실제 Y (landing 후 위치 보정용)
       bounces: 0,
       landed: initial,
+      yawJitter,
+      pitchJitter,
     };
 
     fallingTextsArr.push(fallingText);
@@ -1766,7 +1778,13 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
       group.rotation.set(0, 0, 0);
       const baseY = ft.baseGroundY ?? GROUND_Y;
       group.position.y = baseY;
-      setReadableRotationTowardCamera(group, camera, baseY);
+      setReadableRotationTowardCamera(
+        group,
+        camera,
+        baseY,
+        ft.yawJitter ?? 0,
+        ft.pitchJitter ?? 0,
+      );
       group.updateMatrixWorld(true);
       const landedBox = new THREE.Box3().setFromObject(group);
       group.position.y += baseY - landedBox.min.y; // bottom이 baseY에 닿도록
@@ -1788,7 +1806,13 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
  * 가독성이 떨어진다. 수평 yaw로 카메라 쪽을 본 뒤, 시선의 고도에 맞춰 약간 눕혀(피치)
  * 평면이 시선에 가깝게 정면을 향하도록 한다.
  */
-function setReadableRotationTowardCamera(group, camera, _groundY) {
+function setReadableRotationTowardCamera(
+  group,
+  camera,
+  _groundY,
+  yawJitter = 0,
+  pitchJitter = 0,
+) {
   const toCam = new THREE.Vector3(
     camera.position.x - group.position.x,
     camera.position.y - group.position.y,
@@ -1798,10 +1822,10 @@ function setReadableRotationTowardCamera(group, camera, _groundY) {
   if (horizLen < 1e-6 && Math.abs(toCam.y) < 1e-6) return;
   toCam.normalize();
 
-  const yaw = Math.atan2(toCam.x, toCam.z);
+  const yaw = Math.atan2(toCam.x, toCam.z) + yawJitter;
   const elev = Math.atan2(toCam.y, Math.max(1e-6, horizLen));
   const tilt = THREE.MathUtils.clamp(
-    elev * LETTER_CAMERA_TILT_FACTOR,
+    elev * LETTER_CAMERA_TILT_FACTOR + pitchJitter,
     -LETTER_MAX_TILT_RAD,
     LETTER_MAX_TILT_RAD,
   );
@@ -1851,15 +1875,12 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
   const turnsY = 0.35 + Math.random() * 0.65; // 0.35~1.0 바퀴
 
   const signX = Math.random() < 0.5 ? -1 : 1;
-  const turnsX = Math.random() * 0.45; // 0~0.45 바퀴 (낙하 중 X 텀블)
-
-  const signZ = Math.random() < 0.5 ? -1 : 1;
-  const turnsZ = Math.random() * 0.35; // 0~0.35 바퀴 (낙하 중 Z 기울기)
+  const turnsX = Math.random() * 0.5; // 0~0.5 바퀴 (앞뒤 텀블)
 
   return {
     x: (signX * 2 * Math.PI * turnsX) / T,
     y: (sign * 2 * Math.PI * turnsY) / T,
-    z: (signZ * 2 * Math.PI * turnsZ) / T,
+    z: 0, // 좌우 roll 없음 — 땅에 박히는 느낌 방지
   };
 }
 
@@ -2141,7 +2162,7 @@ function pickSpawnXZ(
   };
 
   // 1단계: 충분한 간격(0.3m) → 2단계: 아주 살짝(0.05m) → 3단계: 거의 맞닿음(0) → 4단계: 약간 겹침 허용
-  const gapLevels = [0.3, 0.05, 0.0, -0.5];
+  const gapLevels = [0.1, -0.2, -0.6, -1.2];
   for (const minGap of gapLevels) {
     for (let tryCount = 0; tryCount < 40; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
