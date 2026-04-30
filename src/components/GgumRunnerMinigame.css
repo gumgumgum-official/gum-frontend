@@ -1,7 +1,10 @@
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
+
 .ggum-runner {
   position: relative;
   width: min(92vw, 760px);
-  font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  min-height: clamp(340px, 56vh, 520px);
+  font-family: "Press Start 2P", "Courier New", monospace;
   user-select: none;
   border-radius: 16px;
   overflow: visible;
@@ -29,48 +32,51 @@
 }
 
 .ggum-runner-inner {
+  position: relative;
   border-radius: 16px;
   overflow: hidden;
   background: oklch(0.99 0.012 85);
 }
 
-.ggum-runner-header {
+.ggum-runner-score-hud {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  z-index: 3;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  color: #fffbeb;
-  background: linear-gradient(
-    180deg,
-    oklch(0.62 0.09 60) 0%,
-    oklch(0.45 0.08 55) 100%
-  );
-  border-bottom: none;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
 
-.ggum-runner-score-box {
-  padding: 4px 8px;
-  background: oklch(0.5 0.09 130);
-  border: none;
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-  white-space: nowrap;
-  border-radius: 4px;
-  font-weight: 400;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.ggum-runner-score-hud-item {
+  color: #fffbeb;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+  background: rgba(22, 36, 16, 0.35);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.ggum-runner-message-overlay {
+  position: absolute;
+  top: 42px;
+  left: 12px;
+  right: 12px;
+  z-index: 3;
+  pointer-events: none;
 }
 
 .ggum-runner-message {
+  color: #fffbeb;
+  font-size: 11px;
   opacity: 0.95;
   text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
 }
 
 .ggum-runner-canvas {
@@ -85,7 +91,7 @@
 
 .ggum-runner-start-overlay {
   position: absolute;
-  inset: 39px 0 0 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -115,7 +121,7 @@
 
 .ggum-runner-gameover-overlay {
   position: absolute;
-  inset: 39px 0 0 0;
+  inset: 0;
   display: none;
   align-items: center;
   justify-content: center;
@@ -124,11 +130,7 @@
 }
 
 .ggum-runner-gameover-card {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 251, 235, 0.97) 0%,
-    rgba(244, 229, 194, 0.97) 100%
-  );
+  background: rgba(255, 251, 235, 0.97);
   color: oklch(0.45 0.08 55);
   border-radius: 10px;
   padding: 16px 20px;

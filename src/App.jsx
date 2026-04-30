@@ -110,7 +110,7 @@ export function App() {
         hideCloseButton
         contentStyle={{
           width: "min(860px, 100%)",
-          minHeight: "auto",
+          minHeight: "clamp(360px, 62vh, 620px)",
           background: "transparent",
           boxShadow: "none",
           padding: 0,

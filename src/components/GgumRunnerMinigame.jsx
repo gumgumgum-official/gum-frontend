@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import "./GgumRunnerMinigame.css";
 
 const W = 700;
-const H = 200;
+const H = 340;
 const GROUND_Y = H - 44;
 const FRAME_W = 32;
 const FRAME_H = 32;
@@ -317,15 +317,15 @@ export function GgumRunnerMinigame({ onClose }) {
       lastRenderedScore = displayScore;
       lastRenderedHiScore = hiScore;
       lastRenderedOpacity = opacityText;
-      currentScoreEl.textContent = `현재점수: ${displayScore}`;
+      currentScoreEl.textContent = `SCORE: ${displayScore}`;
       currentScoreEl.style.opacity = opacityText;
-      hiScoreEl.textContent = `최고 점수: ${hiScore}`;
+      hiScoreEl.textContent = `HIGH SCORE: ${hiScore}`;
     };
 
     const updateOverlayVisibility = () => {
       startOverlayEl.style.display = state === "idle" ? "flex" : "none";
       gameOverOverlayEl.style.display = state === "dead" ? "flex" : "none";
-      gameOverScoreEl.textContent = `현재 점수: ${Math.floor(score)}\n최고 점수: ${hiScore}`;
+      gameOverScoreEl.textContent = `현재 점수: ${Math.floor(score)}\nHIGH SCORE: ${hiScore}`;
     };
 
     const jump = () => {
@@ -514,16 +514,20 @@ export function GgumRunnerMinigame({ onClose }) {
         ×
       </button>
       <div className="ggum-runner-inner">
-        <div className="ggum-runner-header">
-          <div className="ggum-runner-score-box">
-            <span ref={currentScoreRef}>현재점수: 0</span>
-            <span ref={hiScoreRef}>최고 점수: 0</span>
-          </div>
+        <canvas ref={canvasRef} className="ggum-runner-canvas" />
+        <div className="ggum-runner-score-hud">
+          <span ref={hiScoreRef} className="ggum-runner-score-hud-item">
+            HIGH SCORE: 0
+          </span>
+          <span ref={currentScoreRef} className="ggum-runner-score-hud-item">
+            SCORE: 0
+          </span>
+        </div>
+        <div className="ggum-runner-message-overlay">
           <span ref={msgRef} className="ggum-runner-message">
             스페이스바 또는 클릭으로 점프!
           </span>
         </div>
-        <canvas ref={canvasRef} className="ggum-runner-canvas" />
         <div ref={startOverlayRef} className="ggum-runner-start-overlay">
           <button
             ref={startButtonRef}
@@ -539,7 +543,7 @@ export function GgumRunnerMinigame({ onClose }) {
             <div ref={gameOverScoreRef} className="ggum-runner-gameover-score">
               현재 점수: 0
               <br />
-              최고 점수: 0
+              HIGH SCORE: 0
             </div>
             <button
               ref={gameOverButtonRef}
