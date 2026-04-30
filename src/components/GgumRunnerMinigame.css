@@ -76,7 +76,9 @@
 .ggum-runner-canvas {
   display: block;
   width: 100%;
-  image-rendering: pixelated;
+  image-rendering: -webkit-optimize-contrast; /* 구형 Safari */
+  image-rendering: crisp-edges; /* Firefox 폴백 */
+  image-rendering: pixelated; /* Chrome/Edge/FF93+ */
   cursor: pointer;
   touch-action: none;
 }
