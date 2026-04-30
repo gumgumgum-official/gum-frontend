@@ -2,40 +2,47 @@
 
 .ggum-runner {
   position: relative;
-  width: min(92vw, 760px);
+  width: min(95vw, 860px);
+  margin: 0 auto;
   font-family: "Press Start 2P", "Courier New", monospace;
   user-select: none;
-  border-radius: 16px;
+  border-radius: 10px;
   overflow: visible;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
-  background: oklch(0.99 0.012 85);
-}
-
-.ggum-runner-close {
-  position: absolute;
-  top: -14px;
-  right: -14px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 251, 235, 0.9);
-  color: oklch(0.45 0.08 55);
-  font-size: 17px;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  background: transparent;
 }
 
 .ggum-runner-inner {
   position: relative;
   width: 100%;
-  border-radius: 16px;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
   overflow: hidden;
-  background: oklch(0.99 0.012 85);
+  background-image: url("/assets/minigame/minigame.png");
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.ggum-runner-frame-close {
+  position: absolute;
+  top: 0.7%;
+  right: 0.4%;
+  width: 7.3%;
+  height: 11%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  z-index: 6;
+}
+
+.ggum-runner-viewport {
+  position: absolute;
+  left: 1.8%;
+  right: 1.8%;
+  top: 15.8%;
+  bottom: 5.1%;
+  overflow: hidden;
 }
 
 .ggum-runner-score-hud {

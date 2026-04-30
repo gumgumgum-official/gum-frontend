@@ -593,51 +593,57 @@ export function GgumRunnerMinigame({ onClose }) {
 
   return (
     <div className="ggum-runner">
-      <button
-        type="button"
-        onClick={() => onClose?.()}
-        aria-label="모달 닫기"
-        className="ggum-runner-close"
-      >
-        ×
-      </button>
       <div className="ggum-runner-inner">
-        <canvas ref={canvasRef} className="ggum-runner-canvas" />
-        <div className="ggum-runner-score-hud">
-          <span ref={hiScoreRef} className="ggum-runner-score-hud-item">
-            HIGH SCORE: 0
-          </span>
-          <span ref={currentScoreRef} className="ggum-runner-score-hud-item">
-            SCORE: 0
-          </span>
-        </div>
-        <div className="ggum-runner-message-overlay">
-          <span ref={msgRef} className="ggum-runner-message" />
-        </div>
-        <div ref={startOverlayRef} className="ggum-runner-start-overlay">
-          <button
-            ref={startButtonRef}
-            type="button"
-            className="ggum-runner-start-button"
-          >
-            산책 시작하기
-          </button>
-        </div>
-        <div ref={gameOverOverlayRef} className="ggum-runner-gameover-overlay">
-          <div className="ggum-runner-gameover-card">
-            <div className="ggum-runner-gameover-title">산책 종료</div>
-            <div ref={gameOverScoreRef} className="ggum-runner-gameover-score">
-              score: 0
-              <br />
+        <button
+          type="button"
+          onClick={() => onClose?.()}
+          aria-label="모달 닫기"
+          className="ggum-runner-frame-close"
+        />
+        <div className="ggum-runner-viewport">
+          <canvas ref={canvasRef} className="ggum-runner-canvas" />
+          <div className="ggum-runner-score-hud">
+            <span ref={hiScoreRef} className="ggum-runner-score-hud-item">
               HIGH SCORE: 0
-            </div>
+            </span>
+            <span ref={currentScoreRef} className="ggum-runner-score-hud-item">
+              SCORE: 0
+            </span>
+          </div>
+          <div className="ggum-runner-message-overlay">
+            <span ref={msgRef} className="ggum-runner-message" />
+          </div>
+          <div ref={startOverlayRef} className="ggum-runner-start-overlay">
             <button
-              ref={gameOverButtonRef}
+              ref={startButtonRef}
               type="button"
-              className="ggum-runner-gameover-button"
+              className="ggum-runner-start-button"
             >
-              다시 시작
+              산책 시작하기
             </button>
+          </div>
+          <div
+            ref={gameOverOverlayRef}
+            className="ggum-runner-gameover-overlay"
+          >
+            <div className="ggum-runner-gameover-card">
+              <div className="ggum-runner-gameover-title">산책 종료</div>
+              <div
+                ref={gameOverScoreRef}
+                className="ggum-runner-gameover-score"
+              >
+                score: 0
+                <br />
+                HIGH SCORE: 0
+              </div>
+              <button
+                ref={gameOverButtonRef}
+                type="button"
+                className="ggum-runner-gameover-button"
+              >
+                다시 시작
+              </button>
+            </div>
           </div>
         </div>
       </div>
