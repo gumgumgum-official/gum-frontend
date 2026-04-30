@@ -10,7 +10,7 @@ import { NoticeModalBoard } from "./components/NoticeModalBoard.jsx";
 import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
 import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
 import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
-import { BasicWhiteModal } from "./components/BasicWhiteModal.jsx";
+import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
 import {
@@ -22,15 +22,16 @@ import {
 
 export function App() {
   const [showNoticeModal, setShowNoticeModal] = useState(false);
-  const [showGameMachineModal, setShowGameMachineModal] = useState(false);
+  const [showGameMachineModalShell, setShowGameMachineModalShell] =
+    useState(false);
   const [showStage6PosterModal, setShowStage6PosterModal] = useState(false);
   const [stage6PosterImageSrc, setStage6PosterImageSrc] = useState(
     "/assets/poster/stamp_poster.png",
   );
   const [showAirportChime, setShowAirportChime] = useState(false);
 
-  const closeGameMachineModal = useCallback(() => {
-    setShowGameMachineModal(false);
+  const closeGameMachineModalShell = useCallback(() => {
+    setShowGameMachineModalShell(false);
     dispatchMinigameClose();
   }, []);
 
@@ -46,15 +47,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const showHandler = () => setShowGameMachineModal(true);
-    const closeHandler = () => closeGameMachineModal();
+    const showHandler = () => setShowGameMachineModalShell(true);
+    const closeHandler = () => closeGameMachineModalShell();
     window.addEventListener("gum:showGameMachineModal", showHandler);
     window.addEventListener("gum:closeGameMachineModal", closeHandler);
     return () => {
       window.removeEventListener("gum:showGameMachineModal", showHandler);
       window.removeEventListener("gum:closeGameMachineModal", closeHandler);
     };
-  }, [closeGameMachineModal]);
+  }, [closeGameMachineModalShell]);
 
   useEffect(() => {
     const showStage6Poster = (event) => {
@@ -102,10 +103,10 @@ export function App() {
           window.dispatchEvent(new CustomEvent("gum:noticeModalClosed"));
         }}
       />
-      <BasicWhiteModal
-        isOpen={showGameMachineModal}
-        onClose={closeGameMachineModal}
-        ariaLabel="게임기 기본 모달"
+      <GameMachineModalShell
+        isOpen={showGameMachineModalShell}
+        onClose={closeGameMachineModalShell}
+        ariaLabel="게임기 모달"
         hideCloseButton
         contentStyle={{
           width: "min(860px, 100%)",
@@ -116,8 +117,8 @@ export function App() {
         }}
         bodyStyle={{ marginTop: 0 }}
       >
-        <GgumRunnerMinigame onClose={closeGameMachineModal} />
-      </BasicWhiteModal>
+        <GgumRunnerMinigame onClose={closeGameMachineModalShell} />
+      </GameMachineModalShell>
       <Stage6PosterModal
         isOpen={showStage6PosterModal}
         imageSrc={stage6PosterImageSrc}

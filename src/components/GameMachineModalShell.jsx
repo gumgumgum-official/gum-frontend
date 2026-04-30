@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import "./BasicWhiteModal.css";
+import "./GameMachineModalShell.css";
 
-export function BasicWhiteModal({
+export function GameMachineModalShell({
   isOpen,
   onClose,
   children,
@@ -27,28 +27,28 @@ export function BasicWhiteModal({
 
   return (
     <div
-      className="basic-white-modal-overlay"
+      className="game-machine-modal-shell-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label={ariaLabel ?? "기본 모달"}
+      aria-label={ariaLabel ?? "게임기 모달"}
       onClick={onClose}
     >
       <div
-        className="basic-white-modal-content"
+        className="game-machine-modal-shell-content"
         style={contentStyle}
         onClick={(event) => event.stopPropagation()}
       >
         {!hideCloseButton && (
           <button
             type="button"
-            className="basic-white-modal-close"
+            className="game-machine-modal-shell-close"
             onClick={onClose}
             aria-label="모달 닫기"
           >
             ×
           </button>
         )}
-        <div className="basic-white-modal-body" style={bodyStyle}>
+        <div className="game-machine-modal-shell-body" style={bodyStyle}>
           {children}
         </div>
       </div>

@@ -1,4 +1,4 @@
-.basic-white-modal-overlay {
+.game-machine-modal-shell-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -9,7 +9,7 @@
   padding: 16px;
 }
 
-.basic-white-modal-content {
+.game-machine-modal-shell-content {
   position: relative;
   width: min(520px, 100%);
   min-height: 220px;
@@ -19,7 +19,7 @@
   padding: 20px 20px 24px;
 }
 
-.basic-white-modal-close {
+.game-machine-modal-shell-close {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -34,11 +34,11 @@
   cursor: pointer;
 }
 
-.basic-white-modal-close:hover {
+.game-machine-modal-shell-close:hover {
   background: #f3f3f3;
 }
 
-.basic-white-modal-body {
+.game-machine-modal-shell-body {
   margin-top: 22px;
   color: #111111;
 }
