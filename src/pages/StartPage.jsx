@@ -25,31 +25,6 @@ const START_BTN_URL = resolvePublicAssetUrl(
   "/static/images/start_button_pink.png",
 );
 
-function debugLogStartPage(runId, hypothesisId, location, message, data = {}) {
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "2e4bd2",
-    },
-    body: JSON.stringify({
-      sessionId: "2e4bd2",
-      runId,
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
-function nowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
 export function StartPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -61,17 +36,6 @@ export function StartPage() {
   /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
-
-  useEffect(() => {
-    const runId = `start-mount-${Date.now()}`;
-    debugLogStartPage(
-      runId,
-      "H5",
-      "StartPage.jsx:useEffect:mount",
-      "StartPage mounted",
-      { search: location.search ?? "" },
-    );
-  }, [location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -169,58 +133,18 @@ export function StartPage() {
   }, []);
 
   const handleStart = useCallback(async () => {
-    const runId = `start-click-${Date.now()}`;
     if (isCompletingKioskSession) {
-      debugLogStartPage(
-        runId,
-        "H4",
-        "StartPage.jsx:handleStart:blockCompletingSession",
-        "Start blocked due to completing kiosk session",
-        {},
-      );
       return;
     }
     if (startNavigationLockedRef.current) {
-      debugLogStartPage(
-        runId,
-        "H4",
-        "StartPage.jsx:handleStart:blockNavigationLock",
-        "Start blocked due to navigation lock",
-        {},
-      );
       return;
     }
     startNavigationLockedRef.current = true;
     setIsPreparingKiosk(true);
-    const t0 = nowMs();
-    debugLogStartPage(
-      runId,
-      "H1",
-      "StartPage.jsx:handleStart:beginWait",
-      "User triggered start; waiting for Stage3 warmup",
-      { search: location.search ?? "" },
-    );
     try {
       await waitForStage3GltfTemplatesReady();
-      debugLogStartPage(
-        runId,
-        "H1",
-        "StartPage.jsx:handleStart:warmupDone",
-        "Stage3 warmup finished before navigate",
-        { elapsedMs: Math.round(nowMs() - t0) },
-      );
       navigate(`/kiosk${location.search}`);
     } catch (e) {
-      debugLogStartPage(
-        runId,
-        "H3",
-        "StartPage.jsx:handleStart:warmupErrorFallbackNavigate",
-        "Warmup failed; fallback navigate",
-        {
-          elapsedMs: Math.round(nowMs() - t0),
-          error: e instanceof Error ? e.message : String(e),
-        },
-      );
       console.warn("[StartPage] Stage3 GLB 프리로드 실패 — 그대로 진행:", e);
       navigate(`/kiosk${location.search}`);
     } finally {
