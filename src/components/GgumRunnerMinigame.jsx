@@ -346,7 +346,7 @@ export function GgumRunnerMinigame({ onClose }) {
         player.onGround = true;
         player.animFrame = 0;
         player.animTimer = 0;
-        msgEl.textContent = "스페이스바 또는 클릭으로 점프!";
+        msgEl.textContent = "";
         updateScoreText();
         updateOverlayVisibility();
       }
@@ -524,9 +524,7 @@ export function GgumRunnerMinigame({ onClose }) {
           </span>
         </div>
         <div className="ggum-runner-message-overlay">
-          <span ref={msgRef} className="ggum-runner-message">
-            스페이스바 또는 클릭으로 점프!
-          </span>
+          <span ref={msgRef} className="ggum-runner-message" />
         </div>
         <div ref={startOverlayRef} className="ggum-runner-start-overlay">
           <button
