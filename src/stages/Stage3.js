@@ -28,6 +28,7 @@ import {
   disposeHandwritingSvgPlaneGroup,
 } from "../utils/handwritingSvgPlane.js";
 import { createHandwritingSvgVolumeGroup } from "../utils/stages/stage3/stage3HandwritingSvgVolume.js";
+// @ts-ignore -- cannon-es is installed, but JS check mode may fail module type resolution in editor.
 import * as CANNON from "cannon-es";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../config/stages/stage3/stage3ObjectsConfig.js";
@@ -3426,24 +3427,45 @@ export function Stage3() {
                 backgroundBounds,
               )
             : [];
+          const walkableNamePatterns = [/^DECO_BRICK/i, /^DECO_Grass/i];
+          const walkableMaterialPatterns = [/island_grass/i, /^grassM$/i];
+          const edgeSafetyInset = 1.9;
           /** @type {import("three").Mesh[]} */
-          const brickWalkableMeshes = [];
+          const stage3WalkableMeshes = [];
+          const tmpWalkableBox = new THREE.Box3();
+          const walkableBounds = new THREE.Box3();
+          let hasWalkableBounds = false;
           model.traverse((obj) => {
             if (!(obj instanceof THREE.Mesh)) return;
             let p = /** @type {THREE.Object3D | null} */ (obj);
-            let isBrick = false;
+            let isWalkableByName = false;
             while (p) {
               const n = typeof p.name === "string" ? p.name.trim() : "";
-              if (n.toUpperCase().startsWith("DECO_BRICK")) {
-                isBrick = true;
+              if (walkableNamePatterns.some((re) => re.test(n))) {
+                isWalkableByName = true;
                 break;
               }
               p = p.parent;
             }
-            if (!isBrick) return;
+            const materialNames = Array.isArray(obj.material)
+              ? obj.material.map((m) => String(m?.name ?? ""))
+              : [String(obj.material?.name ?? "")];
+            const isWalkableByMaterial = materialNames.some((name) =>
+              walkableMaterialPatterns.some((re) => re.test(name)),
+            );
+            if (!isWalkableByName && !isWalkableByMaterial) return;
             // 배경 로더에서 비-INT 메시에 raycast를 비활성화하므로, 벽돌 표면 샘플용으로만 복원.
             obj.raycast = THREE.Mesh.prototype.raycast;
-            brickWalkableMeshes.push(obj);
+            stage3WalkableMeshes.push(obj);
+            tmpWalkableBox.setFromObject(obj);
+            if (!tmpWalkableBox.isEmpty()) {
+              if (!hasWalkableBounds) {
+                walkableBounds.copy(tmpWalkableBox);
+                hasWalkableBounds = true;
+              } else {
+                walkableBounds.union(tmpWalkableBox);
+              }
+            }
           });
           // 런타임에 letter AABB를 push/splice할 수 있도록 상위 스코프에 참조 보관
           stage3CollidersRef = islandStaticColliders;
@@ -3454,7 +3476,24 @@ export function Stage3() {
             backgroundMaxY,
             backgroundBounds,
             islandStaticColliders,
-            { walkableMeshes: brickWalkableMeshes },
+            {
+              walkableMeshes: stage3WalkableMeshes,
+              allowedBoundsXZ: (() => {
+                if (!hasWalkableBounds) return null;
+                const safeBounds = walkableBounds.clone();
+                safeBounds.min.x += edgeSafetyInset;
+                safeBounds.max.x -= edgeSafetyInset;
+                safeBounds.min.z += edgeSafetyInset;
+                safeBounds.max.z -= edgeSafetyInset;
+                if (
+                  safeBounds.max.x <= safeBounds.min.x ||
+                  safeBounds.max.z <= safeBounds.min.z
+                ) {
+                  return walkableBounds.clone();
+                }
+                return safeBounds;
+              })(),
+            },
           );
 
           // 섬 GLB는 backgroundLoader에서 이미 `scene.add(model)`로 들어와 있기 때문에,
@@ -3488,7 +3527,7 @@ export function Stage3() {
               backgroundMaxY,
               isCancelled: () => !isStage3Active || gumCancelled,
               staticColliderBoxes: islandStaticColliders,
-              walkableMeshes: brickWalkableMeshes,
+              walkableMeshes: stage3WalkableMeshes,
             })
             .catch((e) => {
               if (import.meta.env.DEV) {

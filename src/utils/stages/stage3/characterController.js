@@ -39,6 +39,7 @@ function findClip(clips, regex) {
  *     setupOptions?: {
  *       worldSpawnXZ?: { x: number, z: number },
  *       walkableMeshes?: import("three").Mesh[],
+ *       allowedBoundsXZ?: import("three").Box3 | null,
  *     },
  *   ) => void,
  *   update: (
@@ -98,6 +99,8 @@ export function createCharacterController({
     _maxCx = 0,
     _minCz = 0,
     _maxCz = 0;
+  /** @type {import("three").Box3 | null} */
+  let allowedBoundsXZ = null;
 
   const _moveVector = new THREE.Vector3();
   const _direction = new THREE.Vector3();
@@ -111,6 +114,8 @@ export function createCharacterController({
   const _groundHits = [];
   const GROUND_MISS_TOLERANCE_FRAMES = 5;
   const GROUND_HEIGHT_EASE_SPEED = 16;
+  const MAX_SAFE_STEP_DOWN = 0.22;
+  const MIN_SAFE_GROUND_OFFSET = 0.12;
 
   function getWalkSoundVolume() {
     const v = config.character?.walkSoundVolume;
@@ -165,12 +170,20 @@ export function createCharacterController({
 
   return {
     setup(backgroundMaxY, bounds, colliderBoxes = [], setupOptions = {}) {
-      const { worldSpawnXZ, walkableMeshes } = setupOptions;
+      const {
+        worldSpawnXZ,
+        walkableMeshes,
+        allowedBoundsXZ: allowedBounds,
+      } = setupOptions;
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
       walkableGroundMeshes = Array.isArray(walkableMeshes)
         ? walkableMeshes
         : [];
+      allowedBoundsXZ =
+        allowedBounds instanceof THREE.Box3 && !allowedBounds.isEmpty()
+          ? allowedBounds.clone()
+          : null;
       baseGroundY = backgroundMaxY;
       resolvedGroundY = backgroundMaxY;
       groundMissFrames = 0;
@@ -383,7 +396,10 @@ export function createCharacterController({
 
       const resolveGroundY = (x, z) => {
         const sampledGroundY = sampleGroundY(x, z);
-        if (sampledGroundY != null) {
+        const isSafeSample =
+          sampledGroundY != null &&
+          sampledGroundY >= baseGroundY - MIN_SAFE_GROUND_OFFSET;
+        if (isSafeSample) {
           groundMissFrames = 0;
           resolvedGroundY = sampledGroundY;
           return resolvedGroundY;
@@ -393,6 +409,15 @@ export function createCharacterController({
           resolvedGroundY = baseGroundY;
         }
         return resolvedGroundY;
+      };
+      const isInsideAllowedBoundsXZ = (x, z) => {
+        if (!allowedBoundsXZ) return true;
+        return (
+          x >= allowedBoundsXZ.min.x &&
+          x <= allowedBoundsXZ.max.x &&
+          z >= allowedBoundsXZ.min.z &&
+          z <= allowedBoundsXZ.max.z
+        );
       };
 
       if (isPunchPlaying) {
@@ -421,15 +446,44 @@ export function createCharacterController({
 
         const oldX = characterModel.position.x;
         const oldZ = characterModel.position.z;
+        const clampedX = THREE.MathUtils.clamp(
+          oldX + _moveVector.x,
+          _minCx,
+          _maxCx,
+        );
+        const clampedZ = THREE.MathUtils.clamp(
+          oldZ + _moveVector.z,
+          _minCz,
+          _maxCz,
+        );
         const slid = slideMoveXZAgainstAABBs(
           oldX,
           oldZ,
-          THREE.MathUtils.clamp(oldX + _moveVector.x, _minCx, _maxCx),
-          THREE.MathUtils.clamp(oldZ + _moveVector.z, _minCz, _maxCz),
+          clampedX,
+          clampedZ,
           collisionRadius,
           staticColliderBoxes,
         );
-        const nextGroundY = resolveGroundY(slid.x, slid.z);
+        const candidateX = slid.x;
+        const candidateZ = slid.z;
+        const sampledCandidateGroundY = sampleGroundY(candidateX, candidateZ);
+        const isAboveMinSafeGround =
+          sampledCandidateGroundY != null &&
+          sampledCandidateGroundY >= baseGroundY - MIN_SAFE_GROUND_OFFSET;
+        const wouldFallTooFar =
+          isAboveMinSafeGround &&
+          sampledCandidateGroundY < resolvedGroundY - MAX_SAFE_STEP_DOWN;
+        const canMoveToCandidate =
+          isInsideAllowedBoundsXZ(candidateX, candidateZ) &&
+          isAboveMinSafeGround &&
+          !wouldFallTooFar;
+        const targetX = canMoveToCandidate ? candidateX : oldX;
+        const targetZ = canMoveToCandidate ? candidateZ : oldZ;
+        if (isAboveMinSafeGround && canMoveToCandidate) {
+          groundMissFrames = 0;
+          resolvedGroundY = sampledCandidateGroundY;
+        }
+        const nextGroundY = resolveGroundY(targetX, targetZ);
         const targetY = nextGroundY + characterGroundLift;
         const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
         characterYPosition = THREE.MathUtils.lerp(
@@ -437,9 +491,9 @@ export function createCharacterController({
           targetY,
           easeAlpha,
         );
-        characterModel.position.set(slid.x, characterYPosition, slid.z);
+        characterModel.position.set(targetX, characterYPosition, targetZ);
         moved =
-          Math.abs(slid.x - oldX) > 1e-6 || Math.abs(slid.z - oldZ) > 1e-6;
+          Math.abs(targetX - oldX) > 1e-6 || Math.abs(targetZ - oldZ) > 1e-6;
         characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
       } else {
         const p = characterModel.position;
@@ -519,6 +573,7 @@ export function createCharacterController({
       isWalking = false;
       backgroundBounds = null;
       walkableGroundMeshes = [];
+      allowedBoundsXZ = null;
       resolvedGroundY = 0;
       groundMissFrames = 0;
       staticColliderBoxes = [];
