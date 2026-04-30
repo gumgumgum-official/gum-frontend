@@ -350,6 +350,8 @@ body {
 }
 
 .stage3-stamp-poster {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: auto;
@@ -381,6 +383,10 @@ body {
   width: min(86vw, 560px);
 }
 
+.stage3-stamp-zoom-poster-wrap {
+  position: relative;
+}
+
 .stage3-stamp-zoom-image {
   display: block;
   width: 100%;
@@ -405,23 +411,21 @@ body {
 }
 
 .stage3-stamp-mark {
-  --stamp-size: clamp(11px, 1.55vw, 16px);
+  --stamp-size-ratio: 0.15;
   position: absolute;
-  width: var(--stamp-size);
-  height: var(--stamp-size);
-  border-radius: 50%;
-  border: 1px solid rgba(120, 22, 22, 0.7);
-  background: radial-gradient(
-    circle at 35% 35%,
-    rgba(255, 110, 110, 0.95),
-    rgba(204, 34, 34, 0.95) 55%,
-    rgba(120, 12, 12, 0.92) 100%
-  );
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.45),
-    0 1px 3px rgba(60, 8, 8, 0.5);
+  display: block;
+  width: calc(100% * var(--stamp-size-ratio));
+  height: auto;
+  aspect-ratio: 1 / 1;
+  min-width: 16px;
+  background-image: url("/assets/stamp/stamp.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  z-index: 20;
+  pointer-events: none;
   opacity: 0;
-  transform: scale(0.6);
+  transform: scale(0.88);
   transition:
     opacity 0.18s ease,
     transform 0.22s ease;
@@ -432,39 +436,43 @@ body {
   transform: scale(1);
 }
 
+.stage3-stamp-mark--zoom {
+  min-width: 0;
+}
+
 .stage3-stamp-mark[data-step-key="worryBreak"] {
   top: 45.2%;
-  left: 48.7%;
+  left: 46%;
 }
 
 .stage3-stamp-mark[data-step-key="gumtoongji"] {
   top: 45%;
-  left: 18.4%;
+  left: 15.7%;
 }
 
 .stage3-stamp-mark[data-step-key="clock"] {
   top: 45%;
-  left: 78.9%;
+  left: 76.2%;
 }
 
 .stage3-stamp-mark[data-step-key="gameMachine"] {
   top: 58.7%;
-  left: 79.1%;
+  left: 76.4%;
 }
 
 .stage3-stamp-mark[data-step-key="tent"] {
   top: 58.7%;
-  left: 49%;
+  left: 46.3%;
 }
 
 .stage3-stamp-mark[data-step-key="notice"] {
   top: 58.6%;
-  left: 18.4%;
+  left: 15.7%;
 }
 
 .stage3-stamp-mark[data-step-key="icecream"] {
   top: 71.9%;
-  left: 18.3%;
+  left: 15.6%;
 }
 
 .stage3-stamp-pop {

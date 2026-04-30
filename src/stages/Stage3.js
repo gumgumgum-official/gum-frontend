@@ -763,7 +763,16 @@ export function Stage3() {
       <div class="stage3-stamp-zoom-overlay stage3-stamp-zoom-overlay--hidden" aria-hidden="true">
         <div class="stage3-stamp-zoom-content" role="dialog" aria-modal="true" aria-label="스탬프 포스터 확대 보기">
           <button class="stage3-stamp-zoom-close" type="button" aria-label="닫기">×</button>
-          <img class="stage3-stamp-zoom-image" src="${STAMP_POSTER_IMAGE_PATH}" alt="GGUM STAMP TOUR 포스터 확대" />
+          <div class="stage3-stamp-zoom-poster-wrap">
+            <img class="stage3-stamp-zoom-image" src="${STAMP_POSTER_IMAGE_PATH}" alt="GGUM STAMP TOUR 포스터 확대" />
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="gumtoongji" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="worryBreak" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="clock" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="gameMachine" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="tent" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="notice" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="icecream" aria-hidden="true"></span>
+          </div>
         </div>
       </div>
     `;
@@ -956,14 +965,16 @@ export function Stage3() {
 
   function pulseStampMarkForStep(stepKey) {
     if (!stampUiRoot) return;
-    const el = stampUiRoot.querySelector(
+    const marks = stampUiRoot.querySelectorAll(
       `.stage3-stamp-mark[data-step-key="${stepKey}"]`,
     );
-    if (!el) return;
-    el.classList.remove("stage3-stamp-pop");
-    void el.getBoundingClientRect();
-    el.classList.add("stage3-stamp-pop");
-    window.setTimeout(() => el.classList.remove("stage3-stamp-pop"), 500);
+    if (!marks.length) return;
+    marks.forEach((el) => {
+      el.classList.remove("stage3-stamp-pop");
+      void el.getBoundingClientRect();
+      el.classList.add("stage3-stamp-pop");
+      window.setTimeout(() => el.classList.remove("stage3-stamp-pop"), 500);
+    });
   }
 
   function pulseStampPanelGlow() {
