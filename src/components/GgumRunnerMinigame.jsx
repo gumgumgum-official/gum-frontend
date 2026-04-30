@@ -11,9 +11,12 @@ const DISPLAY_H = 48;
 const TOTAL_RUN_FRAMES = 4;
 const SPRITE_PATH = "/assets/minigame/TOTAL_GGUM.png";
 const BG_PATH = "/assets/minigame/pixel_bg.png";
-const BASE_SPEED = 3;
-const MAX_SPEED = 8;
-const SPEED_GAIN_PER_SCORE = 0.0025;
+const BASE_SPEED = 5;
+const MAX_SPEED = 20;
+const SPEED_STEP_SCORE = 200;
+const SPEED_STEP_GAIN = 0.9;
+const TALL_OBSTACLE_MIN_LEVEL = 2;
+const DOUBLE_OBSTACLE_MIN_LEVEL = 3;
 const NEW_HIGH_BLINK_INTERVAL = 8;
 const NEW_HIGH_BLINK_PHASES = 6;
 const TARGET_FPS = 60;
@@ -279,16 +282,17 @@ export function GgumRunnerMinigame({ onClose }) {
       );
     };
 
-    const drawCactus = (x, y) => {
+    const drawCactus = (x, y, tall = false) => {
+      const extraHeight = tall ? 10 : 0;
       // Use a cooler green so cactus is distinguishable from tree foliage.
       ctx.fillStyle = "#1f9aa8";
-      ctx.fillRect(x + 9, y, 6, 32);
-      ctx.fillRect(x, y + 10, 10, 5);
-      ctx.fillRect(x, y + 5, 5, 12);
-      ctx.fillRect(x + 14, y + 14, 10, 5);
-      ctx.fillRect(x + 19, y + 9, 5, 12);
+      ctx.fillRect(x + 9, y - extraHeight, 6, 32 + extraHeight);
+      ctx.fillRect(x, y + 10 - extraHeight, 10, 5);
+      ctx.fillRect(x, y + 5 - extraHeight, 5, 12);
+      ctx.fillRect(x + 14, y + 14 - extraHeight, 10, 5);
+      ctx.fillRect(x + 19, y + 9 - extraHeight, 5, 12);
       ctx.fillStyle = "#0f6f7a";
-      ctx.fillRect(x + 12, y, 3, 32);
+      ctx.fillRect(x + 12, y - extraHeight, 3, 32 + extraHeight);
     };
 
     const drawHammer = (x, y) => {
@@ -314,7 +318,8 @@ export function GgumRunnerMinigame({ onClose }) {
       ctx.restore();
     };
 
-    const drawMushroom = (x, y) => {
+    const drawMushroom = (x, y, tall = false) => {
+      const extraHeight = tall ? 10 : 0;
       const cap = [
         [0, 0, 1, 1, 1, 1, 0, 0],
         [0, 1, 1, 1, 1, 1, 1, 0],
@@ -325,26 +330,51 @@ export function GgumRunnerMinigame({ onClose }) {
         row.forEach((c, ci) => {
           if (!c) return;
           ctx.fillStyle = r < 1 ? "#ef5350" : "#e53935";
-          ctx.fillRect(x + ci * 4, y + r * 4, 4, 4);
+          ctx.fillRect(x + ci * 4, y - extraHeight + r * 4, 4, 4);
         });
       });
       ctx.fillStyle = "#fff";
-      ctx.fillRect(x + 8, y + 4, 5, 5);
-      ctx.fillRect(x + 20, y + 6, 4, 4);
+      ctx.fillRect(x + 8, y - extraHeight + 4, 5, 5);
+      ctx.fillRect(x + 20, y - extraHeight + 6, 4, 4);
       ctx.fillStyle = "#f5f5f5";
-      ctx.fillRect(x + 10, y + 16, 12, 16);
+      ctx.fillRect(x + 10, y - extraHeight + 16, 12, 16 + extraHeight);
     };
 
     const drawObstacle = (obs) => {
-      if (obs.type === 0) drawCactus(obs.x, obs.y);
+      if (obs.type === 0) drawCactus(obs.x, obs.y, obs.tall);
       else if (obs.type === 1) drawHammer(obs.x, obs.y);
-      else drawMushroom(obs.x, obs.y);
+      else drawMushroom(obs.x, obs.y, obs.tall);
     };
 
     const getRect = (obs) => {
-      if (obs.type === 0) return { x: obs.x + 5, y: obs.y + 2, w: 14, h: 30 };
+      if (obs.type === 0) {
+        return {
+          x: obs.x + 5,
+          y: obs.y + (obs.tall ? -8 : 2),
+          w: 14,
+          h: obs.tall ? 40 : 30,
+        };
+      }
       if (obs.type === 1) return { x: obs.x + 2, y: obs.y + 4, w: 24, h: 16 };
-      return { x: obs.x + 8, y: obs.y + 2, w: 16, h: 30 };
+      return {
+        x: obs.x + 8,
+        y: obs.y + (obs.tall ? -8 : 2),
+        w: 16,
+        h: obs.tall ? 40 : 30,
+      };
+    };
+
+    const createObstacle = (spawnX, difficultyLevel) => {
+      const type = Math.floor(Math.random() * 3);
+      const canBeTall =
+        type !== 1 && difficultyLevel >= TALL_OBSTACLE_MIN_LEVEL;
+      const tallChance = Math.min(0.22 + difficultyLevel * 0.06, 0.55);
+      return {
+        x: spawnX,
+        y: GROUND_Y - 34,
+        type,
+        tall: canBeTall && Math.random() < tallChance,
+      };
     };
 
     const updateScoreText = (force = false) => {
@@ -407,6 +437,7 @@ export function GgumRunnerMinigame({ onClose }) {
 
     const onKeyDown = (e) => {
       if (e.code !== "Space") return;
+      if (state === "dead") return;
       e.preventDefault();
       jump();
     };
@@ -443,7 +474,11 @@ export function GgumRunnerMinigame({ onClose }) {
           blinkTimer -= NEW_HIGH_BLINK_INTERVAL;
         }
       }
-      speed = Math.min(MAX_SPEED, BASE_SPEED + score * SPEED_GAIN_PER_SCORE);
+      const speedStepLevel = Math.floor(score / SPEED_STEP_SCORE);
+      speed = Math.min(
+        MAX_SPEED,
+        BASE_SPEED + speedStepLevel * SPEED_STEP_GAIN,
+      );
       bgX += speed * 0.4 * scale;
       groundX += speed * scale;
 
@@ -465,15 +500,20 @@ export function GgumRunnerMinigame({ onClose }) {
 
       obstacleTimer += scale;
       while (obstacleTimer >= nextObstacleIn) {
-        obstacles.push({
-          x: W + 10,
-          y: GROUND_Y - 34,
-          type: Math.floor(Math.random() * 3),
-        });
+        const difficultyLevel = Math.floor(score / SPEED_STEP_SCORE);
+        const firstSpawnX = W + 10;
+        obstacles.push(createObstacle(firstSpawnX, difficultyLevel));
+        if (difficultyLevel >= DOUBLE_OBSTACLE_MIN_LEVEL) {
+          const doubleChance = Math.min(0.18 + difficultyLevel * 0.05, 0.5);
+          if (Math.random() < doubleChance) {
+            const gap = 26 + Math.random() * 24;
+            obstacles.push(createObstacle(firstSpawnX + gap, difficultyLevel));
+          }
+        }
         obstacleTimer -= nextObstacleIn;
         nextObstacleIn = Math.max(
-          42,
-          Math.floor(96 - speed * 6 + Math.random() * 42),
+          30,
+          Math.floor(92 - speed * 6 - difficultyLevel * 2 + Math.random() * 34),
         );
       }
       obstacles.forEach((obs) => {
