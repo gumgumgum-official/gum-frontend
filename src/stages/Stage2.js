@@ -326,6 +326,21 @@ export function Stage2() {
   const processedHandwritingKeys = new Set();
   /** cleanup 이후 stale 비동기 작업(loadInitial, ingest)이 scene에 추가되지 않도록 차단 */
   let isStage2Active = false;
+  /** Realtime SVG 직렬 처리 큐 — 동시에 여러 SVG가 도착해도 한 번에 하나씩 처리 */
+  const svgQueue = [];
+  let svgQueueDraining = false;
+  const drainSvgQueue = async () => {
+    if (svgQueueDraining) return;
+    svgQueueDraining = true;
+    while (svgQueue.length > 0) {
+      if (!isStage2Active) break;
+      const fn = svgQueue.shift();
+      await fn();
+      if (svgQueue.length > 0)
+        await new Promise((r) => setTimeout(r, STAGGER_MS));
+    }
+    svgQueueDraining = false;
+  };
   let cameraRef = null;
   /** 섬 XZ 범위 — island.glb 로드 시 자동 계산됨 (검증: 예전 수치 fallback 없이 이 값만 사용) */
   let islandBounds = null;
@@ -411,7 +426,7 @@ export function Stage2() {
           {
             initial: false,
             groundY: characterWalkGroundY,
-            islandValidator,
+            islandValidator: null, // SVG 스폰은 AABB로 충분 — 레이캐스트 제거
             spawnExclusionZones,
           },
           () => characterMoveBounds ?? islandBounds,
@@ -746,7 +761,8 @@ export function Stage2() {
       // Handwriting: 실시간 수신 (누적 로드는 GLB 로드 후 섬 땅 높이 적용 뒤 호출)
       realtimeSubscription = subscribeHandwritingRealtime({
         onNewHandwriting: (metadata) => {
-          void ingestHandwriting(metadata, "realtime");
+          svgQueue.push(() => ingestHandwriting(metadata, "realtime"));
+          void drainSvgQueue();
         },
         onError: (error) => {
           console.error("[Stage2] Handwriting realtime error:", error);
@@ -817,6 +833,7 @@ export function Stage2() {
 
     cleanup(scene) {
       isStage2Active = false;
+      svgQueue.length = 0;
 
       // Realtime 구독 해제
       if (realtimeSubscription) {
@@ -1186,10 +1203,7 @@ function loadCharacters(
       runClip,
       bounds: walkBounds,
       groundY: rootYForWalk,
-      isPositionValid:
-        typeof islandValidator === "function"
-          ? (x, z) => islandValidator(x, z)
-          : null,
+      isPositionValid: null, // 스폰은 islandValidator로 검증 완료 — 이동 루프에서 매 프레임 레이캐스트 제거
       staticColliderBoxes: obstacleBoxes,
       options: {
         moveSpeed: 0.8,
@@ -1294,6 +1308,7 @@ function loadPropsFromConfig(
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files"; // session_id, storage_path, created_at, client_id
 const STAGGER_MS = 90; // 첫 글자 즉시, 이후 글자는 이 간격으로 순차 스폰
+const MAX_FALLING_TEXTS = 40; // 씬에 동시에 존재할 수 있는 SVG 평면 최대 수
 
 // ------------------------------------------------------------
 // 글씨 스케일 정규화 (Stage3 방식)
@@ -1485,6 +1500,18 @@ async function createFallingText(
     typeof optGroundY === "number" && Number.isFinite(optGroundY)
       ? optGroundY
       : GROUND_Y;
+
+  // 씬 SVG 수 상한 — 착지된 것 중 가장 오래된 것부터 제거
+  if (fallingTextsArr.length >= MAX_FALLING_TEXTS) {
+    const oldestIdx = fallingTextsArr.findIndex((ft) => ft.landed);
+    if (oldestIdx >= 0) {
+      const old = fallingTextsArr.splice(oldestIdx, 1)[0];
+      scene.remove(old.group);
+      disposeHandwritingSvgPlaneGroup(old.group);
+    } else {
+      return; // 아직 낙하 중인 것만 있으면 이번 SVG 스킵
+    }
+  }
 
   try {
     // 50% 확률로 최솟값, 나머지 50%는 전체 범위 내 균일 랜덤
@@ -2005,7 +2032,7 @@ function pickSpawnXZ(
   // 1단계: 충분한 간격(0.3m) → 2단계: 아주 살짝(0.05m) → 3단계: 거의 맞닿음(0) → 4단계: 약간 겹침 허용
   const gapLevels = [0.3, 0.05, 0.0, -0.5];
   for (const minGap of gapLevels) {
-    for (let tryCount = 0; tryCount < 150; tryCount++) {
+    for (let tryCount = 0; tryCount < 40; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
       const z = minZ + Math.random() * (maxZ - minZ);
       if (!isValidPos(x, z)) continue;
