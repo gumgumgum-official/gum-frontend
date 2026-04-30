@@ -1305,13 +1305,13 @@ function loadCharacters(
       logDuration("characters:loadWalk+Idle", tCharsStart);
       const walkGltf = {
         ...walkRes.value,
-        scene: walkRes.value.scene.clone(true),
+        scene: SkeletonUtils.clone(walkRes.value.scene),
       };
       const idleGltf =
         idleRes.status === "fulfilled"
           ? {
               ...idleRes.value,
-              scene: idleRes.value.scene.clone(true),
+              scene: SkeletonUtils.clone(idleRes.value.scene),
             }
           : null;
       if (idleRes.status === "rejected") {
