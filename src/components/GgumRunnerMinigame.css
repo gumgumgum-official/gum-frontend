@@ -1,5 +1,13 @@
 @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
 
+@font-face {
+  font-family: "MaruMinyaHangul";
+  src: url("/fonts/x12y12pxMaruMinyaHangul.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 .ggum-runner {
   position: relative;
   width: min(95vw, 860px);
@@ -150,6 +158,7 @@
 }
 
 .ggum-runner-gameover-title {
+  font-family: "MaruMinyaHangul", "Press Start 2P", "Courier New", monospace;
   font-size: 24px;
   font-weight: 700;
   margin-bottom: 8px;

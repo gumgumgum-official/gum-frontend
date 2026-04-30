@@ -403,7 +403,7 @@ export function GgumRunnerMinigame({ onClose }) {
     const updateOverlayVisibility = () => {
       startOverlayEl.style.display = state === "idle" ? "flex" : "none";
       gameOverOverlayEl.style.display = state === "dead" ? "flex" : "none";
-      gameOverScoreEl.textContent = `score: ${Math.floor(score)}\nHIGH SCORE: ${hiScore}`;
+      gameOverScoreEl.textContent = `score: ${Math.floor(score)}`;
     };
 
     const jump = () => {
@@ -633,8 +633,6 @@ export function GgumRunnerMinigame({ onClose }) {
                 className="ggum-runner-gameover-score"
               >
                 score: 0
-                <br />
-                HIGH SCORE: 0
               </div>
               <button
                 ref={gameOverButtonRef}
