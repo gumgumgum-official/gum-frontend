@@ -37,7 +37,6 @@ function GumCardComponent(props) {
           />
           <div className="gum-card-front-text">
             <div className="num">{card.num}</div>
-            <div className="gum-name">{card.name}</div>
             <div className="keywords">
               {card.keywords.map((k) => (
                 <span key={k} className="kw">

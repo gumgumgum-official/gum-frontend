@@ -31,7 +31,7 @@
 
 body {
   overflow: hidden;
-  font-family: sans-serif;
+  font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
 }
 
 #root {
@@ -177,6 +177,8 @@ body {
 /* Stage3 INT Click 힌트 말풍선: 반투명 배경 */
 .speech-bubble-stage2.speech-bubble-stage3-user.speech-bubble-stage3-int-click {
   background: #fff7bf;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .speech-bubble-stage2.speech-bubble-stage3-user.speech-bubble-stage3-int-click::after {

@@ -13,6 +13,7 @@ import { APP_CONFIG } from "../config/appConfig.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import { warmStage2GltfTemplateUrls } from "../utils/stages/stage2/stage2GltfWarmup.js";
 import {
   disposeStage6LoadingTransition,
   preloadStage6AirplaneModel,
@@ -194,6 +195,10 @@ export function initThreeApp(canvasElement, options = {}) {
 
   if (safeAllowedStages.includes(6)) {
     preloadStage6AirplaneModel();
+  }
+
+  if (safeAllowedStages.includes(2)) {
+    warmStage2GltfTemplateUrls();
   }
 
   if (safeAllowedStages.includes(3)) {

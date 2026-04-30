@@ -74,7 +74,7 @@ export const CARDS = [
     num: "06",
     name: "껌별지",
     img: `${BASE}/assets/tarocard/orange_ggum.png`,
-    keywords: ["#목표", "#든든한페이스메이커"],
+    keywords: ["#목표", "#페이스메이커"],
     accent: "#FDBA74",
     accentBg: "rgba(253,186,116,0.12)",
     accentBorder: "rgba(253,186,116,0.25)",

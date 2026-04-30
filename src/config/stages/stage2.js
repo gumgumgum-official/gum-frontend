@@ -28,17 +28,17 @@ export const STAGE2_CONFIG = {
   characterModelPath: "/models/common/gum_walk_final.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
   characterScale: 1.7,
-  /** 초기 위치를 섬 걸음 영역 안에서 랜덤 분산 */
-  scatterCharacters: true,
+  /** 초기 위치를 고정 좌표로 사용 */
+  scatterCharacters: false,
   /** 분산 시 서로 최소 이 거리(m) 이상 */
   characterScatterMinDistance: 4,
-  /** 5명 (scatterCharacters면 XZ는 무시·y만 선택 적용) */
+  /** 5명 고정 시작 좌표 */
   characters: [
-    { position: {} },
-    { position: {} },
-    { position: {} },
-    { position: {} },
-    { position: {} },
+    { position: { x: -14.8, z: 0.2 } },
+    { position: { x: 14.9, z: -0.6 } },
+    { position: { x: 0.4, z: 12.6 } },
+    { position: { x: -0.3, z: -13.2 } },
+    { position: { x: 0.1, z: 0.4 } },
   ],
   props: [
     {

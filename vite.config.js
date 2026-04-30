@@ -1,11 +1,28 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+/** 서브패스 배포 시 마지막 `/` 포함 (VITE_BASE_URL 누락 보정) */
+function viteBaseFromEnv() {
+  const raw = process.env.VITE_BASE_URL?.trim();
+  if (!raw || raw === "/") return "/";
+  const leadsWithSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return leadsWithSlash.endsWith("/") ? leadsWithSlash : `${leadsWithSlash}/`;
+}
+
 export default defineConfig({
   // Vercel 등 배포 시 루트 기준으로 asset/source 경로 해석
   // 서브경로 배포 시 Vercel에서 VITE_BASE_URL=/gum-frontend/ 등으로 설정
-  base: process.env.VITE_BASE_URL || "/",
+  base: viteBaseFromEnv(),
   plugins: [react()],
+  server: {
+    // VITE_GUM_SERVER_URL 없을 때 브라우저가 :5173/api 로 보냄 → 로컬 Gum 서버(http://localhost:3000). 원격 URL env면 무관
+    proxy: {
+      "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {

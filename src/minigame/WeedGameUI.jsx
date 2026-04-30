@@ -237,20 +237,25 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   }, [startGame]);
 
   return (
-    <div className="w-full h-full flex items-center justify-center p-4 font-sans">
-      {/* Outer modal card */}
+    <div className="w-full h-full flex items-center justify-center font-sans min-h-0">
+      {/*
+       * 외형: NoticeModalBoard와 같은 width / max-height 한도 안에서 높이를 맞춤.
+       * 게시판은 height:auto(포스터 11:16 한 줄 기준)·아래 패딩과 동일한 clamp를 calc에 반영.
+       */}
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
+        data-minigame-modal-card=""
+        initial={{ scale: 0.96, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 18 }}
-        className="w-full rounded-3xl overflow-hidden shadow-2xl"
+        className="w-full max-h-full rounded-3xl overflow-hidden shadow-2xl"
         style={{
           background: "var(--card)",
           border: "3px solid var(--wood)",
           boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
-          // 너무 꽉 차지 않게 "게시판보단 약간" 작은 크기
-          width: "min(80vw, 1250px)",
-          height: "min(78vh, 840px)",
+          width: "min(96vw, 1680px)",
+          maxHeight: "min(94vh, 1200px)",
+          height:
+            "min(min(94vh, 1200px), calc((min(96vw, 1680px) - 2 * clamp(16px, 2.5vw, 40px) - 2 * clamp(16px, 2vw, 32px)) * 16 / 33 + 2 * clamp(32px, 4vh, 56px) + 58px))",
           display: "flex",
           flexDirection: "column",
         }}
