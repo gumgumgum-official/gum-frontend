@@ -16,6 +16,14 @@ import {
   warmStage3GltfTemplateUrls,
   waitForStage3GltfTemplatesReady,
 } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+
+const START_BG_URL = resolvePublicAssetUrl(
+  "/static/images/background_start.png",
+);
+const START_BTN_URL = resolvePublicAssetUrl(
+  "/static/images/start_button_pink.png",
+);
 
 export function StartPage() {
   const navigate = useNavigate();
@@ -193,12 +201,16 @@ export function StartPage() {
     .join(" ");
 
   return (
-    <div className={startPageClassName} onClick={handleStart}>
+    <div
+      className={startPageClassName}
+      style={{ backgroundImage: `url("${START_BG_URL}")` }}
+      onClick={handleStart}
+    >
       <div className={styles.startOverlay}>
         <div className={styles.startButtonHit}>
           <img
             className={styles.startButtonImg}
-            src="/static/images/start_button_pink.png"
+            src={START_BTN_URL}
             alt="START"
             width={1024}
             height={388}

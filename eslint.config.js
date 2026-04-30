@@ -68,6 +68,14 @@ export default [
     },
   },
   {
+    files: ["scripts/**/*.{js,mjs,cjs}"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+      },
+    },
+  },
+  {
     ignores: [
       "node_modules",
       "dist",

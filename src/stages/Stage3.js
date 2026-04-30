@@ -32,7 +32,6 @@ import * as CANNON from "cannon-es";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import {
-  openMinigame,
   closeMinigame,
   dispatchMinigameClose,
   onMinigameClose,

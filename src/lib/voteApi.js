@@ -103,6 +103,8 @@ export async function postVote(candidate, opts = {}) {
   return { ...aggregate, selectedCandidate };
 }
 
+// TODO: 투표 변경/취소 기능 구현 후 GgumddiVoteSection.tsx에서 호출 예정
+//       (deleteMyVote: 취소, updateMyVote: 후보 변경)
 /**
  * @param {{ sessionId?: string, clientId?: string }} [opts]
  * @returns {Promise<VoteAggregate>}
