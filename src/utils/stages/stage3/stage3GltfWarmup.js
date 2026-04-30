@@ -8,8 +8,12 @@ import {
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
 
-/** @returns {string[]} */
-function getStage3PrewarmAbsoluteUrls() {
+/**
+ * @param {{ includeIcecreamSpawnPaths?: boolean }} [options]
+ * @returns {string[]}
+ */
+function getStage3PrewarmAbsoluteUrls(options = {}) {
+  const { includeIcecreamSpawnPaths = true } = options;
   /** @type {string[]} */
   const urls = [];
   urls.push(resolvePublicAssetUrl(STAGE3_CONFIG.model.path));
@@ -32,8 +36,10 @@ function getStage3PrewarmAbsoluteUrls() {
     STAGE3_CONFIG.character?.gumFollowers?.models?.idleModelPath ??
     "/models/common/gum_idle.glb";
   urls.push(resolvePublicAssetUrl(gumIdlePath));
-  for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
-    urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
+  if (includeIcecreamSpawnPaths) {
+    for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
+      urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
+    }
   }
   for (const rel of STAGE3_STANDALONE_FLOWER_GLB_PATHS) {
     urls.push(resolvePublicAssetUrl(rel));
@@ -53,7 +59,9 @@ export function warmStage3GltfTemplateUrls() {
  * @returns {Promise<void>}
  */
 export async function waitForStage3GltfTemplatesReady() {
-  const urls = getStage3PrewarmAbsoluteUrls();
+  const urls = getStage3PrewarmAbsoluteUrls({
+    includeIcecreamSpawnPaths: false,
+  });
   await Promise.all(
     urls.map(async (u) => {
       try {
