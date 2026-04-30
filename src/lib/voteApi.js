@@ -1,5 +1,6 @@
 import { getSessionId } from "./session.js";
 
+/** 원격 예: .env 의 VITE_GUM_SERVER_URL. 미설정 시 Vite 오리진 폴백 → 로컬에 백이 없으면 실패(.env.example, vite 프록시 참고). */
 function getGumServerBaseUrl() {
   const raw =
     import.meta.env.VITE_GUM_SERVER_URL || window.location.origin || "";

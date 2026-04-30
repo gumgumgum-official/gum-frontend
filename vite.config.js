@@ -14,6 +14,15 @@ export default defineConfig({
   // 서브경로 배포 시 Vercel에서 VITE_BASE_URL=/gum-frontend/ 등으로 설정
   base: viteBaseFromEnv(),
   plugins: [react()],
+  server: {
+    // VITE_GUM_SERVER_URL 없을 때 브라우저가 :5173/api 로 보냄 → 로컬 Gum 서버(http://localhost:3000). 원격 URL env면 무관
+    proxy: {
+      "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {
