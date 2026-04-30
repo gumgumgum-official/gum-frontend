@@ -90,6 +90,7 @@ export function GgumRunnerMinigame({ onClose }) {
     let lastRenderedScore = -1;
     let lastRenderedHiScore = -1;
     let lastRenderedOpacity = "";
+    let lastRenderedColor = "";
     let lastTimestamp = 0;
 
     const player = {
@@ -131,11 +132,28 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawPixelTree = (x, y) => {
-      ctx.fillStyle = "#1b5e20";
-      ctx.fillRect(x - 12, y, 24, 50);
-      ctx.fillRect(x - 18, y + 10, 36, 12);
+      // trunk
+      ctx.fillStyle = "#7b4f2e";
+      ctx.fillRect(x - 4, y + 20, 8, 30);
+      ctx.fillStyle = "#5f3a20";
+      ctx.fillRect(x - 2, y + 20, 4, 30);
+
+      // rounder canopy silhouette
       ctx.fillStyle = "#2e7d32";
-      ctx.fillRect(x - 8, y - 14, 16, 18);
+      ctx.fillRect(x - 18, y + 14, 36, 10);
+      ctx.fillRect(x - 22, y + 6, 44, 10);
+      ctx.fillRect(x - 18, y - 2, 36, 10);
+      ctx.fillRect(x - 12, y - 10, 24, 8);
+
+      ctx.fillStyle = "#388e3c";
+      ctx.fillRect(x - 14, y + 12, 28, 8);
+      ctx.fillRect(x - 10, y + 2, 20, 8);
+      ctx.fillRect(x - 6, y - 6, 12, 6);
+
+      ctx.fillStyle = "#1b5e20";
+      ctx.fillRect(x - 24, y + 10, 6, 8);
+      ctx.fillRect(x + 18, y + 10, 6, 8);
+      ctx.fillRect(x - 4, y - 12, 8, 4);
     };
 
     const drawStar = (x, y, s) => {
@@ -146,8 +164,13 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawFallbackBg = () => {
-      ctx.fillStyle = "#5bbcd4";
-      ctx.fillRect(0, 0, W, H * 0.65);
+      // Pixel-art sky gradient: draw stepped color bands (not smooth blend).
+      const skyBands = ["#5bbcd4", "#68c4dd", "#82d7ef", "#9ee8ff"];
+      const bandHeight = Math.ceil(GROUND_Y / skyBands.length);
+      skyBands.forEach((color, index) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(0, index * bandHeight, W, bandHeight);
+      });
 
       ctx.fillStyle = "rgba(240,248,255,0.85)";
       drawCloud(
@@ -164,6 +187,31 @@ export function GgumRunnerMinigame({ onClose }) {
         ((((600 - bgX * 0.2) % (W + 80)) + W + 80) % (W + 80)) - 40,
         14,
         60,
+      );
+      drawCloud(
+        ((((90 - bgX * 0.23) % (W + 100)) + W + 100) % (W + 100)) - 50,
+        52,
+        56,
+      );
+      drawCloud(
+        ((((240 - bgX * 0.21) % (W + 100)) + W + 100) % (W + 100)) - 50,
+        68,
+        48,
+      );
+      drawCloud(
+        ((((470 - bgX * 0.19) % (W + 120)) + W + 120) % (W + 120)) - 60,
+        56,
+        64,
+      );
+      drawCloud(
+        ((((680 - bgX * 0.18) % (W + 120)) + W + 120) % (W + 120)) - 60,
+        72,
+        54,
+      );
+      drawCloud(
+        ((((760 - bgX * 0.16) % (W + 140)) + W + 140) % (W + 140)) - 70,
+        40,
+        58,
       );
 
       ctx.fillStyle = "#2e7d32";
@@ -190,20 +238,9 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawBg = () => {
-      if (!backgroundImage.complete || !backgroundImage.naturalWidth) {
-        drawFallbackBg();
-        return;
-      }
-      const imgW = backgroundImage.naturalWidth;
-      const imgH = backgroundImage.naturalHeight;
-      const scale = Math.max(W / imgW, H / imgH);
-      const drawW = imgW * scale;
-      const drawH = imgH * scale;
-      const y = H - drawH;
-      const loopW = drawW;
-      const x = -((bgX * 0.2) % loopW);
-      ctx.drawImage(backgroundImage, x, y, drawW, drawH);
-      ctx.drawImage(backgroundImage, x + loopW, y, drawW, drawH);
+      // Keep a deterministic pixel-art background so white band artifacts
+      // from source images never show up in the sky area.
+      drawFallbackBg();
     };
 
     const drawPlayer = () => {
@@ -243,31 +280,38 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawCactus = (x, y) => {
-      ctx.fillStyle = "#2e7d32";
+      // Use a cooler green so cactus is distinguishable from tree foliage.
+      ctx.fillStyle = "#1f9aa8";
       ctx.fillRect(x + 9, y, 6, 32);
       ctx.fillRect(x, y + 10, 10, 5);
       ctx.fillRect(x, y + 5, 5, 12);
       ctx.fillRect(x + 14, y + 14, 10, 5);
       ctx.fillRect(x + 19, y + 9, 5, 12);
-      ctx.fillStyle = "#1b5e20";
+      ctx.fillStyle = "#0f6f7a";
       ctx.fillRect(x + 12, y, 3, 32);
     };
 
-    const drawRock = (x, y) => {
-      const shape = [
-        [0, 0, 1, 1, 1, 0, 0],
-        [0, 1, 1, 1, 1, 1, 0],
-        [1, 1, 1, 1, 1, 1, 1],
-        [1, 1, 1, 1, 1, 1, 1],
-        [0, 1, 1, 1, 1, 1, 0],
-      ];
-      shape.forEach((row, r) => {
-        row.forEach((c, ci) => {
-          if (!c) return;
-          ctx.fillStyle = r < 2 ? "#a8a29e" : "#78716c";
-          ctx.fillRect(x + ci * 4, y + r * 4, 4, 4);
-        });
-      });
+    const drawHammer = (x, y) => {
+      // Actually rotate the hammer so it reads as diagonal.
+      ctx.save();
+      ctx.translate(x + 14, y + 16);
+      ctx.rotate(Math.PI / 4.2);
+      ctx.translate(-14, -16);
+
+      // hammer head
+      ctx.fillStyle = "#9ca3af";
+      ctx.fillRect(2, 2, 22, 8);
+      ctx.fillStyle = "#6b7280";
+      ctx.fillRect(18, 0, 8, 12);
+      ctx.fillRect(3, 8, 22, 2);
+
+      // handle
+      ctx.fillStyle = "#b9773a";
+      ctx.fillRect(10, 10, 6, 22);
+      ctx.fillStyle = "#8b5a2b";
+      ctx.fillRect(12, 10, 2, 22);
+
+      ctx.restore();
     };
 
     const drawMushroom = (x, y) => {
@@ -293,7 +337,7 @@ export function GgumRunnerMinigame({ onClose }) {
 
     const drawObstacle = (obs) => {
       if (obs.type === 0) drawCactus(obs.x, obs.y);
-      else if (obs.type === 1) drawRock(obs.x, obs.y);
+      else if (obs.type === 1) drawHammer(obs.x, obs.y);
       else drawMushroom(obs.x, obs.y);
     };
 
@@ -308,24 +352,28 @@ export function GgumRunnerMinigame({ onClose }) {
       const isBlinking = newHighBlinkPhase < NEW_HIGH_BLINK_PHASES;
       const blinkOpacity = isBlinking && newHighBlinkPhase % 2 === 1 ? 0.3 : 1;
       const opacityText = `${blinkOpacity}`;
+      const scoreColor = isBlinking ? "#ffd54f" : "#fffbeb";
       const shouldRender =
         force ||
         displayScore !== lastRenderedScore ||
         hiScore !== lastRenderedHiScore ||
-        opacityText !== lastRenderedOpacity;
+        opacityText !== lastRenderedOpacity ||
+        scoreColor !== lastRenderedColor;
       if (!shouldRender) return;
       lastRenderedScore = displayScore;
       lastRenderedHiScore = hiScore;
       lastRenderedOpacity = opacityText;
+      lastRenderedColor = scoreColor;
       currentScoreEl.textContent = `SCORE: ${displayScore}`;
       currentScoreEl.style.opacity = opacityText;
+      currentScoreEl.style.color = scoreColor;
       hiScoreEl.textContent = `HIGH SCORE: ${hiScore}`;
     };
 
     const updateOverlayVisibility = () => {
       startOverlayEl.style.display = state === "idle" ? "flex" : "none";
       gameOverOverlayEl.style.display = state === "dead" ? "flex" : "none";
-      gameOverScoreEl.textContent = `현재 점수: ${Math.floor(score)}\nHIGH SCORE: ${hiScore}`;
+      gameOverScoreEl.textContent = `score: ${Math.floor(score)}\nHIGH SCORE: ${hiScore}`;
     };
 
     const jump = () => {
@@ -457,7 +505,7 @@ export function GgumRunnerMinigame({ onClose }) {
               // If storage is blocked (private mode, quota, etc), game still works.
             }
           }
-          msgEl.textContent = "앗 장애물에 닿았어요!";
+          msgEl.textContent = "";
           updateOverlayVisibility();
           break;
         }
@@ -539,7 +587,7 @@ export function GgumRunnerMinigame({ onClose }) {
           <div className="ggum-runner-gameover-card">
             <div className="ggum-runner-gameover-title">산책 종료</div>
             <div ref={gameOverScoreRef} className="ggum-runner-gameover-score">
-              현재 점수: 0
+              score: 0
               <br />
               HIGH SCORE: 0
             </div>
