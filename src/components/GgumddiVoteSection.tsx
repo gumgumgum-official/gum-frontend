@@ -7,11 +7,11 @@ import {
   useState,
 } from "react";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import { getSessionId } from "../lib/session.js";
+import { postVote, fetchVoteResults } from "../lib/voteApi.js";
 import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 
 type VoteId = 1 | 2 | 3;
-
-const STORAGE_KEY = "gum-ggumddi-vote-v2";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const [voteImg1, voteImg2, voteImg3] = NOTICE.voteCandidateImages;
@@ -41,62 +41,88 @@ const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
 
 /** 후보 점(dot)과 같은 단색 막대 (그라데이션 없음) */
 const BAR_FILLS = ["bg-[#FF8B33]", "bg-[#c4a882]", "bg-[#FF4A89]"] as const;
+const MY_VOTE_STORAGE_PREFIX = "gum-ggumddi-my-vote";
 
-function loadPersisted(): {
-  votes: Record<VoteId, number>;
-  myVote: VoteId | null;
-} {
+function getMyVoteStorageKey() {
+  return `${MY_VOTE_STORAGE_PREFIX}:${getSessionId()}`;
+}
+
+function loadPersistedMyVote(): VoteId | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { votes: { ...INITIAL_VOTES }, myVote: null };
-    const p = JSON.parse(raw) as {
-      votes?: Partial<Record<string, number>>;
-      myVote?: VoteId | null;
-    };
-    const v = p.votes;
-    if (
-      v &&
-      typeof v["1"] === "number" &&
-      typeof v["2"] === "number" &&
-      typeof v["3"] === "number"
-    ) {
-      return {
-        votes: { 1: v["1"], 2: v["2"], 3: v["3"] },
-        myVote:
-          p.myVote === 1 || p.myVote === 2 || p.myVote === 3 ? p.myVote : null,
-      };
+    const raw = localStorage.getItem(getMyVoteStorageKey());
+    if (raw === "1" || raw === "2" || raw === "3") {
+      return Number(raw) as VoteId;
     }
   } catch {
     /* ignore */
   }
-  return { votes: { ...INITIAL_VOTES }, myVote: null };
-}
-
-function persist(votes: Record<VoteId, number>, myVote: VoteId | null) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ votes, myVote }));
-  } catch {
-    /* ignore */
-  }
+  return null;
 }
 
 type VoteBundle = {
   votes: Record<VoteId, number>;
   myVote: VoteId | null;
+  totalVotes: number;
 };
 
 /** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 */
 export function GgumddiVoteSection({ className }: { className?: string }) {
-  const [bundle, setBundle] = useState<VoteBundle>(loadPersisted);
-  const { votes, myVote } = bundle;
+  const [bundle, setBundle] = useState<VoteBundle>({
+    votes: { ...INITIAL_VOTES },
+    myVote: loadPersistedMyVote(),
+    totalVotes: 0,
+  });
+  const { votes, myVote, totalVotes } = bundle;
   const [popupOpen, setPopupOpen] = useState(false);
   const [justVotedId, setJustVotedId] = useState<VoteId | null>(null);
+  const [isLoadingResults, setIsLoadingResults] = useState(true);
+  const [isVoting, setIsVoting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const posterWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    persist(votes, myVote);
-  }, [votes, myVote]);
+    let alive = true;
+    setIsLoadingResults(true);
+    fetchVoteResults()
+      .then((aggregate) => {
+        if (!alive) return;
+        setBundle((prev) => ({
+          votes: aggregate.votes,
+          myVote: prev.myVote,
+          totalVotes: aggregate.totalVotes,
+        }));
+        setErrorMessage("");
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setErrorMessage(
+          err instanceof Error
+            ? err.message
+            : "투표 집계를 불러오지 못했습니다.",
+        );
+      })
+      .finally(() => {
+        if (!alive) return;
+        setIsLoadingResults(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const key = getMyVoteStorageKey();
+      if (myVote === null) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, String(myVote));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [myVote]);
 
   useLayoutEffect(() => {
     if (justVotedId === null) return;
@@ -104,19 +130,35 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
     return () => window.clearTimeout(t);
   }, [justVotedId]);
 
-  const total = votes[1] + votes[2] + votes[3];
-
-  const onVote = useCallback((id: VoteId) => {
-    setBundle((s) => {
-      const nextVotes = { ...s.votes };
-      if (s.myVote !== null) {
-        nextVotes[s.myVote] = Math.max(0, nextVotes[s.myVote] - 1);
+  const onVote = useCallback(
+    async (id: VoteId) => {
+      if (isVoting) return;
+      if (myVote !== null) {
+        setErrorMessage(
+          "후보 변경/취소 기능은 준비 중입니다. 지금은 1회 투표만 가능합니다.",
+        );
+        return;
       }
-      nextVotes[id] = nextVotes[id] + 1;
-      return { votes: nextVotes, myVote: id };
-    });
-    setJustVotedId(id);
-  }, []);
+      setIsVoting(true);
+      try {
+        const response = await postVote(id);
+        setBundle({
+          votes: response.votes,
+          myVote: id,
+          totalVotes: response.totalVotes,
+        });
+        setJustVotedId(id);
+        setErrorMessage("");
+      } catch (err) {
+        setErrorMessage(
+          err instanceof Error ? err.message : "투표 등록에 실패했습니다.",
+        );
+      } finally {
+        setIsVoting(false);
+      }
+    },
+    [isVoting, myVote],
+  );
 
   useEffect(() => {
     if (!popupOpen) return;
@@ -148,10 +190,11 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const onSubPosterClick = useCallback(
     (e: MouseEvent, id: VoteId) => {
       e.stopPropagation();
+      if (isVoting) return;
       playRandomNoticePaperSound(NOTICE.paperSoundPaths);
-      onVote(id);
+      void onVote(id);
     },
-    [onVote],
+    [isVoting, myVote, onVote],
   );
 
   return (
@@ -207,11 +250,12 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
                   <button
                     type="button"
                     data-vote-id={id}
+                    disabled={isVoting}
                     className={`group/sub relative w-full max-w-full cursor-pointer overflow-hidden rounded-[10px] border-0 bg-transparent p-0 font-inherit shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-[transform,box-shadow] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:!z-20 hover:!-translate-y-1.5 hover:!scale-[1.08] hover:shadow-[0_16px_48px_rgba(0,0,0,0.4)] active:!translate-y-0 active:!scale-[0.97] active:duration-100 ${
                       popupOpen
                         ? "translate-y-0 scale-100"
                         : "translate-y-5 scale-[0.85]"
-                    } ${voted ? "outline outline-[3px] outline-[#FFD700] outline-offset-2" : ""} ${
+                    } ${isVoting ? "cursor-wait opacity-80" : ""} ${voted ? "outline outline-[3px] outline-[#FFD700] outline-offset-2" : ""} ${
                       justVotedId === id ? "animate-ggumddi-vote-pop" : ""
                     }`}
                     style={{ transitionDelay: `${tDelay}ms` }}
@@ -261,14 +305,26 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
             </div>
             <div className="shrink-0 rounded-full border border-slate-200/90 bg-slate-50 px-3.5 py-2 text-[11px] font-medium tabular-nums text-slate-600">
               총{" "}
-              <span className="text-sm font-bold text-slate-900">{total}</span>
+              <span className="text-sm font-bold text-slate-900">
+                {totalVotes}
+              </span>
               표
             </div>
           </div>
+          {isLoadingResults ? (
+            <p className="mt-4 text-[12px] font-medium text-slate-500">
+              투표 집계를 불러오는 중...
+            </p>
+          ) : null}
+          {errorMessage ? (
+            <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-900">
+              {errorMessage}
+            </p>
+          ) : null}
           <div className="mt-5 flex flex-col gap-3.5">
             {CANDIDATES.map(({ id, name, dot }, idx) => {
               const count = votes[id];
-              const pct = total > 0 ? (count / total) * 100 : 0;
+              const pct = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
               const barFill = BAR_FILLS[idx];
               const hasVotes = count > 0;
               return (

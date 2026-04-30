@@ -32,7 +32,6 @@ import * as CANNON from "cannon-es";
 import { STAGE3_CONFIG } from "../config/stages/stage3.js";
 import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import {
-  openMinigame,
   closeMinigame,
   dispatchMinigameClose,
   onMinigameClose,
@@ -317,9 +316,11 @@ export function Stage3() {
   let smoothedCameraYawAssistDemand = 0;
   /** INT_StreetLight* 월드 좌표 (근접 사운드 트리거용) */
   const streetLightWorldPositions = [];
-  /** @type {{ sphere: THREE.Sphere, anchorWorld: THREE.Vector3, hintText: string, hintVariant: "default" | "well-side" }[]} */
+  /** @type {{ sphere: THREE.Sphere, anchorWorld: THREE.Vector3, hintText: string, hintVariant: "default" | "well-side", target: ReturnType<typeof intSuffixToTarget> }[]} */
   /** INT_* 월드 바운딩 스피어 + 앵커 (근접 Click! 말풍선 표시용) */
   const intProximityTargets = [];
+  /** @type {ReturnType<typeof intSuffixToTarget> | null} */
+  let activeIntHintTarget = null;
   let wasNearStreetLight = false;
   let lastStreetLightSoundAtMs = 0;
   const clockWorldPositions = [];
@@ -368,6 +369,9 @@ export function Stage3() {
   let pendingEggDiscoverySubtitle = null;
   /** @type {(() => void) | null} */
   let unlistenGumCardsForEggSubtitle = null;
+  let isNoticeModalOpen = false;
+  let isGameMachineModalOpen = false;
+  let isTentModalOpen = false;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -668,6 +672,10 @@ export function Stage3() {
   }
 
   const handleStageKeyDown = (event) => {
+    if (hasBlockingOverlayOpen()) {
+      if (event.key === "Enter") event.preventDefault();
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       // punch 애니메이션 실행 중에는 다음 타격을 막는다 (한 번 부수고 애니 끝까지 대기)
@@ -738,6 +746,12 @@ export function Stage3() {
       "speech-bubble-stage2 speech-bubble-stage3-user speech-bubble-stage3-int-click";
     intClickHintBubbleEl.textContent = "Click!";
     intClickHintBubbleEl.setAttribute("aria-hidden", "true");
+    intClickHintBubbleEl.style.pointerEvents = "auto";
+    intClickHintBubbleEl.addEventListener(
+      "pointerdown",
+      handleIntClickHintPointerDown,
+      { capture: true },
+    );
     document.body.appendChild(intClickHintBubbleEl);
 
     /*
@@ -852,8 +866,14 @@ export function Stage3() {
     stampUiRoot = null;
     userWorryEnterBubbleEl?.remove();
     userWorryEnterBubbleEl = null;
+    intClickHintBubbleEl?.removeEventListener(
+      "pointerdown",
+      handleIntClickHintPointerDown,
+      { capture: true },
+    );
     intClickHintBubbleEl?.remove();
     intClickHintBubbleEl = null;
+    activeIntHintTarget = null;
     // hammerClickBubbleEl?.remove();
     // hammerClickBubbleEl = null;
     userWorryEnterBubblePhase = "off";
@@ -918,7 +938,25 @@ export function Stage3() {
   }
 
   function handleNoticeModalClosedForEggSubtitle() {
+    isNoticeModalOpen = false;
+    hideStage3InteractionBubbles();
     flushPendingEggDiscoverySubtitle();
+  }
+
+  function hideStage3InteractionBubbles() {
+    userWorryEnterBubbleEl?.classList.remove("is-visible");
+    intClickHintBubbleEl?.classList.remove("is-visible");
+  }
+
+  function hasBlockingOverlayOpen() {
+    return isNoticeModalOpen || isGameMachineModalOpen || isTentModalOpen;
+  }
+
+  function clearStage3MovementInputs() {
+    const keys = keyboard.keys;
+    for (const k of Object.keys(keys)) {
+      keys[k] = false;
+    }
   }
 
   function runStage3EntrySubtitlesAndIntro() {
@@ -1177,6 +1215,7 @@ export function Stage3() {
         anchorWorld,
         hintText: intTarget === "portal" ? "통과!" : "Click!",
         hintVariant: isWell ? "well-side" : "default",
+        target: intTarget,
       });
     });
 
@@ -1195,6 +1234,8 @@ export function Stage3() {
 
     if (gameMachineRef) {
       unlistenMinigameClose = onMinigameClose(() => {
+        isGameMachineModalOpen = false;
+        hideStage3InteractionBubbles();
         closeMinigame({
           camera: cameraRef,
           orbitControls: debugControls?.getOrbitControls?.() ?? null,
@@ -1473,8 +1514,19 @@ export function Stage3() {
 
   /** 게시판 모달 표시 (React NoticeModalBoard에 커스텀 이벤트로 전달) */
   function showNoticeModal() {
+    isNoticeModalOpen = true;
+    clearStage3MovementInputs();
+    hideStage3InteractionBubbles();
     playRandomNoticePaperSound(config.notice?.paperSoundPaths);
     window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
+  }
+
+  /** 게임기 클릭 시 기본 모달 표시 (React App에 커스텀 이벤트로 전달) */
+  function showGameMachineModal() {
+    isGameMachineModalOpen = true;
+    clearStage3MovementInputs();
+    hideStage3InteractionBubbles();
+    window.dispatchEvent(new CustomEvent("gum:showGameMachineModal"));
   }
 
   function playGameMachineClickSound() {
@@ -1502,32 +1554,19 @@ export function Stage3() {
     }
   }
 
-  /** island INT_* 클릭 핸들러 */
-  function handlePointerDown(event) {
-    if (!cameraRef || !canvasRef || !sceneRef) return;
-    const target = getPointerHitTarget(event.clientX, event.clientY);
-    if (!target) {
-      if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
-        spawnIceCreamFromCart();
-      }
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
+  function runInteractionForTarget(target) {
     if (target === "gumtoongji") {
       console.log(
         "[Gumtoongji] 클릭 → 애니메이션 재생, 액션 수:",
         gumtoongjiActions.length,
       );
       playGumtoongjiAnimation();
-      return;
+      return true;
     }
 
     if (target === "portal") {
       tryEnterPortalToStage6();
-      return;
+      return true;
     }
 
     /** @type {{ stampSubtitle: string | null } | null} */
@@ -1559,41 +1598,64 @@ export function Stage3() {
       if (eggTap?.stampSubtitle) {
         dispatchSubtitleLine(eggTap.stampSubtitle);
       }
-      return;
+      return true;
     }
     if (target === "notice") {
       showNoticeModal();
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
       }
-      return;
+      return true;
     }
     if (target === "gameMachine") {
       playGameMachineClickSound();
-      openMinigame({
-        camera: cameraRef,
-        gameMachineRef,
-        orbitControls: debugControls?.getOrbitControls?.() ?? null,
-      });
+      showGameMachineModal();
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
       }
-      return;
+      return true;
     }
     // INT_tent → 껌 카드(타로) 모달 (효과음은 openGumCardsModal 내부)
     if (target === "tent") {
+      isTentModalOpen = true;
+      clearStage3MovementInputs();
+      hideStage3InteractionBubbles();
       openGumCardsModal();
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
       }
-      return;
+      return true;
     }
     if (target === "well") {
       playRandomWellClickSound();
       window.dispatchEvent(new CustomEvent("gum:wellClick"));
+      return true;
+    }
+    if (target === "clock") return true;
+    return false;
+  }
+
+  /** island INT_* 클릭 핸들러 */
+  function handlePointerDown(event) {
+    if (!cameraRef || !canvasRef || !sceneRef) return;
+    const target = getPointerHitTarget(event.clientX, event.clientY);
+    if (!target) {
+      if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
+        spawnIceCreamFromCart();
+      }
       return;
     }
-    if (target === "clock") return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    runInteractionForTarget(target);
+  }
+
+  function handleIntClickHintPointerDown(event) {
+    if (!activeIntHintTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    runInteractionForTarget(activeIntHintTarget);
   }
 
   function updateStreetLightProximitySound() {
@@ -1652,8 +1714,14 @@ export function Stage3() {
 
   function updateIntClickHintBubble() {
     if (!intClickHintBubbleEl || !cameraRef || !canvasRef) return;
+    if (hasBlockingOverlayOpen()) {
+      activeIntHintTarget = null;
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
     const charPos = character?.getPosition?.();
     if (!charPos || intProximityTargets.length === 0) {
+      activeIntHintTarget = null;
       intClickHintBubbleEl.classList.remove("is-visible");
       return;
     }
@@ -1672,9 +1740,11 @@ export function Stage3() {
       nearestDistSq = distSq;
     }
     if (!nearest) {
+      activeIntHintTarget = null;
       intClickHintBubbleEl.classList.remove("is-visible");
       return;
     }
+    activeIntHintTarget = nearest.target ?? null;
     _intHintWorld.copy(nearest.anchorWorld);
     cameraRef.updateMatrixWorld(true);
     _intHintWorld.project(cameraRef);
@@ -3273,6 +3343,8 @@ export function Stage3() {
         handleNoticeModalClosedForEggSubtitle,
       );
       unlistenGumCardsForEggSubtitle = onGumCardsModalClose(() => {
+        isTentModalOpen = false;
+        hideStage3InteractionBubbles();
         flushPendingEggDiscoverySubtitle();
       });
 
@@ -3468,6 +3540,9 @@ export function Stage3() {
         }
       }
       if (character) {
+        if (hasBlockingOverlayOpen()) {
+          clearStage3MovementInputs();
+        }
         character.update(delta, this.camera, {
           skipCameraFollow: cameraIntro.active || !cameraIntro.completed,
           cameraYawAssistRad,
@@ -3578,6 +3653,10 @@ export function Stage3() {
             gumFollowers?.getPrimaryFollowerBubbleAnchorWorld?.(_projWorry),
           );
         if (userWorryEnterBubbleEl) {
+          if (hasBlockingOverlayOpen()) {
+            userWorryEnterBubbleEl.classList.remove("is-visible");
+            return;
+          }
           if (nearLetter && gumBubbleAnchorOk) {
             if (userWorryEnterBubblePhase === "off") {
               userWorryEnterBubblePhase = "show";
@@ -3620,6 +3699,9 @@ export function Stage3() {
       stopStage3IntroAudio();
       gumCancelled = true;
       pendingEggDiscoverySubtitle = null;
+      isNoticeModalOpen = false;
+      isGameMachineModalOpen = false;
+      isTentModalOpen = false;
       if (stage3EntryStampRevealTimerId != null) {
         window.clearTimeout(stage3EntryStampRevealTimerId);
         stage3EntryStampRevealTimerId = null;

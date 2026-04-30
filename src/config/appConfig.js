@@ -10,7 +10,7 @@
 /** @type {AppConfig} */
 export const APP_CONFIG = {
   // 초기 시작 스테이지
-  initialStage: 3,
+  initialStage: 2,
   // 렌더러 설정 (performanceMode: true 시 antialias off, pixelRatio 상한 1.5)
   renderer: {
     antialias: true,

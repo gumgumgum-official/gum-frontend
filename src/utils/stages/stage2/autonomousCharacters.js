@@ -222,9 +222,17 @@ export function createAutonomousCharacters({
                   staticColliderBoxes,
                 )
               : false;
+          const blockedByOtherCharacter = agents.some((other) => {
+            if (other === agent) return false;
+            const dx = resolvedX - other.model.position.x;
+            const dz = resolvedZ - other.model.position.z;
+            const minDistance = collisionRadius * 2;
+            return dx * dx + dz * dz < minDistance * minDistance;
+          });
           const canMoveAfterResolve =
             canMove &&
             !blockedByObstacle &&
+            !blockedByOtherCharacter &&
             (typeof isPositionValid === "function"
               ? isPositionValid(resolvedX, resolvedZ)
               : true);
