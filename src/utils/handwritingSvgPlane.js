@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import { fetchSVG } from "../lib/svg-loader.js";
 
-const MAX_TEXTURE_PIXEL = 2048;
+const MAX_TEXTURE_PIXEL = 512;
 
 /**
  * @param {string} svgText
