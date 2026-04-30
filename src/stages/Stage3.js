@@ -382,6 +382,9 @@ export function Stage3() {
   let isNoticeModalOpen = false;
   let isGameMachineModalOpen = false;
   let isTentModalOpen = false;
+  let isStampPosterZoomOpen = false;
+  /** @type {HTMLDivElement | null} */
+  let stampPosterZoomOverlayEl = null;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -682,6 +685,15 @@ export function Stage3() {
   }
 
   const handleStageKeyDown = (event) => {
+    if (event.key === "m" || event.key === "M" || event.code === "KeyM") {
+      event.preventDefault();
+      if (isStampPosterZoomOpen) {
+        closeStampPosterZoom();
+      } else if (canOpenStampPosterZoom()) {
+        openStampPosterZoom();
+      }
+      return;
+    }
     if (
       hasBlockingOverlayOpen() ||
       stage3StampIntroAnimating ||
@@ -738,7 +750,7 @@ export function Stage3() {
     root.innerHTML = `
       <div class="stage3-stamp-panel stage3-stamp-panel--hidden" aria-label="이스터에그 진행">
         <div class="stage3-stamp-poster-wrap">
-          <img class="stage3-stamp-poster" src="${STAMP_POSTER_IMAGE_PATH}" alt="GGUM STAMP TOUR 포스터" />
+          <img class="stage3-stamp-poster" src="${STAMP_POSTER_IMAGE_PATH}" alt="GGUM STAMP TOUR 포스터" role="button" tabindex="0" />
           <span class="stage3-stamp-mark" data-step-key="gumtoongji" aria-hidden="true"></span>
           <span class="stage3-stamp-mark" data-step-key="worryBreak" aria-hidden="true"></span>
           <span class="stage3-stamp-mark" data-step-key="clock" aria-hidden="true"></span>
@@ -748,9 +760,40 @@ export function Stage3() {
           <span class="stage3-stamp-mark" data-step-key="icecream" aria-hidden="true"></span>
         </div>
       </div>
+      <div class="stage3-stamp-zoom-overlay stage3-stamp-zoom-overlay--hidden" aria-hidden="true">
+        <div class="stage3-stamp-zoom-content" role="dialog" aria-modal="true" aria-label="스탬프 포스터 확대 보기">
+          <button class="stage3-stamp-zoom-close" type="button" aria-label="닫기">×</button>
+          <img class="stage3-stamp-zoom-image" src="${STAMP_POSTER_IMAGE_PATH}" alt="GGUM STAMP TOUR 포스터 확대" />
+        </div>
+      </div>
     `;
     document.body.appendChild(root);
     stampUiRoot = root;
+    stampPosterZoomOverlayEl = root.querySelector(".stage3-stamp-zoom-overlay");
+    const posterEl = root.querySelector(".stage3-stamp-poster");
+    const closeBtnEl = root.querySelector(".stage3-stamp-zoom-close");
+    posterEl?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (canOpenStampPosterZoom()) openStampPosterZoom();
+    });
+    posterEl?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (canOpenStampPosterZoom()) openStampPosterZoom();
+    });
+    closeBtnEl?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeStampPosterZoom();
+    });
+    stampPosterZoomOverlayEl?.addEventListener("pointerdown", (event) => {
+      if (event.target !== stampPosterZoomOverlayEl) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeStampPosterZoom();
+    });
 
     userWorryEnterBubbleEl = document.createElement("div");
     userWorryEnterBubbleEl.className =
@@ -883,6 +926,8 @@ export function Stage3() {
     portalTransitionInProgress = false;
     stampUiRoot?.remove();
     stampUiRoot = null;
+    stampPosterZoomOverlayEl = null;
+    isStampPosterZoomOpen = false;
     userWorryEnterBubbleEl?.remove();
     userWorryEnterBubbleEl = null;
     intClickHintBubbleEl?.removeEventListener(
@@ -981,6 +1026,35 @@ export function Stage3() {
     setStampPanelHidden(hasBlockingOverlayOpen());
   }
 
+  function canOpenStampPosterZoom() {
+    return (
+      stampPanelRevealReady &&
+      !stage3StampIntroAnimating &&
+      !stage3InteractionLocked &&
+      !isNoticeModalOpen &&
+      !isGameMachineModalOpen &&
+      !isTentModalOpen
+    );
+  }
+
+  function openStampPosterZoom() {
+    if (!stampPosterZoomOverlayEl) return;
+    isStampPosterZoomOpen = true;
+    stampPosterZoomOverlayEl.classList.remove(
+      "stage3-stamp-zoom-overlay--hidden",
+    );
+    stampPosterZoomOverlayEl.setAttribute("aria-hidden", "false");
+    syncStampPanelVisibilityByOverlay();
+  }
+
+  function closeStampPosterZoom() {
+    if (!stampPosterZoomOverlayEl) return;
+    isStampPosterZoomOpen = false;
+    stampPosterZoomOverlayEl.classList.add("stage3-stamp-zoom-overlay--hidden");
+    stampPosterZoomOverlayEl.setAttribute("aria-hidden", "true");
+    syncStampPanelVisibilityByOverlay();
+  }
+
   function clearStampIntroTimers() {
     if (stage3StampIntroHoldTimerId != null) {
       window.clearTimeout(stage3StampIntroHoldTimerId);
@@ -1070,7 +1144,12 @@ export function Stage3() {
   }
 
   function hasBlockingOverlayOpen() {
-    return isNoticeModalOpen || isGameMachineModalOpen || isTentModalOpen;
+    return (
+      isNoticeModalOpen ||
+      isGameMachineModalOpen ||
+      isTentModalOpen ||
+      isStampPosterZoomOpen
+    );
   }
 
   function clearStage3MovementInputs() {
@@ -1425,6 +1504,14 @@ export function Stage3() {
       _pointerMoveRafId = 0;
       const e = _lastPointerEvent;
       if (!e || !canvasRef) return;
+      if (
+        stage3InteractionLocked ||
+        stage3StampIntroAnimating ||
+        hasBlockingOverlayOpen()
+      ) {
+        canvasRef.style.cursor = "default";
+        return;
+      }
       const target = getPointerHitTarget(e.clientX, e.clientY);
       canvasRef.style.cursor = target ? "pointer" : "default";
     });
@@ -3417,6 +3504,7 @@ export function Stage3() {
       stampPanelRevealReady = false;
       stage3StampIntroAnimating = false;
       stage3InteractionLocked = true;
+      isStampPosterZoomOpen = false;
       worryCompletionCelebrationDone = false;
       flowerMagicPlayed = false;
       stage3IntroFlowStarted = false;
@@ -3856,6 +3944,7 @@ export function Stage3() {
       isNoticeModalOpen = false;
       isGameMachineModalOpen = false;
       isTentModalOpen = false;
+      isStampPosterZoomOpen = false;
       if (stage3EntryStampRevealTimerId != null) {
         window.clearTimeout(stage3EntryStampRevealTimerId);
         stage3EntryStampRevealTimerId = null;

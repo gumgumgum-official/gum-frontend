@@ -8,6 +8,37 @@ import {
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
 
+function debugLogStage3Warmup(
+  runId,
+  hypothesisId,
+  location,
+  message,
+  data = {},
+) {
+  // #region agent log
+  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "2e4bd2",
+    },
+    body: JSON.stringify({
+      sessionId: "2e4bd2",
+      runId,
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
+function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
 /** @returns {string[]} */
 function getStage3PrewarmAbsoluteUrls() {
   /** @type {string[]} */
@@ -54,11 +85,44 @@ export function warmStage3GltfTemplateUrls() {
  */
 export async function waitForStage3GltfTemplatesReady() {
   const urls = getStage3PrewarmAbsoluteUrls();
+  const runId = `stage3-warmup-${Date.now()}`;
+  const t0 = nowMs();
+  debugLogStage3Warmup(
+    runId,
+    "H1",
+    "stage3GltfWarmup.js:waitForStage3GltfTemplatesReady:start",
+    "Stage3 warmup wait started",
+    { urlCount: urls.length },
+  );
   await Promise.all(
-    urls.map((u) =>
-      loadGltfTemplateCached(u).catch(() => {
+    urls.map(async (u) => {
+      const itemT0 = nowMs();
+      try {
+        await loadGltfTemplateCached(u);
+        debugLogStage3Warmup(
+          runId,
+          "H2",
+          "stage3GltfWarmup.js:waitForStage3GltfTemplatesReady:itemSuccess",
+          "Stage3 warmup URL resolved",
+          { url: u, elapsedMs: Math.round(nowMs() - itemT0) },
+        );
+      } catch {
+        debugLogStage3Warmup(
+          runId,
+          "H3",
+          "stage3GltfWarmup.js:waitForStage3GltfTemplatesReady:itemFail",
+          "Stage3 warmup URL failed",
+          { url: u, elapsedMs: Math.round(nowMs() - itemT0) },
+        );
         /* 네비게이션은 진행; Stage3에서 재시도 */
-      }),
-    ),
+      }
+    }),
+  );
+  debugLogStage3Warmup(
+    runId,
+    "H1",
+    "stage3GltfWarmup.js:waitForStage3GltfTemplatesReady:done",
+    "Stage3 warmup wait finished",
+    { elapsedMs: Math.round(nowMs() - t0), urlCount: urls.length },
   );
 }
