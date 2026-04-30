@@ -1031,6 +1031,7 @@ export function Stage3() {
       stampPanelRevealReady &&
       !stage3StampIntroAnimating &&
       !stage3InteractionLocked &&
+      !isStampPosterZoomOpen &&
       !isNoticeModalOpen &&
       !isGameMachineModalOpen &&
       !isTentModalOpen
