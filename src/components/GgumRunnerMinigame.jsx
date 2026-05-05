@@ -40,6 +40,7 @@ export function GgumRunnerMinigame({ onClose }) {
   const startOverlayRef = useRef(null);
   const startButtonRef = useRef(null);
   const jumpActionRef = useRef(() => {});
+  const goalListScrollRef = useRef(null);
 
   const [fatalScore, setFatalScore] = useState(null);
   const [postGameStep, setPostGameStep] = useState("gameover");
@@ -49,6 +50,11 @@ export function GgumRunnerMinigame({ onClose }) {
   const [selectedSaveSlotIndex, setSelectedSaveSlotIndex] = useState(null);
   const [leaderboardRows, setLeaderboardRows] = useState([]);
   const [myRank, setMyRank] = useState(null);
+  const [goalScrollbar, setGoalScrollbar] = useState({
+    thumbHeight: 24,
+    thumbTop: 0,
+    visible: false,
+  });
 
   const selectedAvatarKey =
     selectedSaveSlotIndex != null
@@ -109,6 +115,42 @@ export function GgumRunnerMinigame({ onClose }) {
     }
     setPostGameStep("leaderboard");
   };
+
+  useEffect(() => {
+    if (fatalScore === null || postGameStep !== "leaderboard") return undefined;
+    const el = goalListScrollRef.current;
+    if (!el) return undefined;
+
+    const updateGoalScrollbar = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const hasOverflow = scrollHeight > clientHeight + 1;
+      if (!hasOverflow) {
+        setGoalScrollbar((prev) =>
+          prev.visible || prev.thumbTop !== 0
+            ? { thumbHeight: 24, thumbTop: 0, visible: false }
+            : prev,
+        );
+        return;
+      }
+
+      const thumbHeight = Math.max(
+        24,
+        (clientHeight / scrollHeight) * clientHeight,
+      );
+      const maxThumbTop = clientHeight - thumbHeight;
+      const maxScrollTop = Math.max(1, scrollHeight - clientHeight);
+      const thumbTop = (scrollTop / maxScrollTop) * maxThumbTop;
+      setGoalScrollbar({ thumbHeight, thumbTop, visible: true });
+    };
+
+    updateGoalScrollbar();
+    el.addEventListener("scroll", updateGoalScrollbar, { passive: true });
+    window.addEventListener("resize", updateGoalScrollbar);
+    return () => {
+      el.removeEventListener("scroll", updateGoalScrollbar);
+      window.removeEventListener("resize", updateGoalScrollbar);
+    };
+  }, [fatalScore, postGameStep, leaderboardRows]);
 
   useEffect(() => {
     const readHiScore = () => {
@@ -802,25 +844,46 @@ export function GgumRunnerMinigame({ onClose }) {
                   setMyRank(null);
                 }}
               />
-              <div className="ggum-runner-goal-list-scroll">
-                {leaderboardRows.map((row, i) => (
-                  <div key={`${row.at}-${i}`} className="ggum-runner-goal-row">
-                    <div className="ggum-runner-goal-row-thumb-wrap">
-                      <img
-                        src={avatarSrc(row.avatarKey)}
-                        alt=""
-                        className="ggum-runner-goal-row-thumb"
-                      />
+              <div className="ggum-runner-goal-list-wrap">
+                <div
+                  ref={goalListScrollRef}
+                  className="ggum-runner-goal-list-scroll"
+                >
+                  {leaderboardRows.map((row, i) => (
+                    <div
+                      key={`${row.at}-${i}`}
+                      className="ggum-runner-goal-row"
+                    >
+                      <div className="ggum-runner-goal-row-thumb-wrap">
+                        <img
+                          src={avatarSrc(row.avatarKey)}
+                          alt=""
+                          className="ggum-runner-goal-row-thumb"
+                        />
+                      </div>
+                      <span className="ggum-runner-goal-row-rank">{i + 1}</span>
+                      <span className="ggum-runner-goal-row-name">
+                        {row.name}
+                      </span>
+                      <span className="ggum-runner-goal-row-score">
+                        {row.score}
+                      </span>
                     </div>
-                    <span className="ggum-runner-goal-row-rank">{i + 1}</span>
-                    <span className="ggum-runner-goal-row-name">
-                      {row.name}
-                    </span>
-                    <span className="ggum-runner-goal-row-score">
-                      {row.score}
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div
+                  className="ggum-runner-goal-custom-scrollbar"
+                  aria-hidden="true"
+                >
+                  <span
+                    className="ggum-runner-goal-custom-scrollbar-thumb"
+                    style={{
+                      opacity: goalScrollbar.visible ? 1 : 0,
+                      height: `${goalScrollbar.thumbHeight}px`,
+                      transform: `translateY(${goalScrollbar.thumbTop}px)`,
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>

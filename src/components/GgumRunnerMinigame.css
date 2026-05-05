@@ -179,12 +179,13 @@
   overflow-y: auto;
   background: rgba(24, 35, 19, 0.42);
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: auto;
-  scrollbar-color: #517545 rgba(12, 20, 8, 0.6);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .ggum-runner-postgame-overlay::-webkit-scrollbar {
-  width: 18px;
+  width: 0;
+  height: 0;
 }
 
 .ggum-runner-postgame-overlay::-webkit-scrollbar-button {
@@ -405,12 +406,12 @@
 /* goal_list.png 1800×2000 — 트로피 우측·헤더 상단 (점수 숫자 열과 정렬감 유지) */
 .ggum-runner-goal-name-above-trophy {
   position: absolute;
-  left: 34%;
-  top: 12%;
+  left: 44%;
+  top: 44px;
   transform: translateX(-50%);
   max-width: 34%;
   box-sizing: border-box;
-  font-size: clamp(7px, 1.85vw, 11px);
+  font-size: clamp(10px, 2.6vw, 15px);
   line-height: 1.35;
   color: #1a1a1a;
   text-align: center;
@@ -481,72 +482,55 @@
   height: 7%;
 }
 
-.ggum-runner-goal-list-scroll {
+.ggum-runner-goal-list-wrap {
   position: absolute;
   left: 9%;
   right: 9%;
   top: 35%;
   bottom: 7%;
+}
+
+.ggum-runner-goal-list-scroll {
+  width: calc(100% - 14px);
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 2px 6px 4px 4px;
+  padding: 2px 2px 4px 4px;
   -webkit-overflow-scrolling: touch;
-  /* Firefox: 캡슐 트랙 + 회색 썸 (OS 기본 화살표 없음) */
-  scrollbar-width: thin;
-  scrollbar-color: #8b9199 #ececec;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-/* 골 리스트 전용 커스텀 스크롤 — 화살표 없음, 위·아래 반원 마감 */
 .ggum-runner-goal-list-scroll::-webkit-scrollbar {
-  width: 10px;
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button,
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button:single-button,
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button:start:decrement,
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button:end:increment {
-  display: none;
   width: 0;
-  min-width: 0;
   height: 0;
-  min-height: 0;
 }
 
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-track {
-  margin: 6px 0;
-  background: linear-gradient(180deg, #f6f6f6 0%, #ebebeb 100%);
+.ggum-runner-goal-custom-scrollbar {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  bottom: 4px;
+  width: 10px;
+  background: #ffffff;
   border-radius: 999px;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.65),
-    inset 0 1px 2px rgba(0, 0, 0, 0.07);
+  box-shadow: inset 0 0 0 1px #e6e9ee;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb {
+.ggum-runner-goal-custom-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 6px;
   border-radius: 999px;
-  min-height: 32px;
-  background: linear-gradient(180deg, #b4b8bf 0%, #8e939c 100%);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.12);
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #a0a5ae 0%, #767b86 100%);
-  border-color: transparent;
-  background-clip: padding-box;
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb:active {
-  background: linear-gradient(180deg, #8f949e 0%, #656a74 100%);
+  background: linear-gradient(180deg, #dde2e8 0%, #c9d0d9 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: opacity 120ms ease;
 }
 
 .ggum-runner-goal-row {
