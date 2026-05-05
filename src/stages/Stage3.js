@@ -786,12 +786,15 @@ export function Stage3() {
       event.stopPropagation();
       if (canOpenStampPosterZoom()) openStampPosterZoom();
     });
-    posterEl?.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (canOpenStampPosterZoom()) openStampPosterZoom();
-    });
+    posterEl?.addEventListener(
+      "keydown",
+      (/** @type {KeyboardEvent} */ event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (canOpenStampPosterZoom()) openStampPosterZoom();
+      },
+    );
     closeBtnEl?.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       event.stopPropagation();

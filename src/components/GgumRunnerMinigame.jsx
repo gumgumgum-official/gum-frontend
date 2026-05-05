@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./GgumRunnerMinigame.css";
+import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
 
 const W = 700;
 const H = 340;
@@ -22,6 +23,13 @@ const NEW_HIGH_BLINK_PHASES = 6;
 const TARGET_FPS = 60;
 const FRAME_MS = 1000 / TARGET_FPS;
 
+/** 왼쪽부터 save_modal.png 카드와 1:1 (비트맵에 그려진 그림만 보이고, 여기서는 PNG를 로드하지 않음) */
+const SAVE_AVATAR_SLOTS = ["clover", "flower", "cake", "flower"];
+
+function avatarSrc(key) {
+  return `/assets/minigame/image_card/${key}.png`;
+}
+
 export function GgumRunnerMinigame({ onClose }) {
   const canvasRef = useRef(null);
   const lastTouchAtRef = useRef(0);
@@ -31,10 +39,57 @@ export function GgumRunnerMinigame({ onClose }) {
   const msgRef = useRef(null);
   const startOverlayRef = useRef(null);
   const startButtonRef = useRef(null);
-  const gameOverOverlayRef = useRef(null);
-  const gameOverScoreRef = useRef(null);
-  const gameOverButtonRef = useRef(null);
   const jumpActionRef = useRef(() => {});
+
+  const [fatalScore, setFatalScore] = useState(null);
+  const [postGameStep, setPostGameStep] = useState("form");
+  const [saveName, setSaveName] = useState("");
+  /** `goal_list`에서만 `avatarSrc()`로 로드; 저장 화면은 슬롯 인덱스만 사용 */
+  const [selectedSaveSlotIndex, setSelectedSaveSlotIndex] = useState(null);
+  const [leaderboardRows, setLeaderboardRows] = useState([]);
+
+  const selectedAvatarKey =
+    selectedSaveSlotIndex != null
+      ? SAVE_AVATAR_SLOTS[selectedSaveSlotIndex]
+      : null;
+
+  const deathBridgeRef = useRef({
+    onDead: (_score) => {},
+    onRestartFromDeath: () => {},
+  });
+  deathBridgeRef.current = {
+    onDead: (score) => {
+      setFatalScore(score);
+      setPostGameStep("form");
+    },
+    onRestartFromDeath: () => {
+      setFatalScore(null);
+      setPostGameStep("form");
+      setSaveName("");
+      setSelectedSaveSlotIndex(null);
+      setLeaderboardRows([]);
+    },
+  };
+
+  const handleSaveEnter = () => {
+    const name = saveName.trim();
+    if (!name) {
+      window.alert("이름을 입력해 주세요.");
+      return;
+    }
+    if (selectedAvatarKey == null) {
+      window.alert("이미지를 하나 선택해 주세요.");
+      return;
+    }
+    if (fatalScore == null) return;
+    const rows = appendLeaderboardEntry({
+      name,
+      avatarKey: selectedAvatarKey,
+      score: fatalScore,
+    });
+    setLeaderboardRows(rows);
+    setPostGameStep("leaderboard");
+  };
 
   useEffect(() => {
     const readHiScore = () => {
@@ -53,19 +108,13 @@ export function GgumRunnerMinigame({ onClose }) {
     const msgEl = msgRef.current;
     const startOverlayEl = startOverlayRef.current;
     const startButtonEl = startButtonRef.current;
-    const gameOverOverlayEl = gameOverOverlayRef.current;
-    const gameOverScoreEl = gameOverScoreRef.current;
-    const gameOverButtonEl = gameOverButtonRef.current;
     if (
       !canvas ||
       !currentScoreEl ||
       !hiScoreEl ||
       !msgEl ||
       !startOverlayEl ||
-      !startButtonEl ||
-      !gameOverOverlayEl ||
-      !gameOverScoreEl ||
-      !gameOverButtonEl
+      !startButtonEl
     ) {
       return undefined;
     }
@@ -95,6 +144,7 @@ export function GgumRunnerMinigame({ onClose }) {
     let lastRenderedOpacity = "";
     let lastRenderedColor = "";
     let lastTimestamp = 0;
+    let deathReported = false;
 
     const player = {
       x: 80,
@@ -110,7 +160,6 @@ export function GgumRunnerMinigame({ onClose }) {
     let isSpriteLoadFailed = false;
     sprite.onerror = () => {
       isSpriteLoadFailed = true;
-      // Keep the game playable even when sprite asset fails.
       console.warn(
         "[GgumRunner] Failed to load sprite, using fallback player.",
       );
@@ -135,13 +184,11 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawPixelTree = (x, y) => {
-      // trunk
       ctx.fillStyle = "#7b4f2e";
       ctx.fillRect(x - 4, y + 20, 8, 30);
       ctx.fillStyle = "#5f3a20";
       ctx.fillRect(x - 2, y + 20, 4, 30);
 
-      // rounder canopy silhouette
       ctx.fillStyle = "#2e7d32";
       ctx.fillRect(x - 18, y + 14, 36, 10);
       ctx.fillRect(x - 22, y + 6, 44, 10);
@@ -167,7 +214,6 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawFallbackBg = () => {
-      // Pixel-art sky gradient: draw stepped color bands (not smooth blend).
       const skyBands = ["#5bbcd4", "#68c4dd", "#82d7ef", "#9ee8ff"];
       const bandHeight = Math.ceil(GROUND_Y / skyBands.length);
       skyBands.forEach((color, index) => {
@@ -241,8 +287,6 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawBg = () => {
-      // Keep a deterministic pixel-art background so white band artifacts
-      // from source images never show up in the sky area.
       drawFallbackBg();
     };
 
@@ -284,7 +328,6 @@ export function GgumRunnerMinigame({ onClose }) {
 
     const drawCactus = (x, y, tall = false) => {
       const extraHeight = tall ? 10 : 0;
-      // Use a cooler green so cactus is distinguishable from tree foliage.
       ctx.fillStyle = "#1f9aa8";
       ctx.fillRect(x + 9, y - extraHeight, 6, 32 + extraHeight);
       ctx.fillRect(x, y + 10 - extraHeight, 10, 5);
@@ -296,20 +339,17 @@ export function GgumRunnerMinigame({ onClose }) {
     };
 
     const drawHammer = (x, y) => {
-      // Actually rotate the hammer so it reads as diagonal.
       ctx.save();
       ctx.translate(x + 14, y + 16);
       ctx.rotate(Math.PI / 4.2);
       ctx.translate(-14, -16);
 
-      // hammer head
       ctx.fillStyle = "#9ca3af";
       ctx.fillRect(2, 2, 22, 8);
       ctx.fillStyle = "#6b7280";
       ctx.fillRect(18, 0, 8, 12);
       ctx.fillRect(3, 8, 22, 2);
 
-      // handle
       ctx.fillStyle = "#b9773a";
       ctx.fillRect(10, 10, 6, 22);
       ctx.fillStyle = "#8b5a2b";
@@ -402,12 +442,14 @@ export function GgumRunnerMinigame({ onClose }) {
 
     const updateOverlayVisibility = () => {
       startOverlayEl.style.display = state === "idle" ? "flex" : "none";
-      gameOverOverlayEl.style.display = state === "dead" ? "flex" : "none";
-      gameOverScoreEl.textContent = `score: ${Math.floor(score)}`;
     };
 
     const jump = () => {
       if (state === "idle" || state === "dead") {
+        if (state === "dead") {
+          deathBridgeRef.current.onRestartFromDeath();
+          deathReported = false;
+        }
         state = "running";
         score = 0;
         speed = BASE_SPEED;
@@ -442,12 +484,13 @@ export function GgumRunnerMinigame({ onClose }) {
       jump();
     };
     const onCanvasClick = () => {
+      if (state === "dead") return;
       if (Date.now() - lastTouchAtRef.current < 450) return;
       jump();
     };
     const onStartButtonClick = () => jump();
-    const onGameOverButtonClick = () => jump();
     const onTouchStart = (e) => {
+      if (state === "dead") return;
       e.preventDefault();
       lastTouchAtRef.current = Date.now();
       jump();
@@ -546,6 +589,10 @@ export function GgumRunnerMinigame({ onClose }) {
             }
           }
           msgEl.textContent = "";
+          if (!deathReported) {
+            deathReported = true;
+            deathBridgeRef.current.onDead(displayScore);
+          }
           updateOverlayVisibility();
           break;
         }
@@ -576,7 +623,6 @@ export function GgumRunnerMinigame({ onClose }) {
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
     canvas.addEventListener("touchend", onTouchEnd, { passive: false });
     startButtonEl.addEventListener("click", onStartButtonClick);
-    gameOverButtonEl.addEventListener("click", onGameOverButtonClick);
     loop(window.performance.now());
 
     return () => {
@@ -586,7 +632,6 @@ export function GgumRunnerMinigame({ onClose }) {
       canvas.removeEventListener("touchstart", onTouchStart);
       canvas.removeEventListener("touchend", onTouchEnd);
       startButtonEl.removeEventListener("click", onStartButtonClick);
-      gameOverButtonEl.removeEventListener("click", onGameOverButtonClick);
       jumpActionRef.current = () => {};
     };
   }, []);
@@ -614,35 +659,147 @@ export function GgumRunnerMinigame({ onClose }) {
             <span ref={msgRef} className="ggum-runner-message" />
           </div>
           <div ref={startOverlayRef} className="ggum-runner-start-overlay">
-            <button
-              ref={startButtonRef}
-              type="button"
-              className="ggum-runner-start-button"
-            >
-              산책 시작하기
-            </button>
-          </div>
-          <div
-            ref={gameOverOverlayRef}
-            className="ggum-runner-gameover-overlay"
-          >
-            <div className="ggum-runner-gameover-card">
-              <div className="ggum-runner-gameover-title">산책 종료</div>
-              <div
-                ref={gameOverScoreRef}
-                className="ggum-runner-gameover-score"
-              >
-                score: 0
-              </div>
+            <div className="ggum-runner-start-modal">
+              <img
+                src="/assets/minigame/start_modal_button.png"
+                alt=""
+                className="ggum-runner-start-modal-art"
+              />
               <button
-                ref={gameOverButtonRef}
                 type="button"
-                className="ggum-runner-gameover-button"
-              >
-                다시 시작
-              </button>
+                className="ggum-runner-start-modal-close"
+                aria-label="설명 창 닫기"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose?.();
+                }}
+              />
+              <button
+                ref={startButtonRef}
+                type="button"
+                className="ggum-runner-start-modal-yes"
+                aria-label="게임 시작"
+              />
             </div>
           </div>
+          {fatalScore !== null && postGameStep === "form" && (
+            <div className="ggum-runner-postgame-overlay">
+              <div className="ggum-runner-postgame-stack">
+                <div className="ggum-runner-sheet ggum-runner-gameover-sheet">
+                  <img
+                    src="/assets/minigame/gameover_modal.png"
+                    alt=""
+                    className="ggum-runner-sheet-art"
+                  />
+                  <span className="ggum-runner-gameover-score-digits">
+                    {fatalScore}
+                  </span>
+                  <button
+                    type="button"
+                    className="ggum-runner-gameover-hit ggum-runner-gameover-yes"
+                    aria-label="다시 시작"
+                    onClick={() => jumpActionRef.current()}
+                  />
+                  <button
+                    type="button"
+                    className="ggum-runner-gameover-hit ggum-runner-gameover-no"
+                    aria-label="미니게임 닫기"
+                    onClick={() => onClose?.()}
+                  />
+                  <button
+                    type="button"
+                    className="ggum-runner-gameover-hit ggum-runner-gameover-header-x"
+                    aria-label="닫기"
+                    onClick={() => onClose?.()}
+                  />
+                </div>
+                <div className="ggum-runner-sheet ggum-runner-save-sheet">
+                  <img
+                    src="/assets/minigame/save_modal.png"
+                    alt=""
+                    className="ggum-runner-sheet-art"
+                  />
+                  <input
+                    type="text"
+                    className="ggum-runner-save-name-input"
+                    value={saveName}
+                    onChange={(e) => setSaveName(e.target.value)}
+                    placeholder="닉네임"
+                    maxLength={16}
+                    autoComplete="off"
+                  />
+                  <div className="ggum-runner-save-slots">
+                    {SAVE_AVATAR_SLOTS.map((key, index) => (
+                      <button
+                        key={`save-slot-${index}`}
+                        type="button"
+                        className={`ggum-runner-save-slot${selectedSaveSlotIndex === index ? " ggum-runner-save-slot--selected" : ""}`}
+                        onClick={() => setSelectedSaveSlotIndex(index)}
+                        aria-label={`캐릭터 슬롯 ${index + 1} 선택 (${key})`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="ggum-runner-save-hit ggum-runner-save-enter"
+                    aria-label="기록 저장 및 순위 보기"
+                    onClick={handleSaveEnter}
+                  />
+                  <button
+                    type="button"
+                    className="ggum-runner-save-hit ggum-runner-save-header-x"
+                    aria-label="미니게임 닫기"
+                    onClick={() => onClose?.()}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          {fatalScore !== null && postGameStep === "leaderboard" && (
+            <div className="ggum-runner-postgame-overlay ggum-runner-postgame-overlay--goal">
+              <div className="ggum-runner-sheet ggum-runner-goal-sheet">
+                <img
+                  src="/assets/minigame/goal_list.png"
+                  alt=""
+                  className="ggum-runner-goal-art"
+                />
+                <div className="ggum-runner-goal-profile-slot">
+                  {selectedAvatarKey ? (
+                    <img src={avatarSrc(selectedAvatarKey)} alt="" />
+                  ) : null}
+                </div>
+                <span className="ggum-runner-goal-my-score">{fatalScore}</span>
+                <button
+                  type="button"
+                  className="ggum-runner-goal-hit ggum-runner-goal-close"
+                  aria-label="뒤로"
+                  onClick={() => setPostGameStep("form")}
+                />
+                <div className="ggum-runner-goal-list-scroll">
+                  {leaderboardRows.map((row, i) => (
+                    <div
+                      key={`${row.at}-${i}`}
+                      className="ggum-runner-goal-row"
+                    >
+                      <div className="ggum-runner-goal-row-thumb-wrap">
+                        <img
+                          src={avatarSrc(row.avatarKey)}
+                          alt=""
+                          className="ggum-runner-goal-row-thumb"
+                        />
+                      </div>
+                      <span className="ggum-runner-goal-row-name">
+                        {row.name}
+                      </span>
+                      <span className="ggum-runner-goal-row-score">
+                        {row.score}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

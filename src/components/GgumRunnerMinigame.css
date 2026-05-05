@@ -51,6 +51,8 @@
   top: 15.8%;
   bottom: 5.1%;
   overflow: hidden;
+  /* postgame overlay uses z-index; keep stacking context */
+  isolation: isolate;
 }
 
 .ggum-runner-score-hud {
@@ -119,71 +121,390 @@
   );
 }
 
-.ggum-runner-start-button {
+.ggum-runner-start-modal {
+  position: relative;
+  width: min(92%, 420px);
+}
+
+.ggum-runner-start-modal-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* 비트맵 `start_modal_button.png`(1510×870) 좌표 기준 % — YES 회색 버튼만 클릭 영역으로 사용 */
+.ggum-runner-start-modal-yes {
+  position: absolute;
+  left: 33.9%;
+  top: 75.06%;
+  width: 32.52%;
+  height: 12.76%;
   border: none;
-  background: #ecd6ad;
-  color: oklch(0.45 0.08 55);
-  border-radius: 8px;
-  padding: 11px 20px;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  box-shadow:
-    0 3px 0 rgba(120, 83, 43, 0.7),
-    0 8px 15px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  padding: 0;
+  background: transparent;
   cursor: pointer;
 }
 
-.ggum-runner-gameover-overlay {
+.ggum-runner-start-modal-close {
+  position: absolute;
+  right: 2.91%;
+  top: 0.69%;
+  width: 8.94%;
+  height: 13.91%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* --- Postgame: gameover + save + leaderboard (비트맵 좌표는 PNG 기준 %) --- */
+.ggum-runner-postgame-overlay {
   position: absolute;
   inset: 0;
-  display: none;
-  align-items: center;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
   justify-content: center;
   pointer-events: auto;
-  background: rgba(24, 35, 19, 0.33);
+  padding: 4px 2px 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: rgba(24, 35, 19, 0.42);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: auto;
+  scrollbar-color: #517545 rgba(12, 20, 8, 0.6);
 }
 
-.ggum-runner-gameover-card {
-  background: rgba(255, 251, 235, 0.97);
-  color: oklch(0.45 0.08 55);
-  border-radius: 10px;
-  padding: 16px 20px;
-  text-align: center;
+.ggum-runner-postgame-overlay::-webkit-scrollbar {
+  width: 18px;
+}
+
+.ggum-runner-postgame-overlay::-webkit-scrollbar-track {
+  margin: 6px 0;
+  background: rgba(14, 22, 10, 0.45);
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px rgba(255, 251, 235, 0.06);
+}
+
+.ggum-runner-postgame-overlay::-webkit-scrollbar-thumb {
+  border-radius: 9px;
+  background: linear-gradient(180deg, #6d8a52 0%, #4a6e3a 48%, #2f4f28 100%);
+  border: 1px solid rgba(18, 30, 14, 0.85);
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.28),
-    inset 0 -2px 0 rgba(120, 83, 43, 0.25);
-  min-width: 280px;
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
-.ggum-runner-gameover-title {
-  font-family: "MaruMinyaHangul", "Press Start 2P", "Courier New", monospace;
-  font-size: 24px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  letter-spacing: 0.01em;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+.ggum-runner-postgame-overlay::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #7c9a60 0%, #557d45 48%, #3a5c32 100%);
 }
 
-.ggum-runner-gameover-score {
-  font-size: 14px;
-  margin-bottom: 10px;
-  background: rgba(139, 185, 104, 0.2);
+.ggum-runner-postgame-overlay--goal {
+  align-items: center;
+}
+
+.ggum-runner-postgame-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: min(96%, 380px);
+}
+
+.ggum-runner-sheet {
+  position: relative;
+  width: 100%;
+}
+
+.ggum-runner-sheet-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* gameover_modal.png 1510×870 */
+.ggum-runner-gameover-score-digits {
+  position: absolute;
+  left: 56%;
+  top: 51.5%;
+  transform: translateY(-50%);
+  font-size: clamp(9px, 2.6vw, 13px);
+  line-height: 1;
+  color: #1a1a1a;
+  pointer-events: none;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.ggum-runner-gameover-hit {
+  position: absolute;
   border: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  white-space: pre-line;
-}
-
-.ggum-runner-gameover-button {
-  border: none;
-  background: #2b3c1f;
-  color: #b9dd8d;
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  padding: 0;
+  background: transparent;
   cursor: pointer;
+}
+
+.ggum-runner-gameover-yes {
+  left: 19.5%;
+  top: 80.2%;
+  width: 29.5%;
+  height: 11.8%;
+}
+
+.ggum-runner-gameover-no {
+  left: 51.5%;
+  top: 80.2%;
+  width: 29.5%;
+  height: 11.8%;
+}
+
+.ggum-runner-gameover-header-x {
+  right: 2.6%;
+  top: 0.55%;
+  width: 9.2%;
+  height: 11.2%;
+}
+
+/* save_modal.png 1510×870 — 노란 헤더(~19.5%) 아래 NAME 행에 맞춤 */
+.ggum-runner-save-name-input {
+  position: absolute;
+  left: 42%;
+  top: 23%;
+  width: 45%;
+  height: 10%;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 4px;
+  padding: 0 6px;
+  font-family: "Press Start 2P", "Courier New", monospace;
+  font-size: clamp(7px, 1.9vw, 10px);
+  color: #1a1a1a;
+  background: rgba(255, 255, 255, 0.92);
+  outline: none;
+}
+
+.ggum-runner-save-name-input::placeholder {
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.ggum-runner-save-slots {
+  position: absolute;
+  left: 11.2%;
+  right: 11.2%;
+  top: 28.8%;
+  height: 28.8%;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 3.35%;
+  pointer-events: auto;
+}
+
+/* 비트맵 카드 영역 위 투명 히트만 (image_card 에셋은 로드하지 않음) */
+.ggum-runner-save-slot {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 11%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ggum-runner-save-slot--selected {
+  box-shadow:
+    inset 0 0 0 4px rgba(230, 57, 70, 0.95),
+    inset 0 0 12px rgba(230, 57, 70, 0.25);
+  border-radius: 11%;
+}
+
+.ggum-runner-save-hit {
+  position: absolute;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ggum-runner-save-enter {
+  left: 30.9%;
+  top: 71.95%;
+  width: 38.2%;
+  height: 14.6%;
+}
+
+.ggum-runner-save-header-x {
+  right: 2.6%;
+  top: 0.55%;
+  width: 9.2%;
+  height: 11.2%;
+}
+
+/* goal_list.png 1800×2000 */
+.ggum-runner-goal-sheet {
+  width: min(98%, 420px);
+  max-height: min(96%, 520px);
+}
+
+.ggum-runner-goal-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(92vh, 500px);
+  image-rendering: pixelated;
+}
+
+.ggum-runner-goal-profile-slot {
+  position: absolute;
+  left: 7.2%;
+  top: 11.2%;
+  width: 15.5%;
+  aspect-ratio: 1;
+  max-height: 18%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.ggum-runner-goal-profile-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.ggum-runner-goal-my-score {
+  position: absolute;
+  left: 72%;
+  top: 16.8%;
+  font-size: clamp(10px, 2.8vw, 14px);
+  line-height: 1;
+  color: #1a1a1a;
+  pointer-events: none;
+}
+
+.ggum-runner-goal-hit {
+  position: absolute;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ggum-runner-goal-close {
+  right: 2.8%;
+  top: 1.8%;
+  width: 8%;
+  height: 7%;
+}
+
+.ggum-runner-goal-list-scroll {
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  top: 44%;
+  bottom: 7%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 4px 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: auto;
+  scrollbar-color: #517545 rgba(12, 20, 8, 0.6);
+}
+
+.ggum-runner-goal-list-scroll::-webkit-scrollbar {
+  width: 14px;
+}
+
+.ggum-runner-goal-list-scroll::-webkit-scrollbar-track {
+  margin: 4px 0;
+  background: rgba(14, 22, 10, 0.4);
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px rgba(255, 251, 235, 0.06);
+}
+
+.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb {
+  border-radius: 7px;
+  background: linear-gradient(180deg, #6d8a52 0%, #4a6e3a 48%, #2f4f28 100%);
+  border: 1px solid rgba(18, 30, 14, 0.85);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #7c9a60 0%, #557d45 48%, #3a5c32 100%);
+}
+
+.ggum-runner-goal-row {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 1520 / 250;
+  max-height: 52px;
+  background-image: url("/assets/minigame/list.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.ggum-runner-goal-row-thumb-wrap {
+  position: absolute;
+  left: 5.5%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 13%;
+  height: 74%;
+  max-width: 40px;
+  max-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.ggum-runner-goal-row-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.ggum-runner-goal-row-name {
+  position: absolute;
+  left: 24%;
+  right: 28%;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: clamp(7px, 2vw, 11px);
+  line-height: 1.2;
+  color: #1a1a1a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ggum-runner-goal-row-score {
+  position: absolute;
+  right: 7%;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: clamp(8px, 2.2vw, 12px);
+  line-height: 1;
+  color: #1a1a1a;
 }
