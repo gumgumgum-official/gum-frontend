@@ -296,58 +296,199 @@ body {
 /* Stage3: 이스터에그 스탬프 · 걱정 라벨 · 포탈 화이트아웃 */
 .stage3-ui-root {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 30px;
+  left: 30px;
   z-index: 2250;
   pointer-events: none;
   font-family: "Noto Sans KR", sans-serif;
 }
 
 .stage3-stamp-panel {
-  background: rgba(40, 40, 40, 0.55);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border-radius: 8px;
-  padding: 10px 14px;
+  border-radius: 10px;
+  overflow: hidden;
+  transform-origin: top left;
+  transform: scale(0.52);
   transition:
     box-shadow 0.35s ease,
     opacity 0.5s ease,
-    transform 0.5s ease,
+    transform 0.35s ease,
     visibility 0.5s ease;
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--hidden {
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-10px);
+  transform: translateY(-10px) scale(0.52);
   pointer-events: none;
 }
 
-.stage3-stamp-title {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.65);
-  margin-bottom: 6px;
-  letter-spacing: 0.02em;
+.stage3-stamp-poster-wrap {
+  position: relative;
+  width: min(24vw, 190px);
+  max-width: 190px;
 }
 
-.stage3-stamp-slots {
+.stage3-stamp-panel.stage3-stamp-panel--pop {
+  animation: stage3-stamp-panel-pop 2s ease-in-out;
+}
+
+.stage3-stamp-panel.stage3-stamp-panel--intro-center {
+  position: fixed;
+  left: 50vw;
+  top: 44vh;
+  transform: translate(-50%, -50%) scale(1.35);
+  z-index: 2260;
+}
+
+.stage3-stamp-panel.stage3-stamp-panel--intro-center.stage3-stamp-panel--intro-fly {
+  transition: transform 0.78s cubic-bezier(0.2, 0.8, 0.15, 1);
+  transform: translate(calc(-50vw + 16px), calc(-44vh + 16px)) scale(0.52);
+}
+
+.stage3-stamp-panel.stage3-stamp-panel--settling {
+  transition: none !important;
+}
+
+.stage3-stamp-poster {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  pointer-events: auto;
+  cursor: zoom-in;
+  border-radius: 8px;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
+}
+
+.stage3-stamp-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
   display: flex;
-  gap: 8px;
-  font-size: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+.stage3-stamp-zoom-overlay.stage3-stamp-zoom-overlay--hidden {
+  display: none;
+}
+
+.stage3-stamp-zoom-content {
+  position: relative;
+  width: min(86vw, 560px);
+}
+
+.stage3-stamp-zoom-poster-wrap {
+  position: relative;
+}
+
+.stage3-stamp-zoom-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+}
+
+.stage3-stamp-zoom-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.52);
+  color: #fff;
+  font-size: 22px;
   line-height: 1;
+  cursor: pointer;
 }
 
-.stage3-stamp-slot {
-  display: inline-block;
-  transition: transform 0.2s ease;
+.stage3-stamp-mark {
+  --stamp-size-ratio: 0.15;
+  position: absolute;
+  display: block;
+  width: calc(100% * var(--stamp-size-ratio));
+  height: auto;
+  aspect-ratio: 1 / 1;
+  min-width: 16px;
+  background-image: url("/assets/stamp/stamp.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.88);
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s ease;
 }
 
-.stage3-stamp-slot.filled {
-  filter: drop-shadow(0 0 4px rgba(255, 220, 120, 0.7));
+.stage3-stamp-mark.filled {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.stage3-stamp-mark--zoom {
+  min-width: 0;
+}
+
+.stage3-stamp-mark[data-step-key="worryBreak"] {
+  top: 45.2%;
+  left: 46%;
+}
+
+.stage3-stamp-mark[data-step-key="gumtoongji"] {
+  top: 45%;
+  left: 15.7%;
+}
+
+.stage3-stamp-mark[data-step-key="clock"] {
+  top: 45%;
+  left: 76.2%;
+}
+
+.stage3-stamp-mark[data-step-key="gameMachine"] {
+  top: 58.7%;
+  left: 76.4%;
+}
+
+.stage3-stamp-mark[data-step-key="tent"] {
+  top: 58.7%;
+  left: 46.3%;
+}
+
+.stage3-stamp-mark[data-step-key="notice"] {
+  top: 58.6%;
+  left: 15.7%;
+}
+
+.stage3-stamp-mark[data-step-key="icecream"] {
+  top: 71.9%;
+  left: 15.6%;
 }
 
 .stage3-stamp-pop {
   animation: stage3-stamp-pop-anim 0.45s ease;
+}
+
+@keyframes stage3-stamp-panel-pop {
+  0% {
+    transform: scale(0.52);
+  }
+  45% {
+    transform: scale(0.62);
+  }
+  100% {
+    transform: scale(0.52);
+  }
 }
 
 @keyframes stage3-stamp-pop-anim {
