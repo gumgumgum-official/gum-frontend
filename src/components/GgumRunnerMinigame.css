@@ -409,7 +409,7 @@
 .ggum-runner-goal-my-score {
   position: absolute;
   left: 72%;
-  top: 16.8%;
+  top: 23%;
   font-size: clamp(10px, 2.8vw, 14px);
   line-height: 1;
   color: #1a1a1a;
