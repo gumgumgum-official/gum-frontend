@@ -302,6 +302,19 @@
   color: rgba(0, 0, 0, 0.35);
 }
 
+.ggum-runner-save-error {
+  position: absolute;
+  left: 42%;
+  right: 13%;
+  top: 33.6%;
+  margin: 0;
+  font-size: clamp(6px, 1.45vw, 9px);
+  line-height: 1.2;
+  color: #b71c1c;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+
 /* save_modal.png 1510×870 — 카드 4칸: x 120‥1389(y 340‥619), 칸 폭 280 간격 51 */
 .ggum-runner-save-slots {
   position: absolute;

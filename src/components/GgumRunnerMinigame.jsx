@@ -44,6 +44,7 @@ export function GgumRunnerMinigame({ onClose }) {
   const [fatalScore, setFatalScore] = useState(null);
   const [postGameStep, setPostGameStep] = useState("form");
   const [saveName, setSaveName] = useState("");
+  const [saveFormError, setSaveFormError] = useState("");
   /** `goal_list`에서만 `avatarSrc()`로 로드; 저장 화면은 슬롯 인덱스만 사용 */
   const [selectedSaveSlotIndex, setSelectedSaveSlotIndex] = useState(null);
   const [leaderboardRows, setLeaderboardRows] = useState([]);
@@ -66,6 +67,7 @@ export function GgumRunnerMinigame({ onClose }) {
       setFatalScore(null);
       setPostGameStep("form");
       setSaveName("");
+      setSaveFormError("");
       setSelectedSaveSlotIndex(null);
       setLeaderboardRows([]);
     },
@@ -74,13 +76,14 @@ export function GgumRunnerMinigame({ onClose }) {
   const handleSaveEnter = () => {
     const name = saveName.trim();
     if (!name) {
-      window.alert("이름을 입력해 주세요.");
+      setSaveFormError("이름을 입력해 주세요.");
       return;
     }
     if (selectedAvatarKey == null) {
-      window.alert("이미지를 하나 선택해 주세요.");
+      setSaveFormError("이미지를 하나 선택해 주세요.");
       return;
     }
+    setSaveFormError("");
     if (fatalScore == null) return;
     const rows = appendLeaderboardEntry({
       name,
@@ -213,6 +216,11 @@ export function GgumRunnerMinigame({ onClose }) {
       ctx.fillRect(x + s - 3, y + 1, 2, 2);
     };
 
+    const wrapScroll = (offset, speed, range, shift) =>
+      ((((offset - speed) % range) + range) % range) - shift;
+    const wrapCloud = (offset, speed, range = W + 100) =>
+      wrapScroll(offset, bgX * speed, range, Math.floor((range - W) / 2));
+
     const drawFallbackBg = () => {
       const skyBands = ["#5bbcd4", "#68c4dd", "#82d7ef", "#9ee8ff"];
       const bandHeight = Math.ceil(GROUND_Y / skyBands.length);
@@ -222,46 +230,14 @@ export function GgumRunnerMinigame({ onClose }) {
       });
 
       ctx.fillStyle = "rgba(240,248,255,0.85)";
-      drawCloud(
-        ((((150 - bgX * 0.2) % (W + 80)) + W + 80) % (W + 80)) - 40,
-        18,
-        70,
-      );
-      drawCloud(
-        ((((380 - bgX * 0.2) % (W + 80)) + W + 80) % (W + 80)) - 40,
-        28,
-        90,
-      );
-      drawCloud(
-        ((((600 - bgX * 0.2) % (W + 80)) + W + 80) % (W + 80)) - 40,
-        14,
-        60,
-      );
-      drawCloud(
-        ((((90 - bgX * 0.23) % (W + 100)) + W + 100) % (W + 100)) - 50,
-        52,
-        56,
-      );
-      drawCloud(
-        ((((240 - bgX * 0.21) % (W + 100)) + W + 100) % (W + 100)) - 50,
-        68,
-        48,
-      );
-      drawCloud(
-        ((((470 - bgX * 0.19) % (W + 120)) + W + 120) % (W + 120)) - 60,
-        56,
-        64,
-      );
-      drawCloud(
-        ((((680 - bgX * 0.18) % (W + 120)) + W + 120) % (W + 120)) - 60,
-        72,
-        54,
-      );
-      drawCloud(
-        ((((760 - bgX * 0.16) % (W + 140)) + W + 140) % (W + 140)) - 70,
-        40,
-        58,
-      );
+      drawCloud(wrapCloud(150, 0.2, W + 80), 18, 70);
+      drawCloud(wrapCloud(380, 0.2, W + 80), 28, 90);
+      drawCloud(wrapCloud(600, 0.2, W + 80), 14, 60);
+      drawCloud(wrapCloud(90, 0.23), 52, 56);
+      drawCloud(wrapCloud(240, 0.21), 68, 48);
+      drawCloud(wrapCloud(470, 0.19, W + 120), 56, 64);
+      drawCloud(wrapCloud(680, 0.18, W + 120), 72, 54);
+      drawCloud(wrapCloud(760, 0.16, W + 140), 40, 58);
 
       ctx.fillStyle = "#2e7d32";
       for (let i = 0; i < 8; i += 1) {
@@ -723,18 +699,27 @@ export function GgumRunnerMinigame({ onClose }) {
                     type="text"
                     className="ggum-runner-save-name-input"
                     value={saveName}
-                    onChange={(e) => setSaveName(e.target.value)}
+                    onChange={(e) => {
+                      setSaveName(e.target.value);
+                      if (saveFormError) setSaveFormError("");
+                    }}
                     placeholder="닉네임"
                     maxLength={16}
                     autoComplete="off"
                   />
+                  {saveFormError ? (
+                    <p className="ggum-runner-save-error">{saveFormError}</p>
+                  ) : null}
                   <div className="ggum-runner-save-slots">
                     {SAVE_AVATAR_SLOTS.map((key, index) => (
                       <button
                         key={`save-slot-${index}`}
                         type="button"
                         className={`ggum-runner-save-slot${selectedSaveSlotIndex === index ? " ggum-runner-save-slot--selected" : ""}`}
-                        onClick={() => setSelectedSaveSlotIndex(index)}
+                        onClick={() => {
+                          setSelectedSaveSlotIndex(index);
+                          if (saveFormError) setSaveFormError("");
+                        }}
                         aria-label={`캐릭터 슬롯 ${index + 1} 선택 (${key})`}
                       />
                     ))}
@@ -781,7 +766,12 @@ export function GgumRunnerMinigame({ onClose }) {
                   type="button"
                   className="ggum-runner-goal-hit ggum-runner-goal-close"
                   aria-label="뒤로"
-                  onClick={() => setPostGameStep("form")}
+                  onClick={() => {
+                    setPostGameStep("form");
+                    setSaveName("");
+                    setSaveFormError("");
+                    setSelectedSaveSlotIndex(null);
+                  }}
                 />
                 <div className="ggum-runner-goal-list-scroll">
                   {leaderboardRows.map((row, i) => (
