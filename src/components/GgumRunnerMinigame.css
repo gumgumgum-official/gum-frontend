@@ -18,10 +18,11 @@
   background: transparent;
 }
 
+/* 플레이·포스트게임 전 구간 동일 높이(16:9보다 세로 여유 — 순위·저장 에셋 잘림 완화) */
 .ggum-runner-inner {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 16 / 11.5;
   border-radius: 10px;
   overflow: hidden;
   background-image: url("/assets/minigame/minigame.png");
@@ -371,21 +372,21 @@
 /* goal_list.png 1800×2000 */
 .ggum-runner-goal-sheet {
   width: min(98%, 420px);
-  max-height: min(96%, 520px);
+  max-height: none;
 }
 
 .ggum-runner-goal-art {
   display: block;
   width: 100%;
   height: auto;
-  max-height: min(92vh, 500px);
+  max-height: none;
   image-rendering: pixelated;
 }
 
 /* goal_list.png 1800×2000 — 트로피 우측·헤더 상단 (점수 숫자 열과 정렬감 유지) */
 .ggum-runner-goal-name-above-trophy {
   position: absolute;
-  left: 34%;
+  left: 38.5%;
   top: 12%;
   transform: translateX(-50%);
   max-width: 34%;
