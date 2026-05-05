@@ -40,7 +40,8 @@ This ensured no prior-user vote footprint leaked, but it also forced heavy asset
 ### 4) Start page now clears vote keys on entry (Option B)
 
 - Updated `src/pages/StartPage.jsx`:
-  - On mount, `clearGgumddiMyVotesFromLocalStorage()` is executed.
+  - On `/start` entry, `clearGgumddiMyVotesFromLocalStorage()` is executed.
+  - `?complete=1` path is excluded here to avoid duplicate clear (that path is handled by `resetClientForNextKioskVisitor()`).
   - Result: refresh/re-entry at `/start` clears prior vote footprint without global cache eviction.
 
 ### 5) Documentation updated
@@ -63,8 +64,8 @@ This ensured no prior-user vote footprint leaked, but it also forced heavy asset
 ### Reset behavior now
 
 - Clearing vote footprint:
-  - `/start` mount (new)
-  - `/start?complete=1` path via `resetClientForNextKioskVisitor()` (now vote-only)
+  - `/start` entry (when `complete` is not `1`)
+  - `/start?complete=1` path via `resetClientForNextKioskVisitor()` (single path, no duplicate call)
 - Not cleared anymore:
   - global local/session storage
   - cookies
@@ -91,5 +92,7 @@ This ensured no prior-user vote footprint leaked, but it also forced heavy asset
 ## Risk / notes
 
 - Because only vote keys are cleared, other localStorage keys remain by design.
+- Example non-cleared key:
+  - `ggumRunner_leaderboard_v1` — minigame leaderboard (`src/utils/ggumRunnerLeaderboard.js`)
 - If strict per-visitor isolation is needed for additional features, add explicit key-level cleanup for those features instead of global clear.
 

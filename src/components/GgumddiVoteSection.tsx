@@ -196,7 +196,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
       playRandomNoticePaperSound(NOTICE.paperSoundPaths);
       void onVote(id);
     },
-    [isVoting, myVote, onVote],
+    [isVoting, onVote],
   );
 
   return (

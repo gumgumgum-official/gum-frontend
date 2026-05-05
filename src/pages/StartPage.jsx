@@ -39,8 +39,10 @@ export function StartPage() {
     useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("complete") === "1") return;
     clearGgumddiMyVotesFromLocalStorage();
-  }, []);
+  }, [location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

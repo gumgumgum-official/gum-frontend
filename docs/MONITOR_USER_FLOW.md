@@ -33,3 +33,5 @@
 
 `/start?complete=1` 진입 시 `resetClientForNextKioskVisitor()` 는 **게시판 껌딱지 투표**에 쓰인 `localStorage` 키만 제거한다 (`gum-ggumddi-my-vote:*`).  
 전체 `localStorage` / `sessionStorage` / 쿠키 / Cache Storage / GLTF 메모리 캐시는 비우지 않는다 — 다음 이용자에게 미니게임 기록·에셋 웜업 상태는 유지하고, “이미 투표했음” UI만 초기화하기 위함이다.
+
+또한 일반 `/start` 진입(새로고침 포함)에서도 같은 투표 키를 초기화하지만, `complete=1` 경로에서는 중복 호출을 피하기 위해 일반 진입 초기화는 건너뛴다.
