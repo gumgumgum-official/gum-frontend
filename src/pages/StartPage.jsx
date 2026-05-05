@@ -17,6 +17,7 @@ import {
   waitForStage3GltfTemplatesReady,
 } from "../utils/stages/stage3/stage3GltfWarmup.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
 
 const START_BG_URL = resolvePublicAssetUrl(
   "/static/images/background_start.png",
@@ -36,6 +37,12 @@ export function StartPage() {
   /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("complete") === "1") return;
+    clearGgumddiMyVotesFromLocalStorage();
+  }, [location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -133,8 +140,12 @@ export function StartPage() {
   }, []);
 
   const handleStart = useCallback(async () => {
-    if (isCompletingKioskSession) return;
-    if (startNavigationLockedRef.current) return;
+    if (isCompletingKioskSession) {
+      return;
+    }
+    if (startNavigationLockedRef.current) {
+      return;
+    }
     startNavigationLockedRef.current = true;
     setIsPreparingKiosk(true);
     try {

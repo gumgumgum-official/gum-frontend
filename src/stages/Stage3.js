@@ -155,6 +155,8 @@ const PORTAL_WHITEOUT_FADE_SEC = 1.85;
 const PORTAL_WHITEOUT_HOLD_MS = 500;
 /** 스테이지 전환 후 새 씬이 드러나도록 화이트 페이드 아웃 */
 const PORTAL_WHITEOUT_FADE_OUT_SEC = 1.45;
+const STAGE3_STAMP_INTRO_HOLD_MS = 2000;
+const STAGE3_STAMP_INTRO_FLY_MS = 780;
 /** App.jsx NoticeModalBoard onClose — 게시판 UI가 닫힌 뒤(Stage3 이스터에그 자막용) */
 const NOTICE_MODAL_USER_CLOSED_EVENT = "gum:noticeModalClosed";
 /** 포탈 통과 판정 반경 보정치(포탈 bbox 구체 반경 기반) */
@@ -180,6 +182,7 @@ const RAY_TARGET_TO_EGG_KEY = {
   icecream: "INT_icecream",
   tent: "INT_Tent",
 };
+const STAMP_POSTER_IMAGE_PATH = "/assets/poster/stamp_poster.png";
 
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
@@ -330,6 +333,9 @@ export function Stage3() {
   let easterEggCount = 0;
   let textDestroyed = false;
   const discoveredEggs = new Set();
+  const stampCompletedSteps = new Set();
+  const pendingStampStepsOnModalClose = new Set();
+  let stampPanelRevealReady = false;
   let stage3IntroFlowStarted = false;
   /** 이스터에그 3 + 걱정 텍스트 파괴 후 축하 자막 1회만 */
   let worryCompletionCelebrationDone = false;
@@ -365,6 +371,10 @@ export function Stage3() {
   const _hammerBubbleWorld = new THREE.Vector3();
   */
   let stage3EntryStampRevealTimerId = null;
+  let stage3StampIntroHoldTimerId = null;
+  let stage3StampIntroFlyTimerId = null;
+  let stage3StampIntroAnimating = false;
+  let stage3InteractionLocked = true;
   /** 모달/미니게임 닫힌 뒤 재생할 이스터에그 발견 자막 (notice / gameMachine / tent) */
   let pendingEggDiscoverySubtitle = null;
   /** @type {(() => void) | null} */
@@ -372,6 +382,9 @@ export function Stage3() {
   let isNoticeModalOpen = false;
   let isGameMachineModalOpen = false;
   let isTentModalOpen = false;
+  let isStampPosterZoomOpen = false;
+  /** @type {HTMLDivElement | null} */
+  let stampPosterZoomOverlayEl = null;
 
   const keyboard = createKeyboardInput([
     "ArrowUp",
@@ -672,7 +685,20 @@ export function Stage3() {
   }
 
   const handleStageKeyDown = (event) => {
-    if (hasBlockingOverlayOpen()) {
+    if (event.key === "m" || event.key === "M" || event.code === "KeyM") {
+      event.preventDefault();
+      if (isStampPosterZoomOpen) {
+        closeStampPosterZoom();
+      } else if (canOpenStampPosterZoom()) {
+        openStampPosterZoom();
+      }
+      return;
+    }
+    if (
+      hasBlockingOverlayOpen() ||
+      stage3StampIntroAnimating ||
+      stage3InteractionLocked
+    ) {
       if (event.key === "Enter") event.preventDefault();
       return;
     }
@@ -723,16 +749,63 @@ export function Stage3() {
     root.className = "stage3-ui-root";
     root.innerHTML = `
       <div class="stage3-stamp-panel stage3-stamp-panel--hidden" aria-label="이스터에그 진행">
-        <div class="stage3-stamp-title">이스터에그 찾기</div>
-        <div class="stage3-stamp-slots">
-          <span class="stage3-stamp-slot" data-idx="0">🥚</span>
-          <span class="stage3-stamp-slot" data-idx="1">🥚</span>
-          <span class="stage3-stamp-slot" data-idx="2">🥚</span>
+        <div class="stage3-stamp-poster-wrap">
+          <img class="stage3-stamp-poster" src="${STAMP_POSTER_IMAGE_PATH}" alt="GGUM STAMP TOUR 포스터" role="button" tabindex="0" />
+          <span class="stage3-stamp-mark" data-step-key="gumtoongji" aria-hidden="true"></span>
+          <span class="stage3-stamp-mark" data-step-key="worryBreak" aria-hidden="true"></span>
+          <span class="stage3-stamp-mark" data-step-key="clock" aria-hidden="true"></span>
+          <span class="stage3-stamp-mark" data-step-key="gameMachine" aria-hidden="true"></span>
+          <span class="stage3-stamp-mark" data-step-key="tent" aria-hidden="true"></span>
+          <span class="stage3-stamp-mark" data-step-key="notice" aria-hidden="true"></span>
+          <span class="stage3-stamp-mark" data-step-key="icecream" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="stage3-stamp-zoom-overlay stage3-stamp-zoom-overlay--hidden" aria-hidden="true">
+        <div class="stage3-stamp-zoom-content" role="dialog" aria-modal="true" aria-label="스탬프 포스터 확대 보기">
+          <button class="stage3-stamp-zoom-close" type="button" aria-label="닫기">×</button>
+          <div class="stage3-stamp-zoom-poster-wrap">
+            <img class="stage3-stamp-zoom-image" src="${STAMP_POSTER_IMAGE_PATH}" alt="GGUM STAMP TOUR 포스터 확대" />
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="gumtoongji" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="worryBreak" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="clock" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="gameMachine" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="tent" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="notice" aria-hidden="true"></span>
+            <span class="stage3-stamp-mark stage3-stamp-mark--zoom" data-step-key="icecream" aria-hidden="true"></span>
+          </div>
         </div>
       </div>
     `;
     document.body.appendChild(root);
     stampUiRoot = root;
+    stampPosterZoomOverlayEl = root.querySelector(".stage3-stamp-zoom-overlay");
+    const posterEl = root.querySelector(".stage3-stamp-poster");
+    const closeBtnEl = root.querySelector(".stage3-stamp-zoom-close");
+    posterEl?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (canOpenStampPosterZoom()) openStampPosterZoom();
+    });
+    posterEl?.addEventListener(
+      "keydown",
+      (/** @type {KeyboardEvent} */ event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (canOpenStampPosterZoom()) openStampPosterZoom();
+      },
+    );
+    closeBtnEl?.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeStampPosterZoom();
+    });
+    stampPosterZoomOverlayEl?.addEventListener("pointerdown", (event) => {
+      if (event.target !== stampPosterZoomOverlayEl) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeStampPosterZoom();
+    });
 
     userWorryEnterBubbleEl = document.createElement("div");
     userWorryEnterBubbleEl.className =
@@ -838,6 +911,7 @@ export function Stage3() {
   }
 
   function disposeStage3Ui() {
+    clearStampIntroTimers();
     portalTransitionTween?.kill();
     portalTransitionTween = null;
     if (portalTransitionHoldTimeoutId != null) {
@@ -864,6 +938,8 @@ export function Stage3() {
     portalTransitionInProgress = false;
     stampUiRoot?.remove();
     stampUiRoot = null;
+    stampPosterZoomOverlayEl = null;
+    isStampPosterZoomOpen = false;
     userWorryEnterBubbleEl?.remove();
     userWorryEnterBubbleEl = null;
     intClickHintBubbleEl?.removeEventListener(
@@ -880,26 +956,28 @@ export function Stage3() {
     userWorryEnterBubbleT = 0;
   }
 
-  function updateStampSlotsFilled(count) {
+  function updateStampMarksFilled() {
     if (!stampUiRoot) return;
-    const slots = stampUiRoot.querySelectorAll(".stage3-stamp-slot");
-    slots.forEach((el, i) => {
-      const filled = i < count;
-      el.textContent = filled ? "🌟" : "🥚";
+    const marks = stampUiRoot.querySelectorAll(".stage3-stamp-mark");
+    marks.forEach((el) => {
+      const key = el.getAttribute("data-step-key");
+      const filled = !!key && stampCompletedSteps.has(key);
       el.classList.toggle("filled", filled);
     });
   }
 
-  function pulseStampSlot(index) {
+  function pulseStampMarkForStep(stepKey) {
     if (!stampUiRoot) return;
-    const el = stampUiRoot.querySelector(
-      `.stage3-stamp-slot[data-idx="${index}"]`,
+    const marks = stampUiRoot.querySelectorAll(
+      `.stage3-stamp-mark[data-step-key="${stepKey}"]`,
     );
-    if (!el) return;
-    el.classList.remove("stage3-stamp-pop");
-    void el.getBoundingClientRect();
-    el.classList.add("stage3-stamp-pop");
-    window.setTimeout(() => el.classList.remove("stage3-stamp-pop"), 500);
+    if (!marks.length) return;
+    marks.forEach((el) => {
+      el.classList.remove("stage3-stamp-pop");
+      void el.getBoundingClientRect();
+      el.classList.add("stage3-stamp-pop");
+      window.setTimeout(() => el.classList.remove("stage3-stamp-pop"), 500);
+    });
   }
 
   function pulseStampPanelGlow() {
@@ -912,10 +990,140 @@ export function Stage3() {
     window.setTimeout(() => panel.classList.remove("stage3-stamp-glow"), 900);
   }
 
+  function pulseStampPanelPop() {
+    if (!stampUiRoot) return;
+    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    if (!panel) return;
+    panel.classList.remove("stage3-stamp-panel--pop");
+    void panel.getBoundingClientRect();
+    panel.classList.add("stage3-stamp-panel--pop");
+    window.setTimeout(
+      () => panel.classList.remove("stage3-stamp-panel--pop"),
+      2000,
+    );
+  }
+
+  /**
+   * 상호작용이 완료되면 순서와 무관하게 해당 위치 도장을 찍는다.
+   * @param {"gumtoongji"|"worryBreak"|"clock"|"gameMachine"|"tent"|"notice"|"icecream"} stepKey
+   * @returns {boolean}
+   */
+  function tryAdvanceStampSequence(stepKey) {
+    if (stampCompletedSteps.has(stepKey)) return false;
+    stampCompletedSteps.add(stepKey);
+    updateStampMarksFilled();
+    pulseStampMarkForStep(stepKey);
+    pulseStampPanelPop();
+    pulseStampPanelGlow();
+    return true;
+  }
+
   function revealStage3StampPanelAfterEntrySubtitles() {
     if (!stampUiRoot || !isStage3Active) return;
+    if (hasBlockingOverlayOpen()) return;
+    stampPanelRevealReady = true;
+    playStampPanelEntryAnimation();
+  }
+
+  function setStampPanelHidden(hidden) {
+    if (!stampUiRoot) return;
     const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
-    if (panel) panel.classList.remove("stage3-stamp-panel--hidden");
+    if (!panel) return;
+    panel.classList.toggle("stage3-stamp-panel--hidden", hidden);
+  }
+
+  function syncStampPanelVisibilityByOverlay() {
+    if (!stampPanelRevealReady) {
+      setStampPanelHidden(true);
+      return;
+    }
+    setStampPanelHidden(hasBlockingOverlayOpen());
+  }
+
+  function canOpenStampPosterZoom() {
+    return (
+      stampPanelRevealReady &&
+      !stage3StampIntroAnimating &&
+      !stage3InteractionLocked &&
+      !isStampPosterZoomOpen &&
+      !isNoticeModalOpen &&
+      !isGameMachineModalOpen &&
+      !isTentModalOpen
+    );
+  }
+
+  function openStampPosterZoom() {
+    if (!stampPosterZoomOverlayEl) return;
+    isStampPosterZoomOpen = true;
+    stampPosterZoomOverlayEl.classList.remove(
+      "stage3-stamp-zoom-overlay--hidden",
+    );
+    stampPosterZoomOverlayEl.setAttribute("aria-hidden", "false");
+    syncStampPanelVisibilityByOverlay();
+  }
+
+  function closeStampPosterZoom() {
+    if (!stampPosterZoomOverlayEl) return;
+    isStampPosterZoomOpen = false;
+    stampPosterZoomOverlayEl.classList.add("stage3-stamp-zoom-overlay--hidden");
+    stampPosterZoomOverlayEl.setAttribute("aria-hidden", "true");
+    syncStampPanelVisibilityByOverlay();
+  }
+
+  function clearStampIntroTimers() {
+    if (stage3StampIntroHoldTimerId != null) {
+      window.clearTimeout(stage3StampIntroHoldTimerId);
+      stage3StampIntroHoldTimerId = null;
+    }
+    if (stage3StampIntroFlyTimerId != null) {
+      window.clearTimeout(stage3StampIntroFlyTimerId);
+      stage3StampIntroFlyTimerId = null;
+    }
+    stage3StampIntroAnimating = false;
+  }
+
+  function playStampPanelEntryAnimation() {
+    if (!stampUiRoot || !isStage3Active) return;
+    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    if (!panel) return;
+    clearStampIntroTimers();
+    stage3StampIntroAnimating = true;
+    panel.classList.remove("stage3-stamp-panel--hidden");
+    panel.classList.remove("stage3-stamp-panel--intro-fly");
+    panel.classList.add("stage3-stamp-panel--intro-center");
+    stage3StampIntroHoldTimerId = window.setTimeout(() => {
+      stage3StampIntroHoldTimerId = null;
+      if (!isStage3Active || !stampUiRoot) return;
+      panel.classList.add("stage3-stamp-panel--intro-fly");
+      stage3StampIntroFlyTimerId = window.setTimeout(() => {
+        stage3StampIntroFlyTimerId = null;
+        panel.classList.add("stage3-stamp-panel--settling");
+        panel.classList.remove("stage3-stamp-panel--intro-center");
+        panel.classList.remove("stage3-stamp-panel--intro-fly");
+        requestAnimationFrame(() => {
+          panel.classList.remove("stage3-stamp-panel--settling");
+          stage3StampIntroAnimating = false;
+          stage3InteractionLocked = false;
+        });
+      }, STAGE3_STAMP_INTRO_FLY_MS);
+    }, STAGE3_STAMP_INTRO_HOLD_MS);
+  }
+
+  /**
+   * 모달을 다 본 뒤 닫힐 때 도장 처리할 step을 큐잉한다.
+   * @param {"notice"|"gameMachine"|"tent"} stepKey
+   */
+  function queueStampStepOnModalClose(stepKey) {
+    pendingStampStepsOnModalClose.add(stepKey);
+  }
+
+  /**
+   * @param {"notice"|"gameMachine"|"tent"} stepKey
+   */
+  function flushQueuedStampStepOnModalClose(stepKey) {
+    if (!pendingStampStepsOnModalClose.has(stepKey)) return;
+    pendingStampStepsOnModalClose.delete(stepKey);
+    tryAdvanceStampSequence(stepKey);
   }
 
   function dispatchSubtitleSequence(messages) {
@@ -940,6 +1148,8 @@ export function Stage3() {
   function handleNoticeModalClosedForEggSubtitle() {
     isNoticeModalOpen = false;
     hideStage3InteractionBubbles();
+    flushQueuedStampStepOnModalClose("notice");
+    syncStampPanelVisibilityByOverlay();
     flushPendingEggDiscoverySubtitle();
   }
 
@@ -949,7 +1159,12 @@ export function Stage3() {
   }
 
   function hasBlockingOverlayOpen() {
-    return isNoticeModalOpen || isGameMachineModalOpen || isTentModalOpen;
+    return (
+      isNoticeModalOpen ||
+      isGameMachineModalOpen ||
+      isTentModalOpen ||
+      isStampPosterZoomOpen
+    );
   }
 
   function clearStage3MovementInputs() {
@@ -962,6 +1177,7 @@ export function Stage3() {
   function runStage3EntrySubtitlesAndIntro() {
     if (stage3IntroFlowStarted) return;
     stage3IntroFlowStarted = true;
+    stampPanelRevealReady = false;
     if (stage3EntryStampRevealTimerId != null) {
       window.clearTimeout(stage3EntryStampRevealTimerId);
       stage3EntryStampRevealTimerId = null;
@@ -996,8 +1212,6 @@ export function Stage3() {
     let stampSubtitle = null;
     if (easterEggCount < REQUIRED_EGG_COUNT) {
       easterEggCount += 1;
-      updateStampSlotsFilled(easterEggCount);
-      pulseStampSlot(easterEggCount - 1);
       if (easterEggCount >= REQUIRED_EGG_COUNT) {
         pulseStampPanelGlow();
       }
@@ -1236,6 +1450,8 @@ export function Stage3() {
       unlistenMinigameClose = onMinigameClose(() => {
         isGameMachineModalOpen = false;
         hideStage3InteractionBubbles();
+        flushQueuedStampStepOnModalClose("gameMachine");
+        syncStampPanelVisibilityByOverlay();
         closeMinigame({
           camera: cameraRef,
           orbitControls: debugControls?.getOrbitControls?.() ?? null,
@@ -1303,6 +1519,14 @@ export function Stage3() {
       _pointerMoveRafId = 0;
       const e = _lastPointerEvent;
       if (!e || !canvasRef) return;
+      if (
+        stage3InteractionLocked ||
+        stage3StampIntroAnimating ||
+        hasBlockingOverlayOpen()
+      ) {
+        canvasRef.style.cursor = "default";
+        return;
+      }
       const target = getPointerHitTarget(e.clientX, e.clientY);
       canvasRef.style.cursor = target ? "pointer" : "default";
     });
@@ -1517,6 +1741,7 @@ export function Stage3() {
     isNoticeModalOpen = true;
     clearStage3MovementInputs();
     hideStage3InteractionBubbles();
+    syncStampPanelVisibilityByOverlay();
     playRandomNoticePaperSound(config.notice?.paperSoundPaths);
     window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
   }
@@ -1526,6 +1751,7 @@ export function Stage3() {
     isGameMachineModalOpen = true;
     clearStage3MovementInputs();
     hideStage3InteractionBubbles();
+    syncStampPanelVisibilityByOverlay();
     window.dispatchEvent(new CustomEvent("gum:showGameMachineModal"));
   }
 
@@ -1561,6 +1787,7 @@ export function Stage3() {
         gumtoongjiActions.length,
       );
       playGumtoongjiAnimation();
+      tryAdvanceStampSequence("gumtoongji");
       return true;
     }
 
@@ -1595,6 +1822,7 @@ export function Stage3() {
         return;
       }
       spawnIceCreamFromCart();
+      tryAdvanceStampSequence("icecream");
       if (eggTap?.stampSubtitle) {
         dispatchSubtitleLine(eggTap.stampSubtitle);
       }
@@ -1602,6 +1830,7 @@ export function Stage3() {
     }
     if (target === "notice") {
       showNoticeModal();
+      queueStampStepOnModalClose("notice");
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
       }
@@ -1610,6 +1839,7 @@ export function Stage3() {
     if (target === "gameMachine") {
       playGameMachineClickSound();
       showGameMachineModal();
+      queueStampStepOnModalClose("gameMachine");
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
       }
@@ -1620,7 +1850,9 @@ export function Stage3() {
       isTentModalOpen = true;
       clearStage3MovementInputs();
       hideStage3InteractionBubbles();
+      syncStampPanelVisibilityByOverlay();
       openGumCardsModal();
+      queueStampStepOnModalClose("tent");
       if (eggTap?.stampSubtitle) {
         pendingEggDiscoverySubtitle = eggTap.stampSubtitle;
       }
@@ -1631,13 +1863,17 @@ export function Stage3() {
       window.dispatchEvent(new CustomEvent("gum:wellClick"));
       return true;
     }
-    if (target === "clock") return true;
+    if (target === "clock") {
+      tryAdvanceStampSequence("clock");
+      return true;
+    }
     return false;
   }
 
   /** island INT_* 클릭 핸들러 */
   function handlePointerDown(event) {
     if (!cameraRef || !canvasRef || !sceneRef) return;
+    if (stage3StampIntroAnimating || stage3InteractionLocked) return;
     const target = getPointerHitTarget(event.clientX, event.clientY);
     if (!target) {
       if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
@@ -1652,6 +1888,7 @@ export function Stage3() {
   }
 
   function handleIntClickHintPointerDown(event) {
+    if (stage3StampIntroAnimating || stage3InteractionLocked) return;
     if (!activeIntHintTarget) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1714,7 +1951,11 @@ export function Stage3() {
 
   function updateIntClickHintBubble() {
     if (!intClickHintBubbleEl || !cameraRef || !canvasRef) return;
-    if (hasBlockingOverlayOpen()) {
+    if (
+      hasBlockingOverlayOpen() ||
+      stage3StampIntroAnimating ||
+      stage3InteractionLocked
+    ) {
       activeIntHintTarget = null;
       intClickHintBubbleEl.classList.remove("is-visible");
       return;
@@ -3204,6 +3445,7 @@ export function Stage3() {
     letterState.pulseTween?.kill();
     letterState = null;
     textDestroyed = true;
+    tryAdvanceStampSequence("worryBreak");
     // 축하 자막은 첫 꽃이 피어나는 순간(spawnFlowerAt 성공)에 dispatch.
   }
 
@@ -3272,6 +3514,12 @@ export function Stage3() {
       easterEggCount = 0;
       textDestroyed = false;
       discoveredEggs.clear();
+      stampCompletedSteps.clear();
+      pendingStampStepsOnModalClose.clear();
+      stampPanelRevealReady = false;
+      stage3StampIntroAnimating = false;
+      stage3InteractionLocked = true;
+      isStampPosterZoomOpen = false;
       worryCompletionCelebrationDone = false;
       flowerMagicPlayed = false;
       stage3IntroFlowStarted = false;
@@ -3282,6 +3530,7 @@ export function Stage3() {
         window.clearTimeout(stage3EntryStampRevealTimerId);
         stage3EntryStampRevealTimerId = null;
       }
+      clearStampIntroTimers();
       stage3LightingRestore = {
         toneMappingExposure: renderer.toneMappingExposure,
         environmentIntensity: scene.environmentIntensity,
@@ -3345,6 +3594,8 @@ export function Stage3() {
       unlistenGumCardsForEggSubtitle = onGumCardsModalClose(() => {
         isTentModalOpen = false;
         hideStage3InteractionBubbles();
+        flushQueuedStampStepOnModalClose("tent");
+        syncStampPanelVisibilityByOverlay();
         flushPendingEggDiscoverySubtitle();
       });
 
@@ -3388,7 +3639,7 @@ export function Stage3() {
           fountainState = setupFountainFromModel(model, animations);
           backgroundModel = model;
           ensureStage3UiMounted();
-          updateStampSlotsFilled(0);
+          updateStampMarksFilled();
           if (isStage3Active) {
             playStage3IntroAudioTwice();
           }
@@ -3540,7 +3791,11 @@ export function Stage3() {
         }
       }
       if (character) {
-        if (hasBlockingOverlayOpen()) {
+        if (
+          hasBlockingOverlayOpen() ||
+          stage3StampIntroAnimating ||
+          stage3InteractionLocked
+        ) {
           clearStage3MovementInputs();
         }
         character.update(delta, this.camera, {
@@ -3699,13 +3954,17 @@ export function Stage3() {
       stopStage3IntroAudio();
       gumCancelled = true;
       pendingEggDiscoverySubtitle = null;
+      stampPanelRevealReady = false;
+      stage3InteractionLocked = true;
       isNoticeModalOpen = false;
       isGameMachineModalOpen = false;
       isTentModalOpen = false;
+      isStampPosterZoomOpen = false;
       if (stage3EntryStampRevealTimerId != null) {
         window.clearTimeout(stage3EntryStampRevealTimerId);
         stage3EntryStampRevealTimerId = null;
       }
+      clearStampIntroTimers();
       window.removeEventListener(
         NOTICE_MODAL_USER_CLOSED_EVENT,
         handleNoticeModalClosedForEggSubtitle,
