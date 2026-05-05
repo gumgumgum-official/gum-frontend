@@ -746,66 +746,65 @@ export function GgumRunnerMinigame({ onClose }) {
                 </div>
               </div>
             )}
-          {fatalScore !== null && postGameStep === "leaderboard" && (
-            <div className="ggum-runner-postgame-overlay ggum-runner-postgame-overlay--goal">
-              <div className="ggum-runner-sheet ggum-runner-goal-sheet">
-                <img
-                  src="/assets/minigame/goal_list.png"
-                  alt=""
-                  className="ggum-runner-goal-art"
-                />
-                {saveName.trim() ? (
-                  <span
-                    className="ggum-runner-goal-name-above-trophy"
-                    aria-label={`플레이어 이름 ${saveName.trim()}`}
-                  >
-                    {saveName.trim()}
-                  </span>
-                ) : null}
-                <div className="ggum-runner-goal-profile-slot">
-                  {selectedAvatarKey ? (
-                    <img src={avatarSrc(selectedAvatarKey)} alt="" />
-                  ) : null}
-                </div>
-                <span className="ggum-runner-goal-my-score">{fatalScore}</span>
-                <button
-                  type="button"
-                  className="ggum-runner-goal-hit ggum-runner-goal-close"
-                  aria-label="뒤로"
-                  onClick={() => {
-                    setPostGameStep("save");
-                    setSaveName("");
-                    setSaveFormError("");
-                    setSelectedSaveSlotIndex(null);
-                  }}
-                />
-                <div className="ggum-runner-goal-list-scroll">
-                  {leaderboardRows.map((row, i) => (
-                    <div
-                      key={`${row.at}-${i}`}
-                      className="ggum-runner-goal-row"
-                    >
-                      <div className="ggum-runner-goal-row-thumb-wrap">
-                        <img
-                          src={avatarSrc(row.avatarKey)}
-                          alt=""
-                          className="ggum-runner-goal-row-thumb"
-                        />
-                      </div>
-                      <span className="ggum-runner-goal-row-name">
-                        {row.name}
-                      </span>
-                      <span className="ggum-runner-goal-row-score">
-                        {row.score}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+      {fatalScore !== null && postGameStep === "leaderboard" && (
+        <div className="ggum-runner-goal-modal-layer">
+          <div className="ggum-runner-postgame-overlay ggum-runner-postgame-overlay--goal">
+            <div className="ggum-runner-sheet ggum-runner-goal-sheet">
+              <img
+                src="/assets/minigame/goal_list.png"
+                alt=""
+                className="ggum-runner-goal-art"
+              />
+              {saveName.trim() ? (
+                <span
+                  className="ggum-runner-goal-name-above-trophy"
+                  aria-label={`플레이어 이름 ${saveName.trim()}`}
+                >
+                  {saveName.trim()}
+                </span>
+              ) : null}
+              <div className="ggum-runner-goal-profile-slot">
+                {selectedAvatarKey ? (
+                  <img src={avatarSrc(selectedAvatarKey)} alt="" />
+                ) : null}
+              </div>
+              <span className="ggum-runner-goal-my-score">{fatalScore}</span>
+              <button
+                type="button"
+                className="ggum-runner-goal-hit ggum-runner-goal-close"
+                aria-label="뒤로"
+                onClick={() => {
+                  setPostGameStep("save");
+                  setSaveName("");
+                  setSaveFormError("");
+                  setSelectedSaveSlotIndex(null);
+                }}
+              />
+              <div className="ggum-runner-goal-list-scroll">
+                {leaderboardRows.map((row, i) => (
+                  <div key={`${row.at}-${i}`} className="ggum-runner-goal-row">
+                    <div className="ggum-runner-goal-row-thumb-wrap">
+                      <img
+                        src={avatarSrc(row.avatarKey)}
+                        alt=""
+                        className="ggum-runner-goal-row-thumb"
+                      />
+                    </div>
+                    <span className="ggum-runner-goal-row-name">
+                      {row.name}
+                    </span>
+                    <span className="ggum-runner-goal-row-score">
+                      {row.score}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

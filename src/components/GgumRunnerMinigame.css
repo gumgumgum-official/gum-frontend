@@ -31,6 +31,12 @@
   background-repeat: no-repeat;
 }
 
+.ggum-runner-goal-modal-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+}
+
 .ggum-runner-frame-close {
   position: absolute;
   top: 0.7%;
@@ -399,7 +405,7 @@
 /* goal_list.png 1800×2000 — 트로피 우측·헤더 상단 (점수 숫자 열과 정렬감 유지) */
 .ggum-runner-goal-name-above-trophy {
   position: absolute;
-  left: 38.5%;
+  left: 34%;
   top: 12%;
   transform: translateX(-50%);
   max-width: 34%;
@@ -439,8 +445,8 @@
 
 .ggum-runner-goal-my-score {
   position: absolute;
-  left: 72%;
-  top: 23%;
+  left: 66%;
+  top: 17.8%;
   font-size: clamp(10px, 2.8vw, 14px);
   line-height: 1;
   color: #1a1a1a;
