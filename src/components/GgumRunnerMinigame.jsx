@@ -24,7 +24,7 @@ const TARGET_FPS = 60;
 const FRAME_MS = 1000 / TARGET_FPS;
 
 /** 왼쪽부터 save_modal.png 카드와 1:1 (비트맵에 그려진 그림만 보이고, 여기서는 PNG를 로드하지 않음) */
-const SAVE_AVATAR_SLOTS = ["clover", "flower", "cake", "flower"];
+const SAVE_AVATAR_SLOTS = ["clover", "flower", "cake", "dog"];
 
 function avatarSrc(key) {
   return `/assets/minigame/image_card/${key}.png`;
