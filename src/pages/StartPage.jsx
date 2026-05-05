@@ -18,6 +18,7 @@ import {
 } from "../utils/stages/stage3/stage3GltfWarmup.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
+import { IntroStoryOverlay } from "../components/IntroStoryOverlay.jsx";
 
 const START_BG_URL = resolvePublicAssetUrl(
   "/static/images/background_start.png",
@@ -34,9 +35,12 @@ export function StartPage() {
   const toastRef = useRef(null);
   const startNavigationLockedRef = useRef(false);
   const [isPreparingKiosk, setIsPreparingKiosk] = useState(false);
+  const [isIntroOpen, setIsIntroOpen] = useState(false);
+  const [isStartFadingOut, setIsStartFadingOut] = useState(false);
   /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
+  const stage3WarmupPromiseRef = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -139,7 +143,14 @@ export function StartPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const handleStart = useCallback(async () => {
+  const ensureStage3Warmup = useCallback(() => {
+    if (!stage3WarmupPromiseRef.current) {
+      stage3WarmupPromiseRef.current = waitForStage3GltfTemplatesReady();
+    }
+    return stage3WarmupPromiseRef.current;
+  }, []);
+
+  const navigateToKioskAfterWarmup = useCallback(async () => {
     if (isCompletingKioskSession) {
       return;
     }
@@ -149,16 +160,42 @@ export function StartPage() {
     startNavigationLockedRef.current = true;
     setIsPreparingKiosk(true);
     try {
-      await waitForStage3GltfTemplatesReady();
+      await ensureStage3Warmup();
       navigate(`/kiosk${location.search}`);
     } catch (e) {
       console.warn("[StartPage] Stage3 GLB 프리로드 실패 — 그대로 진행:", e);
+      stage3WarmupPromiseRef.current = waitForStage3GltfTemplatesReady();
+      try {
+        await stage3WarmupPromiseRef.current;
+      } catch {
+        // fallback: 웜업 실패가 이어져도 진입은 막지 않는다.
+      }
       navigate(`/kiosk${location.search}`);
     } finally {
       setIsPreparingKiosk(false);
       startNavigationLockedRef.current = false;
     }
-  }, [isCompletingKioskSession, location.search, navigate]);
+  }, [ensureStage3Warmup, isCompletingKioskSession, location.search, navigate]);
+
+  const handleStart = useCallback(() => {
+    if (
+      isCompletingKioskSession ||
+      isPreparingKiosk ||
+      isIntroOpen ||
+      isStartFadingOut
+    ) {
+      return;
+    }
+    void ensureStage3Warmup();
+    setIsStartFadingOut(true);
+    setIsIntroOpen(true);
+  }, [
+    ensureStage3Warmup,
+    isCompletingKioskSession,
+    isIntroOpen,
+    isPreparingKiosk,
+    isStartFadingOut,
+  ]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -217,7 +254,9 @@ export function StartPage() {
       style={{ backgroundImage: `url("${START_BG_URL}")` }}
       onClick={handleStart}
     >
-      <div className={styles.startOverlay}>
+      <div
+        className={`${styles.startOverlay}${isStartFadingOut ? ` ${styles.startOverlayFadeOut}` : ""}`}
+      >
         <div className={styles.startButtonHit}>
           <img
             className={styles.startButtonImg}
@@ -239,6 +278,13 @@ export function StartPage() {
           </div>
         ) : null}
       </div>
+      {isIntroOpen ? (
+        <IntroStoryOverlay
+          onComplete={() => {
+            void navigateToKioskAfterWarmup();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

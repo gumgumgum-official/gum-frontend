@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700&display=swap");
+
 .page {
   position: relative;
   width: 100%;
@@ -28,6 +30,12 @@
   justify-content: flex-start;
   padding-top: 35vh;
   gap: 3vh;
+  opacity: 1;
+  transition: opacity 0.75s ease;
+}
+
+.startOverlayFadeOut {
+  opacity: 0;
 }
 
 .startButtonHit {
@@ -80,6 +88,260 @@
   from {
     opacity: 0;
     transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.introOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 40% 50%, #1c1530 0%, #12101e 70%);
+  color: rgba(255, 255, 255, 0.94);
+  font-family: "Nanum Myeongjo", "Apple SD Gothic Neo", serif;
+  user-select: none;
+  transition: background 0.35s ease;
+}
+
+.introOverlayEnter {
+  animation: introOverlayEnter 0.75s ease forwards;
+}
+
+.introStars {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.introStar {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.08;
+  animation: introTwinkle 2s infinite alternate;
+}
+
+.introSceneNumber {
+  position: absolute;
+  top: 20px;
+  right: 26px;
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.5);
+  z-index: 2;
+}
+
+.introStory {
+  position: relative;
+  z-index: 2;
+  width: min(92vw, 640px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.introFrame {
+  width: min(82vw, 540px);
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 44px rgba(0, 0, 0, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 0;
+  transform: translateY(10px) scale(1);
+}
+
+.introFrameShow {
+  animation: introFadeUp 0.5s ease forwards;
+}
+
+.introFrameImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.introNarr {
+  height: 220px;
+  width: min(88vw, 620px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.introNarrLine {
+  opacity: 0;
+  font-size: clamp(15px, 2.2vw, 18px);
+  line-height: 1.8;
+  transform: translateY(10px);
+}
+
+.introNarrLineShow {
+  animation: introFadeUp 0.46s ease forwards;
+}
+
+.introNarrLineAccent {
+  color: #ffd080;
+  font-style: italic;
+}
+
+.introNarrLineHero {
+  margin-top: 6px;
+  color: #ffd080;
+  font-size: clamp(20px, 3.7vw, 26px);
+  font-weight: 700;
+}
+
+.introNarrLineDark {
+  color: #f2e2ce;
+}
+
+.introNarrLineDarkHero {
+  color: #ffb87f;
+  font-size: clamp(17px, 3.1vw, 22px);
+  font-weight: 700;
+}
+
+.introHint {
+  min-height: 18px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.48);
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    color 0.22s ease,
+    opacity 0.32s ease,
+    transform 0.32s ease;
+}
+
+.introActionSlot {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.introHintReady {
+  color: rgba(255, 255, 255, 0.58);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.introNav {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+
+.introDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  transition:
+    width 0.22s ease,
+    background 0.22s ease,
+    border-radius 0.22s ease;
+}
+
+.introDotOn {
+  width: 22px;
+  border-radius: 4px;
+  background: #ffd080;
+}
+
+.introEnterButton {
+  border: none;
+  border-radius: 999px;
+  background: #ff8c69;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 34px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease,
+    filter 0.14s ease;
+  box-shadow: 0 4px 20px rgba(255, 140, 105, 0.42);
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.introEnterButtonShow {
+  animation: introEnterButtonIn 0.32s ease forwards;
+}
+
+.introEnterButton:hover {
+  transform: scale(1.04);
+  filter: brightness(1.03);
+}
+
+.introEnterButton:active {
+  transform: scale(0.97);
+}
+
+.introEnterButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+  filter: none;
+}
+
+@keyframes introFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes introTwinkle {
+  from {
+    opacity: 0.06;
+  }
+  to {
+    opacity: 0.62;
+  }
+}
+
+@keyframes introOverlayEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes introEnterButtonIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
