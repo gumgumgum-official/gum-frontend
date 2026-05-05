@@ -423,11 +423,11 @@
 
 .ggum-runner-goal-profile-slot {
   position: absolute;
-  left: 7.2%;
-  top: 11.2%;
-  width: 15.5%;
+  left: 19px;
+  top: 36px;
+  width: 20.5%;
   aspect-ratio: 1;
-  max-height: 18%;
+  max-height: 23%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -437,15 +437,28 @@
 }
 
 .ggum-runner-goal-profile-slot img {
+  position: absolute;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  transform: none;
   image-rendering: pixelated;
 }
 
 .ggum-runner-goal-my-score {
   position: absolute;
-  left: 66%;
+  left: 63%;
+  top: 17.8%;
+  font-size: clamp(10px, 2.8vw, 14px);
+  line-height: 1;
+  color: #1a1a1a;
+  pointer-events: none;
+}
+
+.ggum-runner-goal-my-rank {
+  position: absolute;
+  left: 41%;
   top: 17.8%;
   font-size: clamp(10px, 2.8vw, 14px);
   line-height: 1;
@@ -573,7 +586,7 @@
 
 .ggum-runner-goal-row-name {
   position: absolute;
-  left: 24%;
+  left: 91px;
   right: 28%;
   top: 50%;
   transform: translateY(-50%);
@@ -582,6 +595,18 @@
   color: #1a1a1a;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ggum-runner-goal-row-rank {
+  position: absolute;
+  left: 68px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8%;
+  font-size: clamp(7px, 2vw, 11px);
+  line-height: 1.2;
+  color: #69a0d7;
   white-space: nowrap;
 }
 

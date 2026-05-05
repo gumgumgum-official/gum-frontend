@@ -48,6 +48,7 @@ export function GgumRunnerMinigame({ onClose }) {
   /** `goal_list`에서만 `avatarSrc()`로 로드; 저장 화면은 슬롯 인덱스만 사용 */
   const [selectedSaveSlotIndex, setSelectedSaveSlotIndex] = useState(null);
   const [leaderboardRows, setLeaderboardRows] = useState([]);
+  const [myRank, setMyRank] = useState(null);
 
   const selectedAvatarKey =
     selectedSaveSlotIndex != null
@@ -70,6 +71,7 @@ export function GgumRunnerMinigame({ onClose }) {
       setSaveFormError("");
       setSelectedSaveSlotIndex(null);
       setLeaderboardRows([]);
+      setMyRank(null);
     },
   };
 
@@ -91,6 +93,20 @@ export function GgumRunnerMinigame({ onClose }) {
       score: fatalScore,
     });
     setLeaderboardRows(rows);
+    const latestMatchingRow = rows
+      .filter(
+        (row) =>
+          row.name === name &&
+          row.avatarKey === selectedAvatarKey &&
+          row.score === fatalScore,
+      )
+      .sort((a, b) => b.at - a.at)[0];
+    if (latestMatchingRow) {
+      const rank = rows.findIndex((row) => row.at === latestMatchingRow.at) + 1;
+      setMyRank(rank > 0 ? rank : null);
+    } else {
+      setMyRank(null);
+    }
     setPostGameStep("leaderboard");
   };
 
@@ -770,6 +786,9 @@ export function GgumRunnerMinigame({ onClose }) {
                   <img src={avatarSrc(selectedAvatarKey)} alt="" />
                 ) : null}
               </div>
+              {myRank != null ? (
+                <span className="ggum-runner-goal-my-rank">{myRank}위</span>
+              ) : null}
               <span className="ggum-runner-goal-my-score">{fatalScore}</span>
               <button
                 type="button"
@@ -780,6 +799,7 @@ export function GgumRunnerMinigame({ onClose }) {
                   setSaveName("");
                   setSaveFormError("");
                   setSelectedSaveSlotIndex(null);
+                  setMyRank(null);
                 }}
               />
               <div className="ggum-runner-goal-list-scroll">
@@ -792,6 +812,7 @@ export function GgumRunnerMinigame({ onClose }) {
                         className="ggum-runner-goal-row-thumb"
                       />
                     </div>
+                    <span className="ggum-runner-goal-row-rank">{i + 1}</span>
                     <span className="ggum-runner-goal-row-name">
                       {row.name}
                     </span>
