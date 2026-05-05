@@ -28,3 +28,8 @@
 - **태블릿**은 “어느 모니터에 붙었는지”까지만 서버 응답으로 받고, 모니터가 언제 `start`를 보내는지는 **모니터 앱**이 결정합니다.
 
 상세 API는 [API.md](../API.md) 참고.
+
+## 체험 완료 후 프론트 리셋 (`/start?complete=1`)
+
+`/start?complete=1` 진입 시 `resetClientForNextKioskVisitor()` 는 **게시판 껌딱지 투표**에 쓰인 `localStorage` 키만 제거한다 (`gum-ggumddi-my-vote:*`).  
+전체 `localStorage` / `sessionStorage` / 쿠키 / Cache Storage / GLTF 메모리 캐시는 비우지 않는다 — 다음 이용자에게 미니게임 기록·에셋 웜업 상태는 유지하고, “이미 투표했음” UI만 초기화하기 위함이다.

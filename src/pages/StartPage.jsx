@@ -17,6 +17,7 @@ import {
   waitForStage3GltfTemplatesReady,
 } from "../utils/stages/stage3/stage3GltfWarmup.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
 
 const START_BG_URL = resolvePublicAssetUrl(
   "/static/images/background_start.png",
@@ -36,6 +37,10 @@ export function StartPage() {
   /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
+
+  useEffect(() => {
+    clearGgumddiMyVotesFromLocalStorage();
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

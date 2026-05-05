@@ -8,7 +8,11 @@ import {
 } from "react";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import { getSessionId } from "../lib/session.js";
-import { postVote, fetchVoteResults } from "../lib/voteApi.js";
+import {
+  GGUMDDI_MY_VOTE_STORAGE_PREFIX,
+  fetchVoteResults,
+  postVote,
+} from "../lib/voteApi.js";
 import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 
 type VoteId = 1 | 2 | 3;
@@ -41,10 +45,8 @@ const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
 
 /** 후보 점(dot)과 같은 단색 막대 (그라데이션 없음) */
 const BAR_FILLS = ["bg-[#FF8B33]", "bg-[#c4a882]", "bg-[#FF4A89]"] as const;
-const MY_VOTE_STORAGE_PREFIX = "gum-ggumddi-my-vote";
-
 function getMyVoteStorageKey() {
-  return `${MY_VOTE_STORAGE_PREFIX}:${getSessionId()}`;
+  return `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:${getSessionId()}`;
 }
 
 function loadPersistedMyVote(): VoteId | null {
