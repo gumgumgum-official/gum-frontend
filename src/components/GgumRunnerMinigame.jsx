@@ -763,6 +763,14 @@ export function GgumRunnerMinigame({ onClose }) {
                   alt=""
                   className="ggum-runner-goal-art"
                 />
+                {saveName.trim() ? (
+                  <span
+                    className="ggum-runner-goal-name-above-trophy"
+                    aria-label={`플레이어 이름 ${saveName.trim()}`}
+                  >
+                    {saveName.trim()}
+                  </span>
+                ) : null}
                 <div className="ggum-runner-goal-profile-slot">
                   {selectedAvatarKey ? (
                     <img src={avatarSrc(selectedAvatarKey)} alt="" />
