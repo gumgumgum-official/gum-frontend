@@ -293,30 +293,42 @@
   color: rgba(0, 0, 0, 0.35);
 }
 
+/* save_modal.png 1510×870 — 카드 4칸: x 120‥1389(y 340‥619), 칸 폭 280 간격 51 */
 .ggum-runner-save-slots {
   position: absolute;
-  left: 11.2%;
-  right: 11.2%;
-  top: 28.8%;
-  height: 28.8%;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 3.35%;
+  left: calc(120 / 1510 * 100%);
+  width: calc(1270 / 1510 * 100%);
+  top: calc(340 / 870 * 100%);
+  height: calc(280 / 870 * 100%);
+  display: block;
   pointer-events: auto;
 }
 
 /* 비트맵 카드 영역 위 투명 히트만 (image_card 에셋은 로드하지 않음) */
 .ggum-runner-save-slot {
-  flex: 1 1 0;
-  min-width: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(280 / 1270 * 100%);
+  height: 100%;
   margin: 0;
   padding: 0;
   border: none;
   border-radius: 11%;
   background: transparent;
   cursor: pointer;
+}
+
+.ggum-runner-save-slot:nth-child(2) {
+  left: calc(331 / 1270 * 100%);
+}
+
+.ggum-runner-save-slot:nth-child(3) {
+  left: calc(662 / 1270 * 100%);
+}
+
+.ggum-runner-save-slot:nth-child(4) {
+  left: calc(993 / 1270 * 100%);
 }
 
 .ggum-runner-save-slot--selected {
