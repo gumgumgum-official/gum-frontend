@@ -231,10 +231,21 @@
 }
 
 .introActionSlot {
-  height: 52px;
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  min-height: 22px;
+  width: min(92vw, 640px);
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.introActionSlot > * {
+  pointer-events: auto;
 }
 
 .introHintReady {

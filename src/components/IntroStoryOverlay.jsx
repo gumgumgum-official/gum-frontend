@@ -283,10 +283,6 @@ export function IntroStoryOverlay({ onComplete }) {
           ))}
         </div>
       ) : null}
-      <div className={styles.introSceneNumber}>
-        {String(sceneIndex + 1).padStart(2, "0")} /{" "}
-        {String(INTRO_SCENES.length).padStart(2, "0")}
-      </div>
       <div className={styles.introStory}>
         <div
           className={`${styles.introFrame}${showFrame ? ` ${styles.introFrameShow}` : ""}`}
