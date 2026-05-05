@@ -42,7 +42,7 @@ export function GgumRunnerMinigame({ onClose }) {
   const jumpActionRef = useRef(() => {});
 
   const [fatalScore, setFatalScore] = useState(null);
-  const [postGameStep, setPostGameStep] = useState("form");
+  const [postGameStep, setPostGameStep] = useState("gameover");
   const [saveName, setSaveName] = useState("");
   const [saveFormError, setSaveFormError] = useState("");
   /** `goal_list`에서만 `avatarSrc()`로 로드; 저장 화면은 슬롯 인덱스만 사용 */
@@ -61,11 +61,11 @@ export function GgumRunnerMinigame({ onClose }) {
   deathBridgeRef.current = {
     onDead: (score) => {
       setFatalScore(score);
-      setPostGameStep("form");
+      setPostGameStep("gameover");
     },
     onRestartFromDeath: () => {
       setFatalScore(null);
-      setPostGameStep("form");
+      setPostGameStep("gameover");
       setSaveName("");
       setSaveFormError("");
       setSelectedSaveSlotIndex(null);
@@ -658,148 +658,153 @@ export function GgumRunnerMinigame({ onClose }) {
               />
             </div>
           </div>
-          {fatalScore !== null && postGameStep === "form" && (
-            <div className="ggum-runner-postgame-overlay">
-              <div className="ggum-runner-postgame-stack">
-                <div className="ggum-runner-sheet ggum-runner-gameover-sheet">
-                  <img
-                    src="/assets/minigame/gameover_modal.png"
-                    alt=""
-                    className="ggum-runner-sheet-art"
-                  />
-                  <span className="ggum-runner-gameover-score-digits">
-                    {fatalScore}
-                  </span>
-                  <button
-                    type="button"
-                    className="ggum-runner-gameover-hit ggum-runner-gameover-yes"
-                    aria-label="다시 시작"
-                    onClick={() => jumpActionRef.current()}
-                  />
-                  <button
-                    type="button"
-                    className="ggum-runner-gameover-hit ggum-runner-gameover-no"
-                    aria-label="미니게임 닫기"
-                    onClick={() => onClose?.()}
-                  />
-                  <button
-                    type="button"
-                    className="ggum-runner-gameover-hit ggum-runner-gameover-header-x"
-                    aria-label="닫기"
-                    onClick={() => onClose?.()}
-                  />
-                </div>
-                <div className="ggum-runner-sheet ggum-runner-save-sheet">
-                  <img
-                    src="/assets/minigame/save_modal.png"
-                    alt=""
-                    className="ggum-runner-sheet-art"
-                  />
-                  <input
-                    type="text"
-                    className="ggum-runner-save-name-input"
-                    value={saveName}
-                    onChange={(e) => {
-                      setSaveName(e.target.value);
-                      if (saveFormError) setSaveFormError("");
-                    }}
-                    placeholder="닉네임"
-                    maxLength={16}
-                    autoComplete="off"
-                  />
-                  {saveFormError ? (
-                    <p className="ggum-runner-save-error">{saveFormError}</p>
-                  ) : null}
-                  <div className="ggum-runner-save-slots">
-                    {SAVE_AVATAR_SLOTS.map((key, index) => (
+          {fatalScore !== null &&
+            (postGameStep === "gameover" || postGameStep === "save") && (
+              <div className="ggum-runner-postgame-overlay">
+                <div className="ggum-runner-postgame-stack">
+                  {postGameStep === "gameover" ? (
+                    <div className="ggum-runner-sheet ggum-runner-gameover-sheet">
+                      <img
+                        src="/assets/minigame/gameover_modal.png"
+                        alt=""
+                        className="ggum-runner-sheet-art"
+                      />
+                      <span className="ggum-runner-gameover-score-digits">
+                        {fatalScore}
+                      </span>
                       <button
-                        key={`save-slot-${index}`}
                         type="button"
-                        className={`ggum-runner-save-slot${selectedSaveSlotIndex === index ? " ggum-runner-save-slot--selected" : ""}`}
-                        onClick={() => {
-                          setSelectedSaveSlotIndex(index);
+                        className="ggum-runner-gameover-hit ggum-runner-gameover-yes"
+                        aria-label="다시 시작"
+                        onClick={() => jumpActionRef.current()}
+                      />
+                      <button
+                        type="button"
+                        className="ggum-runner-gameover-hit ggum-runner-gameover-no"
+                        aria-label="저장 화면으로"
+                        onClick={() => setPostGameStep("save")}
+                      />
+                      <button
+                        type="button"
+                        className="ggum-runner-gameover-hit ggum-runner-gameover-header-x"
+                        aria-label="닫기"
+                        onClick={() => onClose?.()}
+                      />
+                    </div>
+                  ) : (
+                    <div className="ggum-runner-sheet ggum-runner-save-sheet">
+                      <img
+                        src="/assets/minigame/save_modal.png"
+                        alt=""
+                        className="ggum-runner-sheet-art"
+                      />
+                      <input
+                        type="text"
+                        className="ggum-runner-save-name-input"
+                        value={saveName}
+                        onChange={(e) => {
+                          setSaveName(e.target.value);
                           if (saveFormError) setSaveFormError("");
                         }}
-                        aria-label={`캐릭터 슬롯 ${index + 1} 선택 (${key})`}
+                        placeholder="닉네임"
+                        maxLength={16}
+                        autoComplete="off"
                       />
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="ggum-runner-save-hit ggum-runner-save-enter"
-                    aria-label="기록 저장 및 순위 보기"
-                    onClick={handleSaveEnter}
-                  />
-                  <button
-                    type="button"
-                    className="ggum-runner-save-hit ggum-runner-save-header-x"
-                    aria-label="미니게임 닫기"
-                    onClick={() => onClose?.()}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-          {fatalScore !== null && postGameStep === "leaderboard" && (
-            <div className="ggum-runner-postgame-overlay ggum-runner-postgame-overlay--goal">
-              <div className="ggum-runner-sheet ggum-runner-goal-sheet">
-                <img
-                  src="/assets/minigame/goal_list.png"
-                  alt=""
-                  className="ggum-runner-goal-art"
-                />
-                {saveName.trim() ? (
-                  <span
-                    className="ggum-runner-goal-name-above-trophy"
-                    aria-label={`플레이어 이름 ${saveName.trim()}`}
-                  >
-                    {saveName.trim()}
-                  </span>
-                ) : null}
-                <div className="ggum-runner-goal-profile-slot">
-                  {selectedAvatarKey ? (
-                    <img src={avatarSrc(selectedAvatarKey)} alt="" />
-                  ) : null}
-                </div>
-                <span className="ggum-runner-goal-my-score">{fatalScore}</span>
-                <button
-                  type="button"
-                  className="ggum-runner-goal-hit ggum-runner-goal-close"
-                  aria-label="뒤로"
-                  onClick={() => {
-                    setPostGameStep("form");
-                    setSaveName("");
-                    setSaveFormError("");
-                    setSelectedSaveSlotIndex(null);
-                  }}
-                />
-                <div className="ggum-runner-goal-list-scroll">
-                  {leaderboardRows.map((row, i) => (
-                    <div
-                      key={`${row.at}-${i}`}
-                      className="ggum-runner-goal-row"
-                    >
-                      <div className="ggum-runner-goal-row-thumb-wrap">
-                        <img
-                          src={avatarSrc(row.avatarKey)}
-                          alt=""
-                          className="ggum-runner-goal-row-thumb"
-                        />
+                      {saveFormError ? (
+                        <p className="ggum-runner-save-error">
+                          {saveFormError}
+                        </p>
+                      ) : null}
+                      <div className="ggum-runner-save-slots">
+                        {SAVE_AVATAR_SLOTS.map((key, index) => (
+                          <button
+                            key={`save-slot-${index}`}
+                            type="button"
+                            className={`ggum-runner-save-slot${selectedSaveSlotIndex === index ? " ggum-runner-save-slot--selected" : ""}`}
+                            onClick={() => {
+                              setSelectedSaveSlotIndex(index);
+                              if (saveFormError) setSaveFormError("");
+                            }}
+                            aria-label={`캐릭터 슬롯 ${index + 1} 선택 (${key})`}
+                          />
+                        ))}
                       </div>
-                      <span className="ggum-runner-goal-row-name">
-                        {row.name}
-                      </span>
-                      <span className="ggum-runner-goal-row-score">
-                        {row.score}
-                      </span>
+                      <button
+                        type="button"
+                        className="ggum-runner-save-hit ggum-runner-save-enter"
+                        aria-label="기록 저장 및 순위 보기"
+                        onClick={handleSaveEnter}
+                      />
+                      <button
+                        type="button"
+                        className="ggum-runner-save-hit ggum-runner-save-header-x"
+                        aria-label="미니게임 닫기"
+                        onClick={() => onClose?.()}
+                      />
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       </div>
+      {fatalScore !== null && postGameStep === "leaderboard" && (
+        <div className="ggum-runner-goal-modal-layer">
+          <div className="ggum-runner-postgame-overlay ggum-runner-postgame-overlay--goal">
+            <div className="ggum-runner-sheet ggum-runner-goal-sheet">
+              <img
+                src="/assets/minigame/goal_list.png"
+                alt=""
+                className="ggum-runner-goal-art"
+              />
+              {saveName.trim() ? (
+                <span
+                  className="ggum-runner-goal-name-above-trophy"
+                  aria-label={`플레이어 이름 ${saveName.trim()}`}
+                >
+                  {saveName.trim()}
+                </span>
+              ) : null}
+              <div className="ggum-runner-goal-profile-slot">
+                {selectedAvatarKey ? (
+                  <img src={avatarSrc(selectedAvatarKey)} alt="" />
+                ) : null}
+              </div>
+              <span className="ggum-runner-goal-my-score">{fatalScore}</span>
+              <button
+                type="button"
+                className="ggum-runner-goal-hit ggum-runner-goal-close"
+                aria-label="뒤로"
+                onClick={() => {
+                  setPostGameStep("save");
+                  setSaveName("");
+                  setSaveFormError("");
+                  setSelectedSaveSlotIndex(null);
+                }}
+              />
+              <div className="ggum-runner-goal-list-scroll">
+                {leaderboardRows.map((row, i) => (
+                  <div key={`${row.at}-${i}`} className="ggum-runner-goal-row">
+                    <div className="ggum-runner-goal-row-thumb-wrap">
+                      <img
+                        src={avatarSrc(row.avatarKey)}
+                        alt=""
+                        className="ggum-runner-goal-row-thumb"
+                      />
+                    </div>
+                    <span className="ggum-runner-goal-row-name">
+                      {row.name}
+                    </span>
+                    <span className="ggum-runner-goal-row-score">
+                      {row.score}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
