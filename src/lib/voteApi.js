@@ -3,6 +3,9 @@ import { getSessionId } from "./session.js";
 /** 게시판 껌딱지 투표 UX용 — `:${getSessionId()}` 접미로 localStorage 에 저장됨 */
 export const GGUMDDI_MY_VOTE_STORAGE_PREFIX = "gum-ggumddi-my-vote";
 
+/** clientId 저장 키 — prefix 아래에 두어 kiosk 리셋 시 자동 삭제됨 */
+export const VOTE_CLIENT_ID_STORAGE_KEY = `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:clientId`;
+
 /** 다음 이용자에게 '이미 투표함' 상태가 새지 않도록 해당 키만 제거 */
 export function clearGgumddiMyVotesFromLocalStorage() {
   if (typeof window === "undefined" || !window.localStorage) return;
@@ -13,6 +16,28 @@ export function clearGgumddiMyVotesFromLocalStorage() {
     if (k != null && k.startsWith(prefix)) keys.push(k);
   }
   for (const k of keys) window.localStorage.removeItem(k);
+}
+
+/** 기존 clientId를 반환하거나 새 UUID를 생성·저장해 반환 */
+export function getOrCreateVoteClientId() {
+  try {
+    const stored = localStorage.getItem(VOTE_CLIENT_ID_STORAGE_KEY);
+    if (stored && stored.trim()) return stored.trim();
+    const id = window.crypto.randomUUID();
+    localStorage.setItem(VOTE_CLIENT_ID_STORAGE_KEY, id);
+    return id;
+  } catch {
+    return window.crypto.randomUUID();
+  }
+}
+
+/** 서버 응답 clientId를 localStorage에 저장 */
+export function saveVoteClientId(clientId) {
+  try {
+    localStorage.setItem(VOTE_CLIENT_ID_STORAGE_KEY, clientId);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** 원격 예: .env 의 VITE_GUM_SERVER_URL. 미설정 시 Vite 오리진 폴백 → 로컬에 백이 없으면 실패(.env.example, vite 프록시 참고). */
@@ -55,6 +80,24 @@ function normalizeAggregate(payload) {
         ? payload.updatedAt
         : null,
   };
+}
+
+/**
+ * @param {string} clientId
+ * @returns {Promise<1 | 2 | 3 | null>}
+ */
+export async function fetchMyVote(clientId) {
+  const base = getGumServerBaseUrl();
+  const res = await fetch(
+    `${base}/api/votes/my?clientId=${encodeURIComponent(clientId)}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (!res.ok) {
+    throw new Error(`내 투표 조회 실패 (HTTP ${res.status})`);
+  }
+  const json = await res.json();
+  const c = json?.candidate;
+  return c === 1 || c === 2 || c === 3 ? c : null;
 }
 
 /**
@@ -119,8 +162,6 @@ export async function postVote(candidate, opts = {}) {
   return { ...aggregate, selectedCandidate };
 }
 
-// TODO: 투표 변경/취소 기능 구현 후 GgumddiVoteSection.tsx에서 호출 예정
-//       (deleteMyVote: 취소, updateMyVote: 후보 변경)
 /**
  * @param {{ sessionId?: string, clientId?: string }} [opts]
  * @returns {Promise<VoteAggregate>}
