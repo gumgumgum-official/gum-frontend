@@ -535,6 +535,7 @@
 
 .ggum-runner-goal-row {
   position: relative;
+  isolation: isolate;
   flex: 0 0 auto;
   width: 100%;
   aspect-ratio: 1520 / 250;
@@ -545,12 +546,18 @@
   background-position: center;
 }
 
+.ggum-runner-goal-row > * {
+  position: relative;
+  z-index: 1;
+}
+
 .ggum-runner-goal-row--mine::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 0;
   border-radius: 5px;
-  background: rgba(255, 248, 196, 0.42);
+  background: rgba(255, 248, 196, 0.2);
   box-shadow:
     inset 0 0 0 4px #ffd400,
     0 0 8px rgba(255, 212, 0, 0.15);
