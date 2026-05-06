@@ -45,9 +45,10 @@ const GROUND_Y = 0.7;
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
 const ISLAND_BOUNDS_INSET_RATIO = 0.08;
 // 스폰 시 그 안에서 다시 앞·뒤·좌우 살짝만 더 빼기 (섬 전체에 퍼지도록 작게)
-const SPAWN_INSET_RATIO = 0.05;
-const SPAWN_INSET_SIDE_RATIO = 0.06;
-const SPAWN_INSET_BOTTOM_RATIO = 0.1;
+// 화면 기준: 위≈-X, 아래≈+X, 왼쪽≈-Z, 오른쪽≈+Z
+const SPAWN_INSET_RATIO = 0.02; // minZ(화면 왼쪽) — 왼쪽까지 넓게
+const SPAWN_INSET_SIDE_RATIO = 0.12; // X 양쪽(화면 위/아래) — 위 울타리 여유
+const SPAWN_INSET_BOTTOM_RATIO = 0.18; // maxZ(화면 오른쪽) — 오른쪽 울타리 여유
 const SPAWN_HEIGHT_MIN = 10; // 낙하 시작 높이 하한
 const SPAWN_HEIGHT_MAX = 30; // 최대 시작 높이
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
@@ -2057,7 +2058,7 @@ function getSpawnBounds(bounds) {
  *   z_gt는 MAX(임계값)
  */
 function buildSpawnExclusionZones(allModels) {
-  const MARGIN = 1.5;
+  const MARGIN = 3.5;
   const collected = { z_gt: [] };
   const found = new Set();
 
@@ -2161,10 +2162,10 @@ function pickSpawnXZ(
     return minGap;
   };
 
-  // 1단계: 충분한 간격(0.3m) → 2단계: 아주 살짝(0.05m) → 3단계: 거의 맞닿음(0) → 4단계: 약간 겹침 허용
-  const gapLevels = [0.1, -0.2, -0.6, -1.2];
+  // 1단계: 여유간격 → 2단계: 거의 닿음 → 3단계: 살짝 겹침 → 4단계: 최대 겹침 하한
+  const gapLevels = [0.6, 0.2, -0.1, -0.4];
   for (const minGap of gapLevels) {
-    for (let tryCount = 0; tryCount < 40; tryCount++) {
+    for (let tryCount = 0; tryCount < 60; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
       const z = minZ + Math.random() * (maxZ - minZ);
       if (!isValidPos(x, z)) continue;

@@ -426,3 +426,352 @@ curl -X POST http://localhost:3000/api/monitors/monitor-1/complete \
 **모니터(gum-frontend) 구현 참고**: `src/lib/monitorCurrentApi.js`, `src/stages/Stage3.js`, `src/pages/StartPage.jsx`
 
 **마지막 업데이트**: 2026-03-28
+
+### 8. 투표 등록 (Supabase)
+
+투표 1건을 등록합니다. 취소는 `DELETE /api/votes/my`, 후보 변경은 `PUT /api/votes/my`를 사용하세요.
+
+**요청**
+
+```
+POST /api/votes
+Content-Type: application/json
+```
+
+**Body**
+
+| 필드        | 필수   | 타입   | 설명                                                                                         |
+| ----------- | ------ | ------ | -------------------------------------------------------------------------------------------- |
+| `candidate` | 예     | number | 선택 후보 번호 (`1`, `2`, `3`)                                                               |
+| `clientId`  | 예     | string | 디바이스 식별자 (localStorage 등에 영구 저장한 UUID 권장). `DELETE`·`PUT`·`GET /my`에 재사용 |
+| `sessionId` | 아니오 | string | 세션 식별자                                                                                  |
+
+**응답 `200`**
+
+```json
+{
+  "ok": true,
+  "selectedCandidate": 2,
+  "clientId": "tablet-uuid-001",
+  "totalVotes": 128,
+  "results": {
+    "candidate1": 40,
+    "candidate2": 55,
+    "candidate3": 33
+  },
+  "updatedAt": "2026-03-31T09:10:11.123Z"
+}
+```
+
+**필드 설명**
+
+| 필드                   | 타입    | 설명                               |
+| ---------------------- | ------- | ---------------------------------- |
+| `ok`                   | boolean | 성공 여부 (`true`)                 |
+| `selectedCandidate`    | number  | 방금 등록된 후보 번호              |
+| `clientId`             | string  | 요청에 보낸 `clientId` 그대로 반환 |
+| `totalVotes`           | number  | 전체 누적 투표수                   |
+| `results.candidate1~3` | number  | 후보별 누적 투표수                 |
+| `updatedAt`            | string  | 집계 기준 시각 (ISO-8601)          |
+
+**에러**
+
+- `400` — `clientId` 누락: `{ "error": "clientId is required" }`
+- `400` — 후보값 누락/범위 오류: `{ "error": "candidate must be one of 1, 2, 3" }`
+- `409` — DB 유니크 제약 위반 시: `{ "error": "duplicate vote" }`
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 8-1. 내 투표 취소 (DELETE)
+
+투표를 명시적으로 취소합니다. 투표가 없어도 에러 없이 `deleted: false`로 응답합니다.
+
+**요청**
+
+```
+DELETE /api/votes/my
+Content-Type: application/json
+```
+
+**Body**
+
+| 필드       | 필수 | 타입   | 설명            |
+| ---------- | ---- | ------ | --------------- |
+| `clientId` | 예   | string | 디바이스 식별자 |
+
+**응답 `200`**
+
+```json
+{
+  "ok": true,
+  "deleted": true,
+  "totalVotes": 127,
+  "results": {
+    "candidate1": 40,
+    "candidate2": 54,
+    "candidate3": 33
+  },
+  "updatedAt": "2026-03-31T09:10:12.000Z"
+}
+```
+
+`deleted: false`이면 기존 투표가 없었음을 의미합니다.
+
+**에러**
+
+- `400` — `{ "error": "clientId is required" }`
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 8-2. 내 투표 후보 변경 (PUT)
+
+이미 투표한 후보를 다른 후보로 변경합니다. 기존 투표가 없으면 404.
+
+**요청**
+
+```
+PUT /api/votes/my
+Content-Type: application/json
+```
+
+**Body**
+
+| 필드        | 필수 | 타입   | 설명                             |
+| ----------- | ---- | ------ | -------------------------------- |
+| `clientId`  | 예   | string | 디바이스 식별자                  |
+| `candidate` | 예   | number | 변경할 후보 번호 (`1`, `2`, `3`) |
+
+**응답 `200`**
+
+```json
+{
+  "ok": true,
+  "selectedCandidate": 3,
+  "totalVotes": 128,
+  "results": {
+    "candidate1": 40,
+    "candidate2": 54,
+    "candidate3": 34
+  },
+  "updatedAt": "2026-03-31T09:10:13.000Z"
+}
+```
+
+**에러**
+
+- `400` — `{ "error": "clientId is required" }`
+- `400` — `{ "error": "candidate must be one of 1, 2, 3" }`
+- `404` — 기존 투표 없음: `{ "error": "no vote to change" }`
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 8-3. 내 투표 상태 조회
+
+페이지 재진입 시 이미 투표한 후보가 있는지 확인합니다.
+
+**요청**
+
+```
+GET /api/votes/my?clientId=<clientId>
+```
+
+**응답 `200` — 투표 있음**
+
+```json
+{ "candidate": 2 }
+```
+
+**응답 `200` — 투표 없음**
+
+```json
+{ "candidate": null }
+```
+
+**에러**
+
+- `400` — `{ "error": "clientId is required" }`
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 9. 투표 집계 조회 (읽기 전용)
+
+초기 진입, 새로고침, 전광판 동기화 시 현재 누적 투표수를 조회합니다.
+
+**요청**
+
+```
+GET /api/votes/results
+```
+
+**응답 `200`**
+
+```json
+{
+  "totalVotes": 128,
+  "results": {
+    "candidate1": 40,
+    "candidate2": 55,
+    "candidate3": 33
+  },
+  "updatedAt": "2026-03-31T09:10:11.123Z"
+}
+```
+
+**에러**
+
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 10. 점수 등록 (Supabase)
+
+유저 점수를 누적 저장합니다. 동일 `userId`가 이미 있으면 기존 점수에 더해지고, 없으면 새로 생성됩니다.
+
+**요청**
+
+```
+POST /api/scores
+Content-Type: application/json
+```
+
+**Body**
+
+| 필드     | 필수 | 타입   | 설명                                       |
+| -------- | ---- | ------ | ------------------------------------------ |
+| `userId` | 예   | string | 유저 식별자 (빈 문자열 불가, trim 후 사용) |
+| `score`  | 예   | number | 0 이상의 정수                              |
+
+**응답 `201`**
+
+```json
+{
+  "ok": true,
+  "userId": "player-001",
+  "score": 120
+}
+```
+
+**에러**
+
+- `400` — `userId` 누락/공백: `{ "error": "userId is required" }`
+- `400` — `score` 형식 오류(정수 아님 또는 음수): `{ "error": "score must be a non-negative integer" }`
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 11. 리더보드 조회 (Supabase)
+
+누적 점수 기준 리더보드를 조회합니다.
+
+점수 기준으로 높은거부터 정렬해서 반환함
+
+**요청**
+
+```
+GET /api/scores/leaderboard
+```
+
+**응답 `200`**
+
+```json
+{
+  "leaderboard": [
+    {
+      "id": 1,
+      "userId": "player-001",
+      "totalScore": 320
+    },
+    {
+      "id": 2,
+      "userId": "player-002",
+      "totalScore": 280
+    }
+  ]
+}
+```
+
+`leaderboard` 항목 구조는 `ScoreService.getLeaderboard()` 구현을 따릅니다.
+
+**에러**
+
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 12. 게시글 등록 (Supabase)
+
+게시글 1건을 저장합니다. `id`는 서버가 자동으로 1, 2, 3... 순서로 부여합니다.
+
+**요청**
+
+```
+POST /api/posts
+Content-Type: application/json
+```
+
+**Body**
+
+| 필드       | 필수   | 타입   | 설명                            |
+| ---------- | ------ | ------ | ------------------------------- | ----------------------------------- |
+| `content`  | 예     | string | 게시글 내용 (공백만인 경우 400) |
+| `nickname` | 아니오 | string | null                            | 작성자 닉네임. 없으면 `null`로 저장 |
+
+**응답 `201`**
+
+```json
+{
+  "ok": true,
+  "post": {
+    "id": 1,
+    "nickname": "홍길동",
+    "content": "재밌었어요!",
+    "created_at": "2026-04-30T10:00:00.000Z"
+  }
+}
+```
+
+**에러**
+
+- `400` — `content` 누락/공백: `{ "error": "content is required" }`
+- `500` — `{ "error": "Internal Server Error" }`
+
+---
+
+### 13. 게시글 목록 조회 (Supabase)
+
+전체 게시글을 등록 순서(`id` 오름차순)로 조회합니다.
+
+**요청**
+
+```
+GET /api/posts
+```
+
+**응답 `200`**
+
+```json
+{
+  "posts": [
+    {
+      "id": 1,
+      "nickname": "홍길동",
+      "content": "재밌었어요!",
+      "created_at": "2026-04-30T10:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "nickname": null,
+      "content": "익명 게시글입니다.",
+      "created_at": "2026-04-30T10:05:00.000Z"
+    }
+  ]
+}
+```
+
+**에러**
+
+- `500` — `{ "error": "Internal Server Error" }`
