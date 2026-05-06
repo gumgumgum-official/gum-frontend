@@ -270,7 +270,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
                       popupOpen
                         ? "translate-y-0 scale-100"
                         : "translate-y-5 scale-[0.85]"
-                    } ${isVoting ? "cursor-wait opacity-80" : ""} ${voted ? "outline outline-[3px] outline-[#FFD700] outline-offset-2" : ""} ${
+                    } ${isVoting ? "cursor-wait opacity-80" : ""} ${voted ? "outline outline-[3px] outline-black outline-offset-2" : ""} ${
                       justVotedId === id ? "animate-ggumddi-vote-pop" : ""
                     }`}
                     style={{ transitionDelay: `${tDelay}ms` }}

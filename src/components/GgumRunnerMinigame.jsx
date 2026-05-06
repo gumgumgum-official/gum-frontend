@@ -153,8 +153,10 @@ export function GgumRunnerMinigame({ onClose }) {
     setPostGameStep("gameover");
     setSaveName("");
     setSaveFormError("");
+    setIsSaving(false);
     setSelectedSaveSlotIndex(null);
     setLeaderboardRows([]);
+    setIsLeaderboardLoading(false);
     setMyRank(null);
   }, [stopMinigameBgm]);
 
@@ -172,6 +174,7 @@ export function GgumRunnerMinigame({ onClose }) {
       setPostGameStep("gameover");
       setSaveName("");
       setSaveFormError("");
+      setIsSaving(false);
       setSelectedSaveSlotIndex(null);
       setLeaderboardRows([]);
       setIsLeaderboardLoading(false);
