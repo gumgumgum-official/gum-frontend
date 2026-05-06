@@ -35,6 +35,10 @@ export function App() {
     setShowGameMachineModalShell(false);
     dispatchMinigameClose();
   }, []);
+  const handleNoticeModalClose = useCallback(() => {
+    setShowNoticeModal(false);
+    window.dispatchEvent(new CustomEvent("gum:noticeModalClosed"));
+  }, []);
 
   const closeGameMachineModalShellWithSound = useCallback(() => {
     playUiClickSound();
@@ -104,10 +108,7 @@ export function App() {
     <BrowserRouter>
       <NoticeModalBoard
         isOpen={showNoticeModal}
-        onClose={() => {
-          setShowNoticeModal(false);
-          window.dispatchEvent(new CustomEvent("gum:noticeModalClosed"));
-        }}
+        onClose={handleNoticeModalClose}
       />
       <GameMachineModalShell
         isOpen={showGameMachineModalShell}

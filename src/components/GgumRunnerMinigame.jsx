@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./GgumRunnerMinigame.css";
+import { MINIGAME_AUDIO_CONFIG } from "../config/minigameAudioConfig.js";
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { playUiClickSound } from "../utils/common/playUiClickSound.js";
@@ -70,7 +71,7 @@ export function GgumRunnerMinigame({ onClose }) {
       ? SAVE_AVATAR_SLOTS[selectedSaveSlotIndex]
       : null;
 
-  const playMinigameBgm = () => {
+  const playMinigameBgm = useCallback(() => {
     try {
       if (!minigameBgmRef.current) {
         const audio = new window.Audio(
@@ -78,7 +79,7 @@ export function GgumRunnerMinigame({ onClose }) {
         );
         audio.preload = "auto";
         audio.loop = true;
-        audio.volume = 0.5;
+        audio.volume = MINIGAME_AUDIO_CONFIG.bgmVolume;
         minigameBgmRef.current = audio;
       }
       const audio = minigameBgmRef.current;
@@ -87,9 +88,9 @@ export function GgumRunnerMinigame({ onClose }) {
     } catch {
       // ignore
     }
-  };
+  }, []);
 
-  const stopMinigameBgm = () => {
+  const stopMinigameBgm = useCallback(() => {
     const audio = minigameBgmRef.current;
     if (!audio) return;
     try {
@@ -98,16 +99,16 @@ export function GgumRunnerMinigame({ onClose }) {
     } catch {
       // ignore
     }
-  };
+  }, []);
 
-  const playMinigameGameoverSfx = () => {
+  const playMinigameGameoverSfx = useCallback(() => {
     try {
       if (!minigameGameoverSfxRef.current) {
         const audio = new window.Audio(
           resolvePublicAssetUrl(MINIGAME_GAMEOVER_SFX_PATH),
         );
         audio.preload = "auto";
-        audio.volume = 0.8;
+        audio.volume = MINIGAME_AUDIO_CONFIG.gameoverSfxVolume;
         minigameGameoverSfxRef.current = audio;
       }
       const audio = minigameGameoverSfxRef.current;
@@ -116,16 +117,16 @@ export function GgumRunnerMinigame({ onClose }) {
     } catch {
       // ignore
     }
-  };
+  }, []);
 
-  const playMinigameJumpSfx = () => {
+  const playMinigameJumpSfx = useCallback(() => {
     try {
       if (!minigameJumpSfxRef.current) {
         const audio = new window.Audio(
           resolvePublicAssetUrl(MINIGAME_JUMP_SFX_PATH),
         );
         audio.preload = "auto";
-        audio.volume = 0.7;
+        audio.volume = MINIGAME_AUDIO_CONFIG.jumpSfxVolume;
         minigameJumpSfxRef.current = audio;
       }
       const audio = minigameJumpSfxRef.current;
@@ -134,15 +135,15 @@ export function GgumRunnerMinigame({ onClose }) {
     } catch {
       // ignore
     }
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     playUiClickSound();
     stopMinigameBgm();
     onClose?.();
-  };
+  }, [onClose, stopMinigameBgm]);
 
-  const handleResetToStart = () => {
+  const handleResetToStart = useCallback(() => {
     playUiClickSound();
     stopMinigameBgm();
     resetToStartActionRef.current();
@@ -153,7 +154,7 @@ export function GgumRunnerMinigame({ onClose }) {
     setSelectedSaveSlotIndex(null);
     setLeaderboardRows([]);
     setMyRank(null);
-  };
+  }, [stopMinigameBgm]);
 
   const deathBridgeRef = useRef({
     onDead: (_score) => {},
