@@ -481,12 +481,12 @@ export function StartPage() {
       }
     }
 
-    const fadePromise =
-      introBgmNodesRef.current.source != null
-        ? fadeOutIntroBgm(700)
-        : fadeOutIntroBgmHtml(700);
-    const navPromise = navigateToKioskAfterWarmup();
-    await Promise.allSettled([fadePromise, navPromise]);
+    if (introBgmNodesRef.current.source != null) {
+      await fadeOutIntroBgm(700);
+    } else {
+      await fadeOutIntroBgmHtml(700);
+    }
+    await navigateToKioskAfterWarmup();
   }, [
     fadeOutIntroBgm,
     fadeOutIntroBgmHtml,
@@ -495,12 +495,61 @@ export function StartPage() {
   ]);
 
   const handleStart = useCallback(() => {
+    // #region agent log
+    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "223f13",
+      },
+      body: JSON.stringify({
+        sessionId: "223f13",
+        runId: "pre-fix",
+        hypothesisId: "H1",
+        location: "StartPage.jsx:handleStart:entry",
+        message: "handleStart invoked",
+        data: {
+          isCompletingKioskSession,
+          isPreparingKiosk,
+          isIntroOpen,
+          isStartFadingOut,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     if (
       isCompletingKioskSession ||
       isPreparingKiosk ||
       isIntroOpen ||
       isStartFadingOut
     ) {
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "223f13",
+          },
+          body: JSON.stringify({
+            sessionId: "223f13",
+            runId: "pre-fix",
+            hypothesisId: "H2",
+            location: "StartPage.jsx:handleStart:guard",
+            message: "handleStart blocked by guard",
+            data: {
+              isCompletingKioskSession,
+              isPreparingKiosk,
+              isIntroOpen,
+              isStartFadingOut,
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
       return;
     }
     const startSfx = audioBuffersRef.current.startSfx;
@@ -531,6 +580,24 @@ export function StartPage() {
     void ensureStage3Warmup();
     setIsStartFadingOut(true);
     setIsIntroOpen(true);
+    // #region agent log
+    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "223f13",
+      },
+      body: JSON.stringify({
+        sessionId: "223f13",
+        runId: "pre-fix",
+        hypothesisId: "H1",
+        location: "StartPage.jsx:handleStart:setState",
+        message: "set fade-out and intro-open requested",
+        data: {},
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
   }, [
     ensureStage3Warmup,
     ensureAudioCtx,
@@ -598,12 +665,61 @@ export function StartPage() {
     <div
       className={startPageClassName}
       style={{ backgroundImage: `url("${START_BG_URL}")` }}
-      onClick={handleStart}
+      onPointerDown={handleStart}
     >
       <div
         className={`${styles.startOverlay}${isStartFadingOut ? ` ${styles.startOverlayFadeOut}` : ""}`}
+        onTransitionStart={(event) => {
+          if (event.propertyName !== "opacity") return;
+          // #region agent log
+          fetch(
+            "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Debug-Session-Id": "223f13",
+              },
+              body: JSON.stringify({
+                sessionId: "223f13",
+                runId: "pre-fix",
+                hypothesisId: "H3",
+                location: "StartPage.jsx:startOverlay:onTransitionStart",
+                message: "start overlay fade transition started",
+                data: { propertyName: event.propertyName },
+                timestamp: Date.now(),
+              }),
+            },
+          ).catch(() => {});
+          // #endregion
+        }}
       >
-        <div className={styles.startButtonHit}>
+        <div
+          className={styles.startButtonHit}
+          onPointerDown={() => {
+            // #region agent log
+            fetch(
+              "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Debug-Session-Id": "223f13",
+                },
+                body: JSON.stringify({
+                  sessionId: "223f13",
+                  runId: "pre-fix",
+                  hypothesisId: "H4",
+                  location: "StartPage.jsx:startButtonHit:onPointerDown",
+                  message: "start button pointer down",
+                  data: {},
+                  timestamp: Date.now(),
+                }),
+              },
+            ).catch(() => {});
+            // #endregion
+          }}
+        >
           <img
             className={styles.startButtonImg}
             src={START_BTN_URL}
@@ -611,6 +727,35 @@ export function StartPage() {
             width={1024}
             height={388}
             decoding="async"
+            onTransitionStart={(event) => {
+              if (
+                event.propertyName !== "transform" &&
+                event.propertyName !== "filter"
+              ) {
+                return;
+              }
+              // #region agent log
+              fetch(
+                "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-Debug-Session-Id": "223f13",
+                  },
+                  body: JSON.stringify({
+                    sessionId: "223f13",
+                    runId: "pre-fix",
+                    hypothesisId: "H4",
+                    location: "StartPage.jsx:startButtonImg:onTransitionStart",
+                    message: "start button visual transition started",
+                    data: { propertyName: event.propertyName },
+                    timestamp: Date.now(),
+                  }),
+                },
+              ).catch(() => {});
+              // #endregion
+            }}
           />
         </div>
         {toastMessage ? (

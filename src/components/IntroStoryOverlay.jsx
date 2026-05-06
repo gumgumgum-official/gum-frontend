@@ -5,6 +5,7 @@ const FIRST_LINE_DELAY_MS = 500;
 const REST_LINES_DELAY_MS = 1700;
 const LAST_LINE_DELAY_MS = 2600;
 const ADVANCE_HINT_DELAY_MS = 1200;
+const INTRO_OVERLAY_ENTER_MS = 750;
 
 const INTRO_SCENES = [
   {
@@ -127,9 +128,10 @@ export function IntroStoryOverlay({ onComplete }) {
     setShowAdvanceHint(false);
 
     const timers = [];
+    const firstSceneStartDelay = isFirstScene ? INTRO_OVERLAY_ENTER_MS : 0;
     const frameTimer = window.setTimeout(() => {
       setShowFrame(true);
-    }, FIRST_LINE_DELAY_MS);
+    }, FIRST_LINE_DELAY_MS + firstSceneStartDelay);
     timers.push(frameTimer);
 
     if (scene.sequentialAll) {
@@ -142,27 +144,27 @@ export function IntroStoryOverlay({ onComplete }) {
           if (idx === scene.lines.length - 1) {
             setCanAdvance(true);
           }
-        }, delayMs);
+        }, delayMs + firstSceneStartDelay);
         timers.push(timer);
       });
     } else {
       const firstTimer = window.setTimeout(() => {
         setShowFirstLine(true);
-      }, FIRST_LINE_DELAY_MS);
+      }, FIRST_LINE_DELAY_MS + firstSceneStartDelay);
       if (scene.splitLastLine) {
         const midTimer = window.setTimeout(() => {
           setShowRestLines(true);
-        }, REST_LINES_DELAY_MS);
+        }, REST_LINES_DELAY_MS + firstSceneStartDelay);
         const lastTimer = window.setTimeout(() => {
           setShowLastLine(true);
           setCanAdvance(true);
-        }, LAST_LINE_DELAY_MS);
+        }, LAST_LINE_DELAY_MS + firstSceneStartDelay);
         timers.push(firstTimer, midTimer, lastTimer);
       } else {
         const restTimer = window.setTimeout(() => {
           setShowRestLines(true);
           setCanAdvance(true);
-        }, REST_LINES_DELAY_MS);
+        }, REST_LINES_DELAY_MS + firstSceneStartDelay);
         timers.push(firstTimer, restTimer);
       }
     }
@@ -170,7 +172,7 @@ export function IntroStoryOverlay({ onComplete }) {
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [scene, sceneIndex]);
+  }, [isFirstScene, scene, sceneIndex]);
 
   useEffect(() => {
     if (!canAdvance) {

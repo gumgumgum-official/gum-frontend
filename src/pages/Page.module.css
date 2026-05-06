@@ -163,7 +163,7 @@
 }
 
 .introFrameShow {
-  animation: introFadeUp 0.5s ease forwards;
+  animation: introFadeUp 0.9s ease forwards;
 }
 
 .introFrameFinal {
@@ -213,7 +213,7 @@
 }
 
 .introNarrLineShow {
-  animation: introFadeUp 0.46s ease forwards;
+  animation: introFadeUp 0.78s ease forwards;
 }
 
 .introNarrLineAccent {
