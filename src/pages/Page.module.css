@@ -148,7 +148,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: clamp(26px, 4.5vw, 40px);
 }
 
 .introFrame {
@@ -164,6 +164,27 @@
 
 .introFrameShow {
   animation: introFadeUp 0.5s ease forwards;
+}
+
+.introFrameFinal {
+  position: relative;
+}
+
+.introFrameFinal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 90% 80% at 50% 42%,
+    transparent 20%,
+    rgba(5, 8, 20, 0.5) 100%
+  );
+}
+
+.introFrameFinal .introFrameImage {
+  filter: blur(0.35px) saturate(0.75) brightness(0.72) contrast(0.94);
 }
 
 .introFrameImage {
@@ -233,7 +254,7 @@
 .introActionSlot {
   position: absolute;
   left: 50%;
-  bottom: 44px;
+  bottom: 30px;
   transform: translateX(-50%);
   min-height: 22px;
   width: min(92vw, 640px);
@@ -282,10 +303,15 @@
 }
 
 .introEnterButton {
-  border: none;
-  border-radius: 999px;
-  background: #ff8c69;
-  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #1f3558;
+  border-radius: 50px;
+  background: #081225;
+  color: #a8c4e8;
+  font-family: "Pretendard", sans-serif;
   font-size: 15px;
   font-weight: 700;
   padding: 12px 34px;
@@ -294,10 +320,38 @@
   transition:
     transform 0.14s ease,
     box-shadow 0.14s ease,
-    filter 0.14s ease;
-  box-shadow: 0 4px 20px rgba(255, 140, 105, 0.42);
+    border-color 0.14s ease,
+    background-color 0.14s ease;
+  box-shadow: none;
   opacity: 0;
   transform: translateY(4px);
+}
+
+.introEnterButtonEmoji {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.introEnterButtonIsland {
+  display: block;
+  height: 22px;
+  width: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.introEnterButtonLabel {
+  flex-shrink: 0;
+}
+
+.introEnterButtonArrow {
+  flex-shrink: 0;
+  display: inline-block;
+  transition: transform 0.14s ease;
+  font-weight: 700;
 }
 
 .introEnterButtonShow {
@@ -305,8 +359,14 @@
 }
 
 .introEnterButton:hover {
+  background: #0c162c;
+  border-color: #3968a8;
+  box-shadow: 0 0 20px rgba(16, 28, 52, 0.65);
   transform: scale(1.04);
-  filter: brightness(1.03);
+}
+
+.introEnterButton:hover .introEnterButtonArrow {
+  transform: translateX(4px);
 }
 
 .introEnterButton:active {
@@ -317,7 +377,7 @@
   opacity: 0.55;
   cursor: default;
   transform: none;
-  filter: none;
+  box-shadow: none;
 }
 
 @keyframes introFadeUp {

@@ -72,7 +72,7 @@ const INTRO_SCENES = [
   },
   {
     background: "radial-gradient(ellipse at 50% 40%, #0f1820 0%, #080d12 70%)",
-    imageSrc: "/assets/intro_story/6.svg",
+    imageSrc: "/assets/intro_story/7.svg",
     lines: [
       "다인이는 걱정을 훌훌 털어버리고",
       "다시 일상으로 돌아갈 수 있었답니다.",
@@ -249,10 +249,21 @@ export function IntroStoryOverlay({ onComplete }) {
         handleBack();
         return;
       }
-      if (event.code === "Space" || event.code === "ArrowRight") {
-        event.preventDefault();
-        handleAdvance();
+      if (event.code !== "Enter" && event.code !== "ArrowRight") {
+        return;
       }
+      if (
+        event.code === "Enter" &&
+        typeof globalThis.HTMLElement !== "undefined" &&
+        event.target instanceof globalThis.HTMLElement &&
+        event.target.closest(
+          "button, a[href], input, textarea, select, [role='button']",
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      handleAdvance();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
@@ -285,7 +296,7 @@ export function IntroStoryOverlay({ onComplete }) {
       ) : null}
       <div className={styles.introStory}>
         <div
-          className={`${styles.introFrame}${showFrame ? ` ${styles.introFrameShow}` : ""}`}
+          className={`${styles.introFrame}${showFrame ? ` ${styles.introFrameShow}` : ""}${isFinalScene ? ` ${styles.introFrameFinal}` : ""}`}
         >
           <img
             className={styles.introFrameImage}
@@ -313,20 +324,30 @@ export function IntroStoryOverlay({ onComplete }) {
                   onComplete?.();
                 }}
               >
-                섬으로 들어가기 →
+                <span
+                  className={styles.introEnterButtonEmoji}
+                  aria-hidden="true"
+                >
+                  <img
+                    src="/assets/island.svg"
+                    alt=""
+                    className={styles.introEnterButtonIsland}
+                    draggable={false}
+                    decoding="async"
+                  />
+                </span>
+                <span className={styles.introEnterButtonLabel}>
+                  껌딱지 월드로 들어가기
+                </span>
+                <span
+                  className={styles.introEnterButtonArrow}
+                  aria-hidden="true"
+                >
+                  →
+                </span>
               </button>
             ) : null
-          ) : (
-            <div
-              className={`${styles.introHint}${showAdvanceHint ? ` ${styles.introHintReady}` : ""}`}
-            >
-              {canAdvance
-                ? isFinalScene
-                  ? "준비됐어! 버튼을 눌러 들어가자"
-                  : "클릭해서 넘기기 →"
-                : ""}
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
       <div className={styles.introNav}>
