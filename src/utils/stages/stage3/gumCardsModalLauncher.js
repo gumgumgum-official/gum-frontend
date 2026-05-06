@@ -50,6 +50,24 @@ function playRandomTentModalSound() {
   const src = resolvePublicAssetUrl(rel);
   const audio = new window.Audio();
   const v = Number(STAGE3_OBJECTS_CONFIG.tent?.tentSoundVolume ?? 0.28);
+  // #region agent log
+  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "223f13",
+    },
+    body: JSON.stringify({
+      sessionId: "223f13",
+      runId: "pre-fix-volume",
+      hypothesisId: "H1",
+      location: "gumCardsModalLauncher.js:playRandomTentModalSound",
+      message: "tent sound volume applied",
+      data: { configuredVolume: v, src },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   applyExtendedAudioVolume(audio, v);
   audio.preload = "auto";
   audio.src = src;

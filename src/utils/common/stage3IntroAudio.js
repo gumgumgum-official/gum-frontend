@@ -47,6 +47,28 @@ function cancelStage3BackgroundTimers() {
 function stopStage3BackgroundAmbient() {
   cancelStage3BackgroundTimers();
   if (!stage3BackgroundAudio) return;
+  // #region agent log
+  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "223f13",
+    },
+    body: JSON.stringify({
+      sessionId: "223f13",
+      runId: "pre-fix",
+      hypothesisId: "H1",
+      location: "stage3IntroAudio.js:stopStage3BackgroundAmbient",
+      message: "stop background ambient called",
+      data: {
+        paused: stage3BackgroundAudio.paused,
+        volume: stage3BackgroundAudio.volume,
+        currentTime: stage3BackgroundAudio.currentTime,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   stage3BackgroundAudio.pause();
   stage3BackgroundAudio.currentTime = 0;
   stage3BackgroundAudio.volume = 0;
@@ -70,10 +92,57 @@ function startStage3BackgroundFadeIn() {
   a.volume = 0;
   a.currentTime = 0;
 
+  // #region agent log
+  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "223f13",
+    },
+    body: JSON.stringify({
+      sessionId: "223f13",
+      runId: "pre-fix",
+      hypothesisId: "H2",
+      location: "stage3IntroAudio.js:startStage3BackgroundFadeIn:init",
+      message: "background fade-in init",
+      data: { targetVol, fadeSec, paused: a.paused },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   let fadeT0 = null;
   const tick = (now) => {
     stage3BackgroundFadeRafId = 0;
     if (!stage3BackgroundAudio || stage3BackgroundAudio !== a || a.paused) {
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "223f13",
+          },
+          body: JSON.stringify({
+            sessionId: "223f13",
+            runId: "pre-fix",
+            hypothesisId: "H3",
+            location:
+              "stage3IntroAudio.js:startStage3BackgroundFadeIn:tick:stop",
+            message: "fade tick stopped early",
+            data: {
+              missing: !stage3BackgroundAudio,
+              sameRef: stage3BackgroundAudio === a,
+              paused: a.paused,
+              volume: a.volume,
+              currentTime: a.currentTime,
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
       return;
     }
     if (fadeT0 === null) fadeT0 = now;
@@ -82,23 +151,160 @@ function startStage3BackgroundFadeIn() {
     a.volume = targetVol * u;
     if (u < 1) {
       stage3BackgroundFadeRafId = requestAnimationFrame(tick);
+    } else {
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "223f13",
+          },
+          body: JSON.stringify({
+            sessionId: "223f13",
+            runId: "pre-fix",
+            hypothesisId: "H2",
+            location:
+              "stage3IntroAudio.js:startStage3BackgroundFadeIn:tick:done",
+            message: "fade tick done",
+            data: { volume: a.volume, currentTime: a.currentTime },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
     }
   };
 
   a.play()
     .then(() => {
       if (!stage3BackgroundAudio || stage3BackgroundAudio !== a || a.paused) {
+        // #region agent log
+        fetch(
+          "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "223f13",
+            },
+            body: JSON.stringify({
+              sessionId: "223f13",
+              runId: "pre-fix",
+              hypothesisId: "H4",
+              location:
+                "stage3IntroAudio.js:startStage3BackgroundFadeIn:play:then",
+              message: "play resolved but cannot start fade",
+              data: {
+                missing: !stage3BackgroundAudio,
+                sameRef: stage3BackgroundAudio === a,
+                paused: a.paused,
+                volume: a.volume,
+                currentTime: a.currentTime,
+              },
+              timestamp: Date.now(),
+            }),
+          },
+        ).catch(() => {});
+        // #endregion
         return;
       }
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "223f13",
+          },
+          body: JSON.stringify({
+            sessionId: "223f13",
+            runId: "pre-fix",
+            hypothesisId: "H2",
+            location:
+              "stage3IntroAudio.js:startStage3BackgroundFadeIn:play:then",
+            message: "play resolved; starting fade tick",
+            data: {
+              paused: a.paused,
+              volume: a.volume,
+              currentTime: a.currentTime,
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
       stage3BackgroundFadeRafId = requestAnimationFrame(tick);
     })
-    .catch(() => {});
+    .catch((e) => {
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "223f13",
+          },
+          body: JSON.stringify({
+            sessionId: "223f13",
+            runId: "pre-fix",
+            hypothesisId: "H4",
+            location:
+              "stage3IntroAudio.js:startStage3BackgroundFadeIn:play:catch",
+            message: "play rejected",
+            data: { name: e?.name, message: String(e?.message ?? "") },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
+    });
 }
 
 function scheduleStage3BackgroundAmbientAfterIntro() {
   cancelStage3BackgroundTimers();
+  // #region agent log
+  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "223f13",
+    },
+    body: JSON.stringify({
+      sessionId: "223f13",
+      runId: "pre-fix",
+      hypothesisId: "H1",
+      location: "stage3IntroAudio.js:scheduleStage3BackgroundAmbientAfterIntro",
+      message: "scheduled background ambient after intro",
+      data: { delaySec: STAGE3_BACKGROUND_DELAY_AFTER_INTRO_SEC },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   stage3BackgroundDelayTimeoutId = window.setTimeout(() => {
     stage3BackgroundDelayTimeoutId = 0;
+    // #region agent log
+    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "223f13",
+      },
+      body: JSON.stringify({
+        sessionId: "223f13",
+        runId: "pre-fix",
+        hypothesisId: "H1",
+        location:
+          "stage3IntroAudio.js:scheduleStage3BackgroundAmbientAfterIntro:fire",
+        message: "background ambient timer fired",
+        data: {},
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     startStage3BackgroundFadeIn();
   }, STAGE3_BACKGROUND_DELAY_AFTER_INTRO_SEC * 1000);
 }

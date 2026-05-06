@@ -1761,7 +1761,7 @@ export function Stage3() {
     if (!gameMachineClickAudio) {
       gameMachineClickAudio = new window.Audio();
       gameMachineClickAudio.preload = "auto";
-      gameMachineClickAudio.volume = 0.5;
+      gameMachineClickAudio.volume = 1;
     }
     gameMachineClickAudio.pause();
     gameMachineClickAudio.currentTime = 0;

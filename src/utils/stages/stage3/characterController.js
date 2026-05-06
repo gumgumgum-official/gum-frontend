@@ -136,7 +136,26 @@ export function createCharacterController({
       walkAudio.loop = true;
       walkAudio.src = resolvePublicAssetUrl(WALK_SOUND_REL);
     }
-    walkAudio.volume = getWalkSoundVolume();
+    const walkVolume = getWalkSoundVolume();
+    // #region agent log
+    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "223f13",
+      },
+      body: JSON.stringify({
+        sessionId: "223f13",
+        runId: "pre-fix-volume",
+        hypothesisId: "H2",
+        location: "characterController.js:syncWalkSound",
+        message: "walk sound volume applied",
+        data: { walkVolume, paused: walkAudio.paused },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    walkAudio.volume = walkVolume;
     if (walkAudio.paused) walkAudio.play().catch(() => {});
   }
 
@@ -259,12 +278,9 @@ export function createCharacterController({
             spawnX += off.x ?? 0;
             spawnZ += off.z ?? 0;
           }
-          const spawnRotationRadRaw = Number(
-            config.character?.spawnRotationRad,
-          );
-          const spawnRotationDegRaw = Number(
-            config.character?.spawnRotationDeg,
-          );
+          const charCfg = /** @type {any} */ (config.character);
+          const spawnRotationRadRaw = Number(charCfg?.spawnRotationRad);
+          const spawnRotationDegRaw = Number(charCfg?.spawnRotationDeg);
           const spawnYaw = Number.isFinite(spawnRotationRadRaw)
             ? spawnRotationRadRaw
             : Number.isFinite(spawnRotationDegRaw)

@@ -27,7 +27,7 @@ export const STAGE3_CHARACTER_CONFIG = {
     cameraYawAssistReturnEaseSec: 0.52,
     cameraYawAssistMaxDistance: 42,
     cameraYawAssistOnlyWhenMoving: true,
-    walkSoundVolume: 0.04, // 이동 시 걷기 루프 볼륨 (0~1)
+    walkSoundVolume: 0.5, // 이동 시 걷기 루프 볼륨 (0~1)
     lookAtHeightOffset: 0.9, // lookAt 시 캐릭터 기준점을 낮춰 화면에서 캐릭터를 살짝 위로 배치
     /** true면 펀치 애니를 GLB 클립 끝에서 역재생(맞춤 타격 타이밍은 동일 프레임 기준 유지) */
     punchAnimationReverse: true,

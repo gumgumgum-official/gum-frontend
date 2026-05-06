@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
+import { playUiClickSound } from "../utils/common/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
@@ -33,18 +34,22 @@ const POSTER_BASE = {
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
   const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "icecream" | null
+  const closeWithSound = () => {
+    playUiClickSound();
+    onClose();
+  };
 
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
         if (zoomedPoster) setZoomedPoster(null);
-        else onClose();
+        else closeWithSound();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose, zoomedPoster]);
+  }, [isOpen, closeWithSound, zoomedPoster]);
 
   useEffect(() => {
     if (!isOpen) setZoomedPoster(null);
@@ -59,7 +64,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
+            if (e.target === e.currentTarget) closeWithSound();
           }}
           style={{
             position: "fixed",
@@ -121,7 +126,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
             </div>
             <button
               type="button"
-              onClick={() => onClose()}
+              onClick={() => closeWithSound()}
               aria-label="닫기"
               style={{
                 position: "absolute",
@@ -129,6 +134,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 right: "12px",
                 width: "32px",
                 height: "32px",
+                padding: 0,
                 border: "none",
                 borderRadius: "50%",
                 background: "transparent",
@@ -136,6 +142,9 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 lineHeight: 1,
                 cursor: "pointer",
                 color: "rgba(255, 251, 235, 0.8)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 transition: "color 0.2s, background 0.2s",
                 zIndex: 5,
               }}
@@ -148,7 +157,12 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 e.currentTarget.style.background = "transparent";
               }}
             >
-              ×
+              <span
+                aria-hidden="true"
+                style={{ transform: "translateY(-1px)" }}
+              >
+                ×
+              </span>
             </button>
             <div
               style={{
