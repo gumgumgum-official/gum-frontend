@@ -1,5 +1,20 @@
 import { getSessionId } from "./session.js";
 
+/** 게시판 껌딱지 투표 UX용 — `:${getSessionId()}` 접미로 localStorage 에 저장됨 */
+export const GGUMDDI_MY_VOTE_STORAGE_PREFIX = "gum-ggumddi-my-vote";
+
+/** 다음 이용자에게 '이미 투표함' 상태가 새지 않도록 해당 키만 제거 */
+export function clearGgumddiMyVotesFromLocalStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  const prefix = `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:`;
+  const keys = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const k = window.localStorage.key(i);
+    if (k != null && k.startsWith(prefix)) keys.push(k);
+  }
+  for (const k of keys) window.localStorage.removeItem(k);
+}
+
 /** 원격 예: .env 의 VITE_GUM_SERVER_URL. 미설정 시 Vite 오리진 폴백 → 로컬에 백이 없으면 실패(.env.example, vite 프록시 참고). */
 function getGumServerBaseUrl() {
   const raw =
