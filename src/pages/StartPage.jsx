@@ -26,6 +26,9 @@ const START_BG_URL = resolvePublicAssetUrl(
 const START_BTN_URL = resolvePublicAssetUrl(
   "/static/images/start_button_pink.png",
 );
+const START_CLICK_SFX_URL = resolvePublicAssetUrl(
+  "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3",
+);
 
 export function StartPage() {
   const navigate = useNavigate();
@@ -37,10 +40,23 @@ export function StartPage() {
   const [isPreparingKiosk, setIsPreparingKiosk] = useState(false);
   const [isIntroOpen, setIsIntroOpen] = useState(false);
   const [isStartFadingOut, setIsStartFadingOut] = useState(false);
+  const startClickAudioRef = useRef(null);
   /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
   const stage3WarmupPromiseRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      if (!startClickAudioRef.current) {
+        startClickAudioRef.current = new window.Audio(START_CLICK_SFX_URL);
+        startClickAudioRef.current.preload = "auto";
+        startClickAudioRef.current.load();
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -186,6 +202,17 @@ export function StartPage() {
     ) {
       return;
     }
+    try {
+      if (!startClickAudioRef.current) {
+        startClickAudioRef.current = new window.Audio(START_CLICK_SFX_URL);
+        startClickAudioRef.current.preload = "auto";
+        startClickAudioRef.current.load();
+      }
+      startClickAudioRef.current.currentTime = 0;
+      startClickAudioRef.current.play().catch(() => {});
+    } catch {
+      // ignore
+    }
     void ensureStage3Warmup();
     setIsStartFadingOut(true);
     setIsIntroOpen(true);
@@ -195,6 +222,7 @@ export function StartPage() {
     isIntroOpen,
     isPreparingKiosk,
     isStartFadingOut,
+    startClickAudioRef,
   ]);
 
   useEffect(() => {
