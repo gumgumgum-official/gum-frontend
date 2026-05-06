@@ -49,8 +49,12 @@ import {
   fetchMonitorCurrent,
   postMonitorStart,
 } from "../lib/monitorCurrentApi.js";
-import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
-import { stopStage3IntroAudio } from "../utils/common/stage3IntroAudio.js";
+import {
+  pauseStage3BackgroundAmbientForOverlay,
+  playStage3IntroAudioTwice,
+  resumeStage3BackgroundAmbientFromOverlay,
+  stopStage3IntroAudio,
+} from "../utils/common/stage3IntroAudio.js";
 import {
   playRandomNoticePaperSound,
   disposeNoticePaperAudio,
@@ -121,7 +125,7 @@ const ICECREAM_LAND_SOUND_PATHS = [
 
 /** 게임기(INT_gameMachine) 클릭 시 — 파일명에 `#` 있으면 Vite 정적 서버가 MP3로 매핑하지 못함 */
 const GAME_MACHINE_CLICK_SOUND_PATH =
-  "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3";
+  "/static/sounds/minigame/start_click_sfx.mp3";
 
 /** island `INT_StreetLight*` 근접 시 사운드 재생 */
 const STREET_LIGHT_NAME_PREFIX = "INT_StreetLight";
@@ -1453,6 +1457,7 @@ export function Stage3() {
         hideStage3InteractionBubbles();
         flushQueuedStampStepOnModalClose("gameMachine");
         syncStampPanelVisibilityByOverlay();
+        resumeStage3BackgroundAmbientFromOverlay();
         closeMinigame({
           camera: cameraRef,
           orbitControls: debugControls?.getOrbitControls?.() ?? null,
@@ -1753,6 +1758,7 @@ export function Stage3() {
     clearStage3MovementInputs();
     hideStage3InteractionBubbles();
     syncStampPanelVisibilityByOverlay();
+    pauseStage3BackgroundAmbientForOverlay();
     window.dispatchEvent(new CustomEvent("gum:showGameMachineModal"));
   }
 
@@ -1761,7 +1767,7 @@ export function Stage3() {
     if (!gameMachineClickAudio) {
       gameMachineClickAudio = new window.Audio();
       gameMachineClickAudio.preload = "auto";
-      gameMachineClickAudio.volume = 0.5;
+      gameMachineClickAudio.volume = 1;
     }
     gameMachineClickAudio.pause();
     gameMachineClickAudio.currentTime = 0;

@@ -342,7 +342,7 @@ body {
 
 .stage3-stamp-panel.stage3-stamp-panel--intro-center.stage3-stamp-panel--intro-fly {
   transition: transform 0.78s cubic-bezier(0.2, 0.8, 0.15, 1);
-  transform: translate(calc(-50vw + 16px), calc(-44vh + 16px)) scale(0.52);
+  transform: translate(calc(-50vw + 30px), calc(-44vh + 30px)) scale(0.52);
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--settling {

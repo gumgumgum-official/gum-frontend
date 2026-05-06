@@ -179,12 +179,13 @@
   overflow-y: auto;
   background: rgba(24, 35, 19, 0.42);
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: auto;
-  scrollbar-color: #517545 rgba(12, 20, 8, 0.6);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .ggum-runner-postgame-overlay::-webkit-scrollbar {
-  width: 18px;
+  width: 0;
+  height: 0;
 }
 
 .ggum-runner-postgame-overlay::-webkit-scrollbar-button {
@@ -407,12 +408,12 @@
 /* goal_list.png 1800×2000 — 트로피 우측·헤더 상단 (점수 숫자 열과 정렬감 유지) */
 .ggum-runner-goal-name-above-trophy {
   position: absolute;
-  left: 34%;
-  top: 12%;
+  left: 44%;
+  top: 44px;
   transform: translateX(-50%);
   max-width: 34%;
   box-sizing: border-box;
-  font-size: clamp(7px, 1.85vw, 11px);
+  font-size: clamp(10px, 2.6vw, 15px);
   line-height: 1.35;
   color: #1a1a1a;
   text-align: center;
@@ -425,11 +426,11 @@
 
 .ggum-runner-goal-profile-slot {
   position: absolute;
-  left: 7.2%;
-  top: 11.2%;
-  width: 15.5%;
+  left: 19px;
+  top: 36px;
+  width: 20.5%;
   aspect-ratio: 1;
-  max-height: 18%;
+  max-height: 23%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -439,15 +440,28 @@
 }
 
 .ggum-runner-goal-profile-slot img {
+  position: absolute;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  transform: none;
   image-rendering: pixelated;
 }
 
 .ggum-runner-goal-my-score {
   position: absolute;
-  left: 66%;
+  left: 63%;
+  top: 17.8%;
+  font-size: clamp(10px, 2.8vw, 14px);
+  line-height: 1;
+  color: #1a1a1a;
+  pointer-events: none;
+}
+
+.ggum-runner-goal-my-rank {
+  position: absolute;
+  left: 41%;
   top: 17.8%;
   font-size: clamp(10px, 2.8vw, 14px);
   line-height: 1;
@@ -478,76 +492,60 @@
   color: rgba(0, 0, 0, 0.45);
 }
 
-.ggum-runner-goal-list-scroll {
+.ggum-runner-goal-list-wrap {
   position: absolute;
   left: 9%;
   right: 9%;
   top: 35%;
   bottom: 7%;
+}
+
+.ggum-runner-goal-list-scroll {
+  width: calc(100% - 14px);
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 2px 6px 4px 4px;
+  padding: 2px 2px 4px 4px;
   -webkit-overflow-scrolling: touch;
-  /* Firefox: 캡슐 트랙 + 회색 썸 (OS 기본 화살표 없음) */
-  scrollbar-width: thin;
-  scrollbar-color: #8b9199 #ececec;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-/* 골 리스트 전용 커스텀 스크롤 — 화살표 없음, 위·아래 반원 마감 */
 .ggum-runner-goal-list-scroll::-webkit-scrollbar {
-  width: 10px;
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button,
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button:single-button,
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button:start:decrement,
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-button:end:increment {
-  display: none;
   width: 0;
-  min-width: 0;
   height: 0;
-  min-height: 0;
 }
 
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-track {
-  margin: 6px 0;
-  background: linear-gradient(180deg, #f6f6f6 0%, #ebebeb 100%);
+.ggum-runner-goal-custom-scrollbar {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  bottom: 4px;
+  width: 10px;
+  background: #ffffff;
   border-radius: 999px;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.65),
-    inset 0 1px 2px rgba(0, 0, 0, 0.07);
+  box-shadow: inset 0 0 0 1px #e6e9ee;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb {
+.ggum-runner-goal-custom-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 6px;
   border-radius: 999px;
-  min-height: 32px;
-  background: linear-gradient(180deg, #b4b8bf 0%, #8e939c 100%);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.12);
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #a0a5ae 0%, #767b86 100%);
-  border-color: transparent;
-  background-clip: padding-box;
-}
-
-.ggum-runner-goal-list-scroll::-webkit-scrollbar-thumb:active {
-  background: linear-gradient(180deg, #8f949e 0%, #656a74 100%);
+  background: linear-gradient(180deg, #dde2e8 0%, #c9d0d9 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: opacity 120ms ease;
 }
 
 .ggum-runner-goal-row {
   position: relative;
+  isolation: isolate;
   flex: 0 0 auto;
   width: 100%;
   aspect-ratio: 1520 / 250;
@@ -556,6 +554,24 @@
   background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: center;
+}
+
+.ggum-runner-goal-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ggum-runner-goal-row--mine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 5px;
+  background: rgba(255, 248, 196, 0.2);
+  box-shadow:
+    inset 0 0 0 4px #ffd400,
+    0 0 8px rgba(255, 212, 0, 0.15);
+  pointer-events: none;
 }
 
 .ggum-runner-goal-row-thumb-wrap {
@@ -583,7 +599,7 @@
 
 .ggum-runner-goal-row-name {
   position: absolute;
-  left: 24%;
+  left: 91px;
   right: 28%;
   top: 50%;
   transform: translateY(-50%);
@@ -592,6 +608,18 @@
   color: #1a1a1a;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ggum-runner-goal-row-rank {
+  position: absolute;
+  left: 68px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8%;
+  font-size: clamp(7px, 2vw, 11px);
+  line-height: 1.2;
+  color: #69a0d7;
   white-space: nowrap;
 }
 

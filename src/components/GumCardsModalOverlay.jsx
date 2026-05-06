@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { GumCardsModal } from "./GumCardsModal.jsx";
+import { playUiClickSound } from "../utils/common/playUiClickSound.js";
 import {
   dispatchGumCardsModalClose,
   EVENT_OPEN,
@@ -14,6 +15,7 @@ export function GumCardsModalOverlay() {
   const [visible, setVisible] = useState(false);
 
   const handleClose = useCallback(() => {
+    playUiClickSound();
     setVisible(false);
     dispatchGumCardsModalClose();
   }, []);

@@ -179,7 +179,9 @@ export function GumCardsModal({ open, onClose }) {
             onClick={onClose}
             aria-label="닫기"
           >
-            ✕
+            <span className="gum-cards-close-icon" aria-hidden="true">
+              ×
+            </span>
           </button>
           <div className="gum-cards-header">
             <h2>
