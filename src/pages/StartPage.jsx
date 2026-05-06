@@ -18,6 +18,7 @@ import {
 } from "../utils/stages/stage3/stage3GltfWarmup.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
+import { IntroStoryOverlay } from "../components/IntroStoryOverlay.jsx";
 
 const START_BG_URL = resolvePublicAssetUrl(
   "/static/images/background_start.png",
@@ -25,6 +26,15 @@ const START_BG_URL = resolvePublicAssetUrl(
 const START_BTN_URL = resolvePublicAssetUrl(
   "/static/images/start_button_pink.png",
 );
+const START_CLICK_SFX_URL = resolvePublicAssetUrl(
+  "/static/sounds/minigame/start_click_sfx.mp3",
+);
+const INTRO_BGM_URL = resolvePublicAssetUrl(
+  "/static/sounds/intro_story/intro_bgm.mp3",
+);
+const INTRO_ENTER_SFX_URL = resolvePublicAssetUrl("/static/sounds/click.mp3");
+const INTRO_BGM_START_OFFSET_SEC = 2;
+const INTRO_BGM_START_DELAY_SEC = 0.07;
 
 export function StartPage() {
   const navigate = useNavigate();
@@ -34,9 +44,293 @@ export function StartPage() {
   const toastRef = useRef(null);
   const startNavigationLockedRef = useRef(false);
   const [isPreparingKiosk, setIsPreparingKiosk] = useState(false);
+  const [isIntroOpen, setIsIntroOpen] = useState(false);
+  const [isStartFadingOut, setIsStartFadingOut] = useState(false);
+  const audioCtxRef = useRef(null);
+  const audioBuffersRef = useRef({
+    startSfx: null,
+    enterSfx: null,
+    introBgm: null,
+  });
+  const introBgmNodesRef = useRef({ source: null, gain: null });
+  const introBgmStopTimerRef = useRef(null);
+  const htmlAudioRef = useRef({
+    startSfx: null,
+    enterSfx: null,
+    introBgm: null,
+    introBgmFadeTimer: null,
+  });
   /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
+  const stage3WarmupPromiseRef = useRef(null);
+
+  const stopIntroBgm = useCallback(() => {
+    if (introBgmStopTimerRef.current) {
+      window.clearTimeout(introBgmStopTimerRef.current);
+      introBgmStopTimerRef.current = null;
+    }
+    const { source, gain } = introBgmNodesRef.current;
+    if (!source || !gain) return;
+    try {
+      source.stop();
+    } catch {
+      // ignore
+    }
+    try {
+      source.disconnect();
+      gain.disconnect();
+    } catch {
+      // ignore
+    }
+    introBgmNodesRef.current = { source: null, gain: null };
+
+    const html = htmlAudioRef.current;
+    if (html.introBgmFadeTimer) {
+      cancelAnimationFrame(html.introBgmFadeTimer);
+      html.introBgmFadeTimer = null;
+    }
+    if (html.introBgm) {
+      try {
+        html.introBgm.pause();
+        html.introBgm.currentTime = 0;
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  const ensureAudioCtx = useCallback(async () => {
+    if (audioCtxRef.current) {
+      if (audioCtxRef.current.state === "suspended") {
+        await audioCtxRef.current.resume().catch(() => {});
+      }
+      return audioCtxRef.current;
+    }
+
+    const Ctor =
+      window.AudioContext ||
+      /** @type {typeof AudioContext | undefined} */ (
+        window["webkitAudioContext"]
+      );
+    if (!Ctor) return null;
+    try {
+      audioCtxRef.current = new Ctor();
+      if (audioCtxRef.current.state === "suspended") {
+        await audioCtxRef.current.resume().catch(() => {});
+      }
+      return audioCtxRef.current;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const decodeToBuffer = useCallback(async (ctx, url) => {
+    const res = await fetch(url);
+    const arr = await res.arrayBuffer();
+    return await new Promise((resolve, reject) => {
+      ctx.decodeAudioData(arr, resolve, reject);
+    });
+  }, []);
+
+  useEffect(() => {
+    // HTMLAudio fallback은 즉시 로드해 두기 (WebAudio decode 전/실패 시에도 소리 보장)
+    try {
+      const html = htmlAudioRef.current;
+      if (!html.startSfx) {
+        html.startSfx = new window.Audio(START_CLICK_SFX_URL);
+        html.startSfx.preload = "auto";
+        html.startSfx.load();
+      }
+      if (!html.enterSfx) {
+        html.enterSfx = new window.Audio(INTRO_ENTER_SFX_URL);
+        html.enterSfx.preload = "auto";
+        html.enterSfx.load();
+      }
+      if (!html.introBgm) {
+        html.introBgm = new window.Audio(INTRO_BGM_URL);
+        html.introBgm.preload = "auto";
+        html.introBgm.loop = true;
+        html.introBgm.volume = 0;
+        html.introBgm.load();
+      }
+    } catch {
+      // ignore
+    }
+
+    // 디코딩은 미리 (재생은 사용자 클릭 때 resume)
+    const Ctor =
+      window.AudioContext ||
+      /** @type {typeof AudioContext | undefined} */ (
+        window["webkitAudioContext"]
+      );
+    if (!Ctor) return;
+
+    let cancelled = false;
+    const ctx = new Ctor();
+    audioCtxRef.current = ctx;
+
+    void (async () => {
+      try {
+        const [startSfx, enterSfx, introBgm] = await Promise.all([
+          decodeToBuffer(ctx, START_CLICK_SFX_URL),
+          decodeToBuffer(ctx, INTRO_ENTER_SFX_URL),
+          decodeToBuffer(ctx, INTRO_BGM_URL),
+        ]);
+        if (cancelled) return;
+        audioBuffersRef.current = { startSfx, enterSfx, introBgm };
+      } catch (e) {
+        console.warn("[StartPage] audio decode 실패:", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try {
+        ctx.close();
+      } catch {
+        // ignore
+      }
+    };
+  }, [decodeToBuffer]);
+
+  const playOneShot = useCallback(
+    async (buffer) => {
+      const ctx = await ensureAudioCtx();
+      if (!ctx || !buffer) return null;
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start();
+      return src;
+    },
+    [ensureAudioCtx],
+  );
+
+  const startIntroBgmAt = useCallback(
+    async (whenSeconds) => {
+      stopIntroBgm();
+      const ctx = await ensureAudioCtx();
+      const buffer = audioBuffersRef.current.introBgm;
+      if (!ctx || !buffer) return;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, whenSeconds);
+      gain.gain.linearRampToValueAtTime(1, whenSeconds + 1.2);
+
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      if (buffer.duration > INTRO_BGM_START_OFFSET_SEC) {
+        src.loopStart = INTRO_BGM_START_OFFSET_SEC;
+        src.loopEnd = buffer.duration;
+      }
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(
+        whenSeconds,
+        buffer.duration > INTRO_BGM_START_OFFSET_SEC
+          ? INTRO_BGM_START_OFFSET_SEC
+          : 0,
+      );
+
+      introBgmNodesRef.current = { source: src, gain };
+    },
+    [ensureAudioCtx, stopIntroBgm],
+  );
+
+  const startIntroBgmHtmlWithFadeIn = useCallback(() => {
+    const html = htmlAudioRef.current;
+    const audio = html.introBgm;
+    if (!audio) return;
+
+    if (html.introBgmFadeTimer) {
+      cancelAnimationFrame(html.introBgmFadeTimer);
+      html.introBgmFadeTimer = null;
+    }
+
+    try {
+      audio.currentTime = INTRO_BGM_START_OFFSET_SEC;
+    } catch {
+      // ignore
+    }
+
+    audio.volume = 0;
+    audio.play().catch(() => {});
+
+    const FADE_MS = 1200;
+    const startAt = Date.now();
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - startAt) / FADE_MS);
+      audio.volume = t;
+      if (t >= 1) {
+        html.introBgmFadeTimer = null;
+        return;
+      }
+      html.introBgmFadeTimer = requestAnimationFrame(tick);
+    };
+    html.introBgmFadeTimer = requestAnimationFrame(tick);
+  }, []);
+
+  const fadeOutIntroBgmHtml = useCallback(
+    (durationMs) => {
+      const html = htmlAudioRef.current;
+      const audio = html.introBgm;
+      if (!audio) return Promise.resolve();
+
+      if (html.introBgmFadeTimer) {
+        cancelAnimationFrame(html.introBgmFadeTimer);
+        html.introBgmFadeTimer = null;
+      }
+
+      return new Promise((resolve) => {
+        const startVol = audio.volume ?? 1;
+        const startAt = Date.now();
+        const tick = () => {
+          const t = Math.min(1, (Date.now() - startAt) / durationMs);
+          audio.volume = startVol * (1 - t);
+          if (t >= 1) {
+            html.introBgmFadeTimer = null;
+            stopIntroBgm();
+            resolve();
+            return;
+          }
+          html.introBgmFadeTimer = requestAnimationFrame(tick);
+        };
+        html.introBgmFadeTimer = requestAnimationFrame(tick);
+      });
+    },
+    [stopIntroBgm],
+  );
+
+  const fadeOutIntroBgm = useCallback(
+    async (durationMs) => {
+      const ctx = await ensureAudioCtx();
+      const { source, gain } = introBgmNodesRef.current;
+      if (!ctx || !source || !gain) return;
+
+      const now = ctx.currentTime;
+      const end = now + durationMs / 1000;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(0, end);
+
+      await new Promise((resolve) => {
+        introBgmStopTimerRef.current = window.setTimeout(() => {
+          introBgmStopTimerRef.current = null;
+          stopIntroBgm();
+          resolve();
+        }, durationMs);
+      });
+    },
+    [ensureAudioCtx, stopIntroBgm],
+  );
+
+  useEffect(() => {
+    return () => {
+      stopIntroBgm();
+    };
+  }, [stopIntroBgm]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -139,7 +433,14 @@ export function StartPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const handleStart = useCallback(async () => {
+  const ensureStage3Warmup = useCallback(() => {
+    if (!stage3WarmupPromiseRef.current) {
+      stage3WarmupPromiseRef.current = waitForStage3GltfTemplatesReady();
+    }
+    return stage3WarmupPromiseRef.current;
+  }, []);
+
+  const navigateToKioskAfterWarmup = useCallback(async () => {
     if (isCompletingKioskSession) {
       return;
     }
@@ -149,16 +450,100 @@ export function StartPage() {
     startNavigationLockedRef.current = true;
     setIsPreparingKiosk(true);
     try {
-      await waitForStage3GltfTemplatesReady();
+      await ensureStage3Warmup();
       navigate(`/kiosk${location.search}`);
     } catch (e) {
       console.warn("[StartPage] Stage3 GLB 프리로드 실패 — 그대로 진행:", e);
+      stage3WarmupPromiseRef.current = waitForStage3GltfTemplatesReady();
+      try {
+        await stage3WarmupPromiseRef.current;
+      } catch {
+        // fallback: 웜업 실패가 이어져도 진입은 막지 않는다.
+      }
       navigate(`/kiosk${location.search}`);
     } finally {
       setIsPreparingKiosk(false);
       startNavigationLockedRef.current = false;
     }
-  }, [isCompletingKioskSession, location.search, navigate]);
+  }, [ensureStage3Warmup, isCompletingKioskSession, location.search, navigate]);
+
+  const handleIntroEnter = useCallback(async () => {
+    const enterBuf = audioBuffersRef.current.enterSfx;
+    if (enterBuf) {
+      void playOneShot(enterBuf);
+    } else {
+      try {
+        const a = htmlAudioRef.current.enterSfx;
+        if (a) {
+          a.currentTime = 0;
+          a.play().catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (introBgmNodesRef.current.source != null) {
+      await fadeOutIntroBgm(700);
+    } else {
+      await fadeOutIntroBgmHtml(700);
+    }
+    await navigateToKioskAfterWarmup();
+  }, [
+    fadeOutIntroBgm,
+    fadeOutIntroBgmHtml,
+    navigateToKioskAfterWarmup,
+    playOneShot,
+  ]);
+
+  const handleStart = useCallback(() => {
+    if (
+      isCompletingKioskSession ||
+      isPreparingKiosk ||
+      isIntroOpen ||
+      isStartFadingOut
+    ) {
+      return;
+    }
+    const startSfx = audioBuffersRef.current.startSfx;
+    void (async () => {
+      const ctx = await ensureAudioCtx();
+      if (ctx && startSfx) {
+        void playOneShot(startSfx);
+        // 효과음이 끝날 때까지 기다리지 않고, 살짝 텀을 두고 바로 BGM 페이드인
+        void startIntroBgmAt(ctx.currentTime + INTRO_BGM_START_DELAY_SEC);
+        return;
+      }
+
+      // WebAudio가 준비 안 됐으면 HTMLAudio로 즉시 재생 + onended로 BGM 시작
+      try {
+        const a = htmlAudioRef.current.startSfx;
+        if (!a) return;
+        a.currentTime = 0;
+        a.play().catch(() => {
+          // ignore
+        });
+        window.setTimeout(() => {
+          startIntroBgmHtmlWithFadeIn();
+        }, INTRO_BGM_START_DELAY_SEC * 1000);
+      } catch {
+        // ignore
+      }
+    })();
+    void ensureStage3Warmup();
+    setIsStartFadingOut(true);
+    setIsIntroOpen(true);
+  }, [
+    ensureStage3Warmup,
+    ensureAudioCtx,
+    isCompletingKioskSession,
+    isIntroOpen,
+    isPreparingKiosk,
+    isStartFadingOut,
+    playOneShot,
+    startIntroBgmAt,
+    startIntroBgmHtmlWithFadeIn,
+  ]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -215,9 +600,11 @@ export function StartPage() {
     <div
       className={startPageClassName}
       style={{ backgroundImage: `url("${START_BG_URL}")` }}
-      onClick={handleStart}
+      onPointerDown={handleStart}
     >
-      <div className={styles.startOverlay}>
+      <div
+        className={`${styles.startOverlay}${isStartFadingOut ? ` ${styles.startOverlayFadeOut}` : ""}`}
+      >
         <div className={styles.startButtonHit}>
           <img
             className={styles.startButtonImg}
@@ -239,6 +626,13 @@ export function StartPage() {
           </div>
         ) : null}
       </div>
+      {isIntroOpen ? (
+        <IntroStoryOverlay
+          onComplete={() => {
+            void handleIntroEnter();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

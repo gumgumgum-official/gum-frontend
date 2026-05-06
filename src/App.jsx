@@ -13,6 +13,7 @@ import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
 import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
+import { playUiClickSound } from "./utils/common/playUiClickSound.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
@@ -34,6 +35,15 @@ export function App() {
     setShowGameMachineModalShell(false);
     dispatchMinigameClose();
   }, []);
+  const handleNoticeModalClose = useCallback(() => {
+    setShowNoticeModal(false);
+    window.dispatchEvent(new CustomEvent("gum:noticeModalClosed"));
+  }, []);
+
+  const closeGameMachineModalShellWithSound = useCallback(() => {
+    playUiClickSound();
+    closeGameMachineModalShell();
+  }, [closeGameMachineModalShell]);
 
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
@@ -98,14 +108,11 @@ export function App() {
     <BrowserRouter>
       <NoticeModalBoard
         isOpen={showNoticeModal}
-        onClose={() => {
-          setShowNoticeModal(false);
-          window.dispatchEvent(new CustomEvent("gum:noticeModalClosed"));
-        }}
+        onClose={handleNoticeModalClose}
       />
       <GameMachineModalShell
         isOpen={showGameMachineModalShell}
-        onClose={closeGameMachineModalShell}
+        onClose={closeGameMachineModalShellWithSound}
         ariaLabel="게임기 모달"
         hideCloseButton
         contentStyle={{
@@ -117,7 +124,7 @@ export function App() {
         }}
         bodyStyle={{ marginTop: 0 }}
       >
-        <GgumRunnerMinigame onClose={closeGameMachineModalShell} />
+        <GgumRunnerMinigame onClose={closeGameMachineModalShellWithSound} />
       </GameMachineModalShell>
       <Stage6PosterModal
         isOpen={showStage6PosterModal}

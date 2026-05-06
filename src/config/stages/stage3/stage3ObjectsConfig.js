@@ -66,7 +66,7 @@ export const STAGE3_OBJECTS_CONFIG = {
     maxSpawns: 20,
     physicsSubsteps: 2,
     /** 스폰 아이스크림이 지면에 닿을 때 `static/sounds/icecream` 재생 볼륨 (1 초과 시 Web Audio 증폭) */
-    landSoundVolume: 1.4,
+    landSoundVolume: 2.8,
   },
 
   /** 게시판 모달: 사운드 + `NoticeModalBoard` 포스터 이미지(public 기준 경로) */
@@ -76,7 +76,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/paper/PaperMovement_fNAyV_01-3.mp3",
     ],
     /** 게시판·포스터 종이 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
-    paperSoundVolume: 0.98,
+    paperSoundVolume: 3.6,
     posterImages: {
       party: "/assets/poster/festival_poster.png",
       bestGum: "/assets/poster/vote_poster.png",
@@ -102,7 +102,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/tent/Quick_fabric_rustlin_4-1775835465322.mp3",
     ],
     /** 텐트 클릭 시 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
-    tentSoundVolume: 1.4,
+    tentSoundVolume: 1.6,
   },
 
   /**
@@ -113,7 +113,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/well/A_single_drip_sound__1.mp3",
       "/static/sounds/well/A_single_drip_sound__2.mp3",
     ],
-    wellSoundVolume: 1.4,
+    wellSoundVolume: 2.8,
   },
 
   /**
@@ -126,7 +126,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/clock/Gentle_digital_beep-_3.mp3",
       "/static/sounds/clock/Gentle_digital_beep-_4.mp3",
     ],
-    clockSoundVolume: 1.4,
+    clockSoundVolume: 2.8,
   },
 
   /**
@@ -139,7 +139,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/light/the_sound_of_a_light_2.mp3",
       "/static/sounds/light/the_sound_of_a_light_3.mp3",
     ],
-    streetLightSoundVolume: 1.4,
+    streetLightSoundVolume: 2.8,
   },
 
   /**
@@ -157,6 +157,6 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/potal/transition2.mp3",
       "/static/sounds/potal/transition3.mp3",
     ],
-    portalTransitionSoundVolume: 0.55,
+    portalTransitionSoundVolume: 1.1,
   },
 };

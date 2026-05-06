@@ -162,6 +162,8 @@
  * @property {boolean} [punchAnimationReverse] - true면 펀치 GLB 애니를 클립 끝→처음 역재생(timeScale 음수)
  * @property {number} [punchAnimationTimeScale] - 펀치 클립 재생 배율(1=GLB 기본 길이, 2=2배 빠름). 기본 1.65
  * @property {{x?: number, z?: number}} [spawnOffset] - 섬 바운딩 XZ 중심 기준 스폰 추가 오프셋(m)
+ * @property {number} [spawnRotationRad] - 캐릭터 초기 스폰 회전(rad)
+ * @property {number} [spawnRotationDeg] - 캐릭터 초기 스폰 회전(deg, rad 미설정 시 사용)
  * @property {number} [escalatorFrontDistance] - Stage6: INT_Escalator 루트에서 카메라 방향으로 뗀 스폰 거리(m)
  * @property {Stage3GumFollowersConfig} [gumFollowers] - Stage3 껌딱지; Stage6 등 유저만 쓰는 스테이지에서는 생략 가능
  */
