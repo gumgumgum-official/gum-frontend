@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./GgumRunnerMinigame.css";
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
+import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 
 const W = 700;
 const H = 340;
@@ -22,6 +23,9 @@ const NEW_HIGH_BLINK_INTERVAL = 8;
 const NEW_HIGH_BLINK_PHASES = 6;
 const TARGET_FPS = 60;
 const FRAME_MS = 1000 / TARGET_FPS;
+const MINIGAME_BGM_PATH = "/static/sounds/minigame/minigame_bgm.mp3";
+const MINIGAME_GAMEOVER_SFX_PATH = "/static/sounds/minigame/Win Score 1.mp3";
+const MINIGAME_JUMP_SFX_PATH = "/static/sounds/minigame/jump.mp3";
 
 /** 왼쪽부터 save_modal.png 카드와 1:1 (비트맵에 그려진 그림만 보이고, 여기서는 PNG를 로드하지 않음) */
 const SAVE_AVATAR_SLOTS = ["clover", "flower", "cake", "dog"];
@@ -40,7 +44,11 @@ export function GgumRunnerMinigame({ onClose }) {
   const startOverlayRef = useRef(null);
   const startButtonRef = useRef(null);
   const jumpActionRef = useRef(() => {});
+  const resetToStartActionRef = useRef(() => {});
   const goalListScrollRef = useRef(null);
+  const minigameBgmRef = useRef(null);
+  const minigameGameoverSfxRef = useRef(null);
+  const minigameJumpSfxRef = useRef(null);
 
   const [fatalScore, setFatalScore] = useState(null);
   const [postGameStep, setPostGameStep] = useState("gameover");
@@ -60,6 +68,89 @@ export function GgumRunnerMinigame({ onClose }) {
     selectedSaveSlotIndex != null
       ? SAVE_AVATAR_SLOTS[selectedSaveSlotIndex]
       : null;
+
+  const playMinigameBgm = () => {
+    try {
+      if (!minigameBgmRef.current) {
+        const audio = new window.Audio(
+          resolvePublicAssetUrl(MINIGAME_BGM_PATH),
+        );
+        audio.preload = "auto";
+        audio.loop = true;
+        audio.volume = 0.5;
+        minigameBgmRef.current = audio;
+      }
+      const audio = minigameBgmRef.current;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+  };
+
+  const stopMinigameBgm = () => {
+    const audio = minigameBgmRef.current;
+    if (!audio) return;
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // ignore
+    }
+  };
+
+  const playMinigameGameoverSfx = () => {
+    try {
+      if (!minigameGameoverSfxRef.current) {
+        const audio = new window.Audio(
+          resolvePublicAssetUrl(MINIGAME_GAMEOVER_SFX_PATH),
+        );
+        audio.preload = "auto";
+        audio.volume = 0.8;
+        minigameGameoverSfxRef.current = audio;
+      }
+      const audio = minigameGameoverSfxRef.current;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+  };
+
+  const playMinigameJumpSfx = () => {
+    try {
+      if (!minigameJumpSfxRef.current) {
+        const audio = new window.Audio(
+          resolvePublicAssetUrl(MINIGAME_JUMP_SFX_PATH),
+        );
+        audio.preload = "auto";
+        audio.volume = 0.7;
+        minigameJumpSfxRef.current = audio;
+      }
+      const audio = minigameJumpSfxRef.current;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleClose = () => {
+    stopMinigameBgm();
+    onClose?.();
+  };
+
+  const handleResetToStart = () => {
+    stopMinigameBgm();
+    resetToStartActionRef.current();
+    setFatalScore(null);
+    setPostGameStep("gameover");
+    setSaveName("");
+    setSaveFormError("");
+    setSelectedSaveSlotIndex(null);
+    setLeaderboardRows([]);
+    setMyRank(null);
+  };
 
   const deathBridgeRef = useRef({
     onDead: (_score) => {},
@@ -503,13 +594,39 @@ export function GgumRunnerMinigame({ onClose }) {
         msgEl.textContent = "";
         updateScoreText();
         updateOverlayVisibility();
+        playMinigameBgm();
       }
       if (state === "running" && player.onGround) {
         player.vy = -11;
         player.onGround = false;
+        playMinigameJumpSfx();
       }
     };
     jumpActionRef.current = jump;
+
+    const resetToStart = () => {
+      state = "idle";
+      score = 0;
+      speed = BASE_SPEED;
+      bgX = 0;
+      groundX = 0;
+      obstacles = [];
+      obstacleTimer = 0;
+      nextObstacleIn = 90;
+      newHighBlinkPhase = NEW_HIGH_BLINK_PHASES;
+      hasTriggeredNewHighBlink = false;
+      blinkTimer = 0;
+      player.y = GROUND_Y - DISPLAY_H;
+      player.vy = 0;
+      player.onGround = true;
+      player.animFrame = 0;
+      player.animTimer = 0;
+      msgEl.textContent = "";
+      deathReported = false;
+      updateScoreText(true);
+      updateOverlayVisibility();
+    };
+    resetToStartActionRef.current = resetToStart;
 
     const onKeyDown = (e) => {
       if (e.code !== "Space") return;
@@ -613,6 +730,8 @@ export function GgumRunnerMinigame({ onClose }) {
           pr.y + pr.h > or.y
         ) {
           state = "dead";
+          stopMinigameBgm();
+          playMinigameGameoverSfx();
           if (displayScore > hiScore) {
             hiScore = displayScore;
             hiScoreValueRef.current = displayScore;
@@ -660,6 +779,7 @@ export function GgumRunnerMinigame({ onClose }) {
     loop(window.performance.now());
 
     return () => {
+      stopMinigameBgm();
       if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener("keydown", onKeyDown);
       canvas.removeEventListener("click", onCanvasClick);
@@ -667,6 +787,7 @@ export function GgumRunnerMinigame({ onClose }) {
       canvas.removeEventListener("touchend", onTouchEnd);
       startButtonEl.removeEventListener("click", onStartButtonClick);
       jumpActionRef.current = () => {};
+      resetToStartActionRef.current = () => {};
     };
   }, []);
 
@@ -675,7 +796,7 @@ export function GgumRunnerMinigame({ onClose }) {
       <div className="ggum-runner-inner">
         <button
           type="button"
-          onClick={() => onClose?.()}
+          onClick={handleClose}
           aria-label="모달 닫기"
           className="ggum-runner-frame-close"
         />
@@ -705,7 +826,7 @@ export function GgumRunnerMinigame({ onClose }) {
                 aria-label="설명 창 닫기"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onClose?.();
+                  handleClose();
                 }}
               />
               <button
@@ -746,7 +867,7 @@ export function GgumRunnerMinigame({ onClose }) {
                         type="button"
                         className="ggum-runner-gameover-hit ggum-runner-gameover-header-x"
                         aria-label="닫기"
-                        onClick={() => onClose?.()}
+                        onClick={handleClose}
                       />
                     </div>
                   ) : (
@@ -797,7 +918,7 @@ export function GgumRunnerMinigame({ onClose }) {
                         type="button"
                         className="ggum-runner-save-hit ggum-runner-save-header-x"
                         aria-label="미니게임 닫기"
-                        onClick={() => onClose?.()}
+                        onClick={handleResetToStart}
                       />
                     </div>
                   )}
@@ -836,13 +957,7 @@ export function GgumRunnerMinigame({ onClose }) {
                 type="button"
                 className="ggum-runner-goal-hit ggum-runner-goal-close"
                 aria-label="뒤로"
-                onClick={() => {
-                  setPostGameStep("save");
-                  setSaveName("");
-                  setSaveFormError("");
-                  setSelectedSaveSlotIndex(null);
-                  setMyRank(null);
-                }}
+                onClick={handleResetToStart}
               />
               <div className="ggum-runner-goal-list-wrap">
                 <div
@@ -852,7 +967,7 @@ export function GgumRunnerMinigame({ onClose }) {
                   {leaderboardRows.map((row, i) => (
                     <div
                       key={`${row.at}-${i}`}
-                      className="ggum-runner-goal-row"
+                      className={`ggum-runner-goal-row${myRank === i + 1 ? " ggum-runner-goal-row--mine" : ""}`}
                     >
                       <div className="ggum-runner-goal-row-thumb-wrap">
                         <img

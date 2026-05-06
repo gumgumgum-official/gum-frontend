@@ -121,7 +121,7 @@ const ICECREAM_LAND_SOUND_PATHS = [
 
 /** 게임기(INT_gameMachine) 클릭 시 — 파일명에 `#` 있으면 Vite 정적 서버가 MP3로 매핑하지 못함 */
 const GAME_MACHINE_CLICK_SOUND_PATH =
-  "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3";
+  "/static/sounds/minigame/Clean_and_light_mech_3-1775840321883.mp3";
 
 /** island `INT_StreetLight*` 근접 시 사운드 재생 */
 const STREET_LIGHT_NAME_PREFIX = "INT_StreetLight";

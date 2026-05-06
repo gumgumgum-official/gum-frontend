@@ -27,7 +27,7 @@ const START_BTN_URL = resolvePublicAssetUrl(
   "/static/images/start_button_pink.png",
 );
 const START_CLICK_SFX_URL = resolvePublicAssetUrl(
-  "/static/sounds/computer/Clean_and_light_mech_3-1775840321883.mp3",
+  "/static/sounds/minigame/Clean_and_light_mech_3-1775840321883.mp3",
 );
 const INTRO_BGM_URL = resolvePublicAssetUrl(
   "/static/sounds/intro_story/Dawns_Embrace_2026-05-06T054645.mp3",

@@ -545,6 +545,18 @@
   background-position: center;
 }
 
+.ggum-runner-goal-row--mine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  background: rgba(255, 248, 196, 0.42);
+  box-shadow:
+    inset 0 0 0 4px #ffd400,
+    0 0 8px rgba(255, 212, 0, 0.15);
+  pointer-events: none;
+}
+
 .ggum-runner-goal-row-thumb-wrap {
   position: absolute;
   left: 3.4%;
