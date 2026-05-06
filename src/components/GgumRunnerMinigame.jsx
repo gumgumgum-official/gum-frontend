@@ -25,7 +25,7 @@ const NEW_HIGH_BLINK_PHASES = 6;
 const TARGET_FPS = 60;
 const FRAME_MS = 1000 / TARGET_FPS;
 const MINIGAME_BGM_PATH = "/static/sounds/minigame/minigame_bgm.mp3";
-const MINIGAME_GAMEOVER_SFX_PATH = "/static/sounds/minigame/Win Score 1.mp3";
+const MINIGAME_GAMEOVER_SFX_PATH = "/static/sounds/minigame/win_score_1.mp3";
 const MINIGAME_JUMP_SFX_PATH = "/static/sounds/minigame/jump.mp3";
 
 /** 왼쪽부터 save_modal.png 카드와 1:1 (비트맵에 그려진 그림만 보이고, 여기서는 PNG를 로드하지 않음) */

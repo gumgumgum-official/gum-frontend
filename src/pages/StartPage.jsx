@@ -27,10 +27,10 @@ const START_BTN_URL = resolvePublicAssetUrl(
   "/static/images/start_button_pink.png",
 );
 const START_CLICK_SFX_URL = resolvePublicAssetUrl(
-  "/static/sounds/minigame/Clean_and_light_mech_3-1775840321883.mp3",
+  "/static/sounds/minigame/start_click_sfx.mp3",
 );
 const INTRO_BGM_URL = resolvePublicAssetUrl(
-  "/static/sounds/intro_story/Dawns_Embrace_2026-05-06T054645.mp3",
+  "/static/sounds/intro_story/intro_bgm.mp3",
 );
 const INTRO_ENTER_SFX_URL = resolvePublicAssetUrl("/static/sounds/click.mp3");
 const INTRO_BGM_START_OFFSET_SEC = 2;
@@ -87,7 +87,7 @@ export function StartPage() {
 
     const html = htmlAudioRef.current;
     if (html.introBgmFadeTimer) {
-      window.clearInterval(html.introBgmFadeTimer);
+      cancelAnimationFrame(html.introBgmFadeTimer);
       html.introBgmFadeTimer = null;
     }
     if (html.introBgm) {
@@ -245,7 +245,7 @@ export function StartPage() {
     if (!audio) return;
 
     if (html.introBgmFadeTimer) {
-      window.clearInterval(html.introBgmFadeTimer);
+      cancelAnimationFrame(html.introBgmFadeTimer);
       html.introBgmFadeTimer = null;
     }
 
@@ -259,16 +259,17 @@ export function StartPage() {
     audio.play().catch(() => {});
 
     const FADE_MS = 1200;
-    const TICK_MS = 25;
     const startAt = Date.now();
-    html.introBgmFadeTimer = window.setInterval(() => {
+    const tick = () => {
       const t = Math.min(1, (Date.now() - startAt) / FADE_MS);
       audio.volume = t;
       if (t >= 1) {
-        window.clearInterval(html.introBgmFadeTimer);
         html.introBgmFadeTimer = null;
+        return;
       }
-    }, TICK_MS);
+      html.introBgmFadeTimer = requestAnimationFrame(tick);
+    };
+    html.introBgmFadeTimer = requestAnimationFrame(tick);
   }, []);
 
   const fadeOutIntroBgmHtml = useCallback(
@@ -278,24 +279,25 @@ export function StartPage() {
       if (!audio) return Promise.resolve();
 
       if (html.introBgmFadeTimer) {
-        window.clearInterval(html.introBgmFadeTimer);
+        cancelAnimationFrame(html.introBgmFadeTimer);
         html.introBgmFadeTimer = null;
       }
 
       return new Promise((resolve) => {
         const startVol = audio.volume ?? 1;
         const startAt = Date.now();
-        const TICK_MS = 25;
-        html.introBgmFadeTimer = window.setInterval(() => {
+        const tick = () => {
           const t = Math.min(1, (Date.now() - startAt) / durationMs);
           audio.volume = startVol * (1 - t);
           if (t >= 1) {
-            window.clearInterval(html.introBgmFadeTimer);
             html.introBgmFadeTimer = null;
             stopIntroBgm();
             resolve();
+            return;
           }
-        }, TICK_MS);
+          html.introBgmFadeTimer = requestAnimationFrame(tick);
+        };
+        html.introBgmFadeTimer = requestAnimationFrame(tick);
       });
     },
     [stopIntroBgm],
@@ -495,61 +497,12 @@ export function StartPage() {
   ]);
 
   const handleStart = useCallback(() => {
-    // #region agent log
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "223f13",
-      },
-      body: JSON.stringify({
-        sessionId: "223f13",
-        runId: "pre-fix",
-        hypothesisId: "H1",
-        location: "StartPage.jsx:handleStart:entry",
-        message: "handleStart invoked",
-        data: {
-          isCompletingKioskSession,
-          isPreparingKiosk,
-          isIntroOpen,
-          isStartFadingOut,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (
       isCompletingKioskSession ||
       isPreparingKiosk ||
       isIntroOpen ||
       isStartFadingOut
     ) {
-      // #region agent log
-      fetch(
-        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "223f13",
-          },
-          body: JSON.stringify({
-            sessionId: "223f13",
-            runId: "pre-fix",
-            hypothesisId: "H2",
-            location: "StartPage.jsx:handleStart:guard",
-            message: "handleStart blocked by guard",
-            data: {
-              isCompletingKioskSession,
-              isPreparingKiosk,
-              isIntroOpen,
-              isStartFadingOut,
-            },
-            timestamp: Date.now(),
-          }),
-        },
-      ).catch(() => {});
-      // #endregion
       return;
     }
     const startSfx = audioBuffersRef.current.startSfx;
@@ -580,24 +533,6 @@ export function StartPage() {
     void ensureStage3Warmup();
     setIsStartFadingOut(true);
     setIsIntroOpen(true);
-    // #region agent log
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "223f13",
-      },
-      body: JSON.stringify({
-        sessionId: "223f13",
-        runId: "pre-fix",
-        hypothesisId: "H1",
-        location: "StartPage.jsx:handleStart:setState",
-        message: "set fade-out and intro-open requested",
-        data: {},
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
   }, [
     ensureStage3Warmup,
     ensureAudioCtx,
@@ -669,57 +604,8 @@ export function StartPage() {
     >
       <div
         className={`${styles.startOverlay}${isStartFadingOut ? ` ${styles.startOverlayFadeOut}` : ""}`}
-        onTransitionStart={(event) => {
-          if (event.propertyName !== "opacity") return;
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Session-Id": "223f13",
-              },
-              body: JSON.stringify({
-                sessionId: "223f13",
-                runId: "pre-fix",
-                hypothesisId: "H3",
-                location: "StartPage.jsx:startOverlay:onTransitionStart",
-                message: "start overlay fade transition started",
-                data: { propertyName: event.propertyName },
-                timestamp: Date.now(),
-              }),
-            },
-          ).catch(() => {});
-          // #endregion
-        }}
       >
-        <div
-          className={styles.startButtonHit}
-          onPointerDown={() => {
-            // #region agent log
-            fetch(
-              "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Debug-Session-Id": "223f13",
-                },
-                body: JSON.stringify({
-                  sessionId: "223f13",
-                  runId: "pre-fix",
-                  hypothesisId: "H4",
-                  location: "StartPage.jsx:startButtonHit:onPointerDown",
-                  message: "start button pointer down",
-                  data: {},
-                  timestamp: Date.now(),
-                }),
-              },
-            ).catch(() => {});
-            // #endregion
-          }}
-        >
+        <div className={styles.startButtonHit}>
           <img
             className={styles.startButtonImg}
             src={START_BTN_URL}
@@ -727,35 +613,6 @@ export function StartPage() {
             width={1024}
             height={388}
             decoding="async"
-            onTransitionStart={(event) => {
-              if (
-                event.propertyName !== "transform" &&
-                event.propertyName !== "filter"
-              ) {
-                return;
-              }
-              // #region agent log
-              fetch(
-                "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "X-Debug-Session-Id": "223f13",
-                  },
-                  body: JSON.stringify({
-                    sessionId: "223f13",
-                    runId: "pre-fix",
-                    hypothesisId: "H4",
-                    location: "StartPage.jsx:startButtonImg:onTransitionStart",
-                    message: "start button visual transition started",
-                    data: { propertyName: event.propertyName },
-                    timestamp: Date.now(),
-                  }),
-                },
-              ).catch(() => {});
-              // #endregion
-            }}
           />
         </div>
         {toastMessage ? (

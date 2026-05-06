@@ -90,6 +90,7 @@ const INTRO_SCENES = [
     dark: true,
   },
 ];
+const MAX_STARS = 25 + (INTRO_SCENES.length - 1) * 3;
 
 export function IntroStoryOverlay({ onComplete }) {
   const [sceneIndex, setSceneIndex] = useState(0);
@@ -106,16 +107,20 @@ export function IntroStoryOverlay({ onComplete }) {
   const isFirstScene = sceneIndex === 0;
   const showStars = !scene.dark;
   const starCount = useMemo(() => 25 + sceneIndex * 3, [sceneIndex]);
-  const stars = useMemo(
+  const allStars = useMemo(
     () =>
-      Array.from({ length: starCount }, (_, idx) => ({
-        id: `${sceneIndex}-${idx}`,
+      Array.from({ length: MAX_STARS }, (_, idx) => ({
+        id: idx,
         top: Math.random() * 100,
         left: Math.random() * 100,
         size: Math.random() * 2.2 + 1,
         delay: Math.random() * 2,
       })),
-    [sceneIndex, starCount],
+    [],
+  );
+  const stars = useMemo(
+    () => allStars.slice(0, starCount),
+    [allStars, starCount],
   );
 
   useEffect(() => {

@@ -59,7 +59,7 @@ export default function WeedGameUI({ onClose: onCloseProp }) {
   useEffect(() => {
     try {
       const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-      const src = base + "/static/sounds/Win Score 1.mp3";
+      const src = base + "/static/sounds/minigame/win_score_1.mp3";
       winScoreAudioSrcRef.current = src;
       if (!winScoreAudioRef.current) {
         winScoreAudioRef.current = new window.Audio();
