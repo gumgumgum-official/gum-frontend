@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./GgumRunnerMinigame.css";
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
+import { postScore, fetchLeaderboard } from "../lib/scoreApi.js";
 
 const W = 700;
 const H = 340;
@@ -45,9 +46,10 @@ export function GgumRunnerMinigame({ onClose }) {
   const [postGameStep, setPostGameStep] = useState("gameover");
   const [saveName, setSaveName] = useState("");
   const [saveFormError, setSaveFormError] = useState("");
-  /** `goal_list`에서만 `avatarSrc()`로 로드; 저장 화면은 슬롯 인덱스만 사용 */
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedSaveSlotIndex, setSelectedSaveSlotIndex] = useState(null);
   const [leaderboardRows, setLeaderboardRows] = useState([]);
+  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(false);
 
   const selectedAvatarKey =
     selectedSaveSlotIndex != null
@@ -70,10 +72,12 @@ export function GgumRunnerMinigame({ onClose }) {
       setSaveFormError("");
       setSelectedSaveSlotIndex(null);
       setLeaderboardRows([]);
+      setIsLeaderboardLoading(false);
     },
   };
 
-  const handleSaveEnter = () => {
+  const handleSaveEnter = async () => {
+    if (isSaving) return;
     const name = saveName.trim();
     if (!name) {
       setSaveFormError("이름을 입력해 주세요.");
@@ -85,13 +89,48 @@ export function GgumRunnerMinigame({ onClose }) {
     }
     setSaveFormError("");
     if (fatalScore == null) return;
-    const rows = appendLeaderboardEntry({
+
+    setIsSaving(true);
+    setLeaderboardRows([]);
+    setIsLeaderboardLoading(true);
+    setPostGameStep("leaderboard");
+
+    const localRows = appendLeaderboardEntry({
       name,
       avatarKey: selectedAvatarKey,
       score: fatalScore,
     });
-    setLeaderboardRows(rows);
-    setPostGameStep("leaderboard");
+
+    postScore(name, fatalScore)
+      .then(() => fetchLeaderboard())
+      .then((apiRows) => {
+        if (apiRows.length > 0) {
+          setLeaderboardRows(
+            apiRows.map((row) => ({
+              name: row.userId,
+              score: row.totalScore,
+              avatarKey:
+                localRows.find((r) => r.name === row.userId)?.avatarKey ?? null,
+              at: row.id,
+            })),
+          );
+        } else {
+          setLeaderboardRows(localRows);
+        }
+        setIsLeaderboardLoading(false);
+      })
+      .catch((err) => {
+        if (err.status === 409) {
+          setPostGameStep("save");
+          setIsSaving(false);
+          setSaveFormError(
+            "이미 사용 중인 닉네임입니다. 다른 이름을 입력해 주세요.",
+          );
+        } else {
+          setLeaderboardRows(localRows);
+        }
+        setIsLeaderboardLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -698,6 +737,11 @@ export function GgumRunnerMinigame({ onClose }) {
                         alt=""
                         className="ggum-runner-sheet-art"
                       />
+                      {saveFormError ? (
+                        <p className="ggum-runner-save-error">
+                          {saveFormError}
+                        </p>
+                      ) : null}
                       <input
                         type="text"
                         className="ggum-runner-save-name-input"
@@ -710,11 +754,6 @@ export function GgumRunnerMinigame({ onClose }) {
                         maxLength={16}
                         autoComplete="off"
                       />
-                      {saveFormError ? (
-                        <p className="ggum-runner-save-error">
-                          {saveFormError}
-                        </p>
-                      ) : null}
                       <div className="ggum-runner-save-slots">
                         {SAVE_AVATAR_SLOTS.map((key, index) => (
                           <button
@@ -734,6 +773,7 @@ export function GgumRunnerMinigame({ onClose }) {
                         className="ggum-runner-save-hit ggum-runner-save-enter"
                         aria-label="기록 저장 및 순위 보기"
                         onClick={handleSaveEnter}
+                        disabled={isSaving}
                       />
                       <button
                         type="button"
@@ -774,32 +814,36 @@ export function GgumRunnerMinigame({ onClose }) {
               <button
                 type="button"
                 className="ggum-runner-goal-hit ggum-runner-goal-close"
-                aria-label="뒤로"
-                onClick={() => {
-                  setPostGameStep("save");
-                  setSaveName("");
-                  setSaveFormError("");
-                  setSelectedSaveSlotIndex(null);
-                }}
+                aria-label="닫기"
+                onClick={() => onClose?.()}
               />
               <div className="ggum-runner-goal-list-scroll">
-                {leaderboardRows.map((row, i) => (
-                  <div key={`${row.at}-${i}`} className="ggum-runner-goal-row">
-                    <div className="ggum-runner-goal-row-thumb-wrap">
-                      <img
-                        src={avatarSrc(row.avatarKey)}
-                        alt=""
-                        className="ggum-runner-goal-row-thumb"
-                      />
+                {isLeaderboardLoading ? (
+                  <div className="ggum-runner-goal-loading">불러오는 중...</div>
+                ) : (
+                  leaderboardRows.map((row, i) => (
+                    <div
+                      key={`${row.at ?? i}-${i}`}
+                      className="ggum-runner-goal-row"
+                    >
+                      <div className="ggum-runner-goal-row-thumb-wrap">
+                        {row.avatarKey ? (
+                          <img
+                            src={avatarSrc(row.avatarKey)}
+                            alt=""
+                            className="ggum-runner-goal-row-thumb"
+                          />
+                        ) : null}
+                      </div>
+                      <span className="ggum-runner-goal-row-name">
+                        {row.name}
+                      </span>
+                      <span className="ggum-runner-goal-row-score">
+                        {row.score}
+                      </span>
                     </div>
-                    <span className="ggum-runner-goal-row-name">
-                      {row.name}
-                    </span>
-                    <span className="ggum-runner-goal-row-score">
-                      {row.score}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>

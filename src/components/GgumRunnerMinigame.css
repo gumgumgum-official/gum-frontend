@@ -310,12 +310,14 @@
 
 .ggum-runner-save-error {
   position: absolute;
-  left: 42%;
-  right: 13%;
+  left: 0;
+  right: 0;
   top: 33.6%;
   margin: 0;
   font-size: clamp(6px, 1.45vw, 9px);
   line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
   color: #b71c1c;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
   pointer-events: none;
@@ -466,6 +468,14 @@
   top: 1.8%;
   width: 8%;
   height: 7%;
+}
+
+.ggum-runner-goal-loading {
+  width: 100%;
+  text-align: center;
+  padding-top: 20%;
+  font-size: clamp(7px, 1.6vw, 10px);
+  color: rgba(0, 0, 0, 0.45);
 }
 
 .ggum-runner-goal-list-scroll {
