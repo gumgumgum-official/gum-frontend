@@ -49,8 +49,12 @@ import {
   fetchMonitorCurrent,
   postMonitorStart,
 } from "../lib/monitorCurrentApi.js";
-import { playStage3IntroAudioTwice } from "../utils/common/stage3IntroAudio.js";
-import { stopStage3IntroAudio } from "../utils/common/stage3IntroAudio.js";
+import {
+  pauseStage3BackgroundAmbientForOverlay,
+  playStage3IntroAudioTwice,
+  resumeStage3BackgroundAmbientFromOverlay,
+  stopStage3IntroAudio,
+} from "../utils/common/stage3IntroAudio.js";
 import {
   playRandomNoticePaperSound,
   disposeNoticePaperAudio,
@@ -1453,6 +1457,7 @@ export function Stage3() {
         hideStage3InteractionBubbles();
         flushQueuedStampStepOnModalClose("gameMachine");
         syncStampPanelVisibilityByOverlay();
+        resumeStage3BackgroundAmbientFromOverlay();
         closeMinigame({
           camera: cameraRef,
           orbitControls: debugControls?.getOrbitControls?.() ?? null,
@@ -1753,6 +1758,7 @@ export function Stage3() {
     clearStage3MovementInputs();
     hideStage3InteractionBubbles();
     syncStampPanelVisibilityByOverlay();
+    pauseStage3BackgroundAmbientForOverlay();
     window.dispatchEvent(new CustomEvent("gum:showGameMachineModal"));
   }
 

@@ -18,6 +18,7 @@ let stage3BackgroundDelayTimeoutId = 0;
 let stage3BackgroundFadeRafId = 0;
 let stage3IntroPlayCount = 0;
 let stage3IntroFadeRafId = 0;
+let stage3BackgroundPausedByOverlay = false;
 /** @type {(() => void) | null} */
 let unlistenStage3IntroEnded = null;
 /** @type {(() => void) | null} */
@@ -358,6 +359,7 @@ function ensureStage3FadeOutHook() {
  */
 export function stopStage3IntroAudio() {
   stopStage3BackgroundAmbient();
+  stage3BackgroundPausedByOverlay = false;
   if (!stage3IntroAudio) return;
   if (stage3IntroFadeRafId) {
     cancelAnimationFrame(stage3IntroFadeRafId);
@@ -374,6 +376,27 @@ export function stopStage3IntroAudio() {
   stage3IntroAudio.pause();
   stage3IntroAudio.currentTime = 0;
   stage3IntroAudio.volume = STAGE3_INTRO_BASE_VOLUME;
+}
+
+/** Stage3 오버레이(예: 미니게임)가 열릴 때 배경 루프를 일시정지 */
+export function pauseStage3BackgroundAmbientForOverlay() {
+  if (!stage3BackgroundAudio) return;
+  cancelStage3BackgroundTimers();
+  if (!stage3BackgroundAudio.paused) {
+    stage3BackgroundAudio.pause();
+  }
+  stage3BackgroundPausedByOverlay = true;
+}
+
+/** Stage3 오버레이가 닫힐 때 배경 루프 재개 */
+export function resumeStage3BackgroundAmbientFromOverlay() {
+  if (!stage3BackgroundPausedByOverlay) return;
+  if (!stage3BackgroundAudio) {
+    stage3BackgroundPausedByOverlay = false;
+    return;
+  }
+  stage3BackgroundAudio.play().catch(() => {});
+  stage3BackgroundPausedByOverlay = false;
 }
 
 /**

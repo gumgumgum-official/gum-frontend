@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import "./GgumRunnerMinigame.css";
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import { playUiClickSound } from "../utils/common/playUiClickSound.js";
 
 const W = 700;
 const H = 340;
@@ -136,11 +137,13 @@ export function GgumRunnerMinigame({ onClose }) {
   };
 
   const handleClose = () => {
+    playUiClickSound();
     stopMinigameBgm();
     onClose?.();
   };
 
   const handleResetToStart = () => {
+    playUiClickSound();
     stopMinigameBgm();
     resetToStartActionRef.current();
     setFatalScore(null);
