@@ -360,7 +360,7 @@ export function Stage2() {
   let islandValidator = null;
   /** 글자 스폰 금지 구역 (오브젝트 가시성 보호) */
   let spawnExclusionZones = [];
-  /** beam2.glb 내 OBJ_Fire 애니메이션 믹서 */
+  /** beam_gum_tent_scene.glb 애니메이션 믹서 (3개 클립 동시 무한 재생) */
   let fireMixer = null;
 
   function updateIslandBoundsFromRoots(roots) {
@@ -751,7 +751,7 @@ export function Stage2() {
             // 전체 애니메이션 클립 무한 재생 (이름 필터 없이 전부)
             const clips = gltf.animations ?? [];
             console.log(
-              "[Stage2] beam2 animations:",
+              "[Stage2] beam_gum_tent_scene animations:",
               clips.map((c) => c.name),
             );
             if (clips.length > 0) {
@@ -764,7 +764,7 @@ export function Stage2() {
               });
             } else {
               console.warn(
-                "[Stage2] beam2.glb에 애니메이션 클립 없음 — Blender export 확인 필요",
+                "[Stage2] beam_gum_tent_scene.glb에 애니메이션 클립 없음 — Blender export 확인 필요",
               );
             }
 
@@ -1258,6 +1258,17 @@ function loadCharacters(
         "[Stage2] 캐릭터 GLB에 애니메이션 클립이 없습니다. 이동만 적용합니다.",
       );
     }
+    // 타원 근사로 AABB 모서리 진입 방지 (레이캐스트 대신 O(1) 연산)
+    const _ellipseCx = (walkBounds.minX + walkBounds.maxX) * 0.5;
+    const _ellipseCz = (walkBounds.minZ + walkBounds.maxZ) * 0.5;
+    const _ellipseRx = (walkBounds.maxX - walkBounds.minX) * 0.5 * 0.92;
+    const _ellipseRz = (walkBounds.maxZ - walkBounds.minZ) * 0.5 * 0.92;
+    const ellipseValidator = (x, z) => {
+      const dx = (x - _ellipseCx) / _ellipseRx;
+      const dz = (z - _ellipseCz) / _ellipseRz;
+      return dx * dx + dz * dz <= 1.0;
+    };
+
     const controller = createAutonomousCharacters({
       models: characterModels,
       idleModels: characterIdleModels,
@@ -1266,7 +1277,7 @@ function loadCharacters(
       runClip,
       bounds: walkBounds,
       groundY: rootYForWalk,
-      isPositionValid: null, // 스폰은 islandValidator로 검증 완료 — 이동 루프에서 매 프레임 레이캐스트 제거
+      isPositionValid: ellipseValidator,
       staticColliderBoxes: obstacleBoxes,
       options: {
         moveSpeed: 0.8,
@@ -2150,15 +2161,28 @@ function pickSpawnXZ(
     return minGap;
   };
 
-  // 1단계: 랜덤 넉넉한 간격(1.0~2.0m) → 2단계: 고정 여유 → 3단계: 거의 닿음 → 4단계: 최소 겹침
-  const randomGap = 1.0 + Math.random() * 1.0;
-  const gapLevels = [randomGap, 0.5, 0.0, -0.5];
-  for (const minGap of gapLevels) {
+  // X축(카메라 심도/앞뒤) 최소 간격 별도 체크 — edgeGap 왜곡 없이 오클루전 방지
+  const depthGapOk = (x, minXGap) => {
+    for (const f of allTexts) {
+      const xDist = Math.abs(f.group.position.x - x);
+      const fR = typeof f.radius === "number" ? f.radius : 0;
+      if (xDist < newR + fR + minXGap) return false;
+    }
+    return true;
+  };
+
+  // 1단계: 넉넉한 원형 간격 + 앞뒤 2m → 점진적으로 완화
+  const randomGap = 1.8 + Math.random() * 1.2;
+  const gapLevels = [randomGap, 1.2, 0.6, 0.0];
+  const depthLevels = [2.0, 1.5, 1.0, 0.5];
+  for (let li = 0; li < gapLevels.length; li++) {
+    const minGap = gapLevels[li];
+    const minDepth = depthLevels[li];
     for (let tryCount = 0; tryCount < 40; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
       const z = minZ + Math.random() * (maxZ - minZ);
       if (!isValidPos(x, z)) continue;
-      if (edgeGap(x, z) >= minGap) return { x, z };
+      if (edgeGap(x, z) >= minGap && depthGapOk(x, minDepth)) return { x, z };
     }
   }
 
