@@ -15,7 +15,7 @@
 import * as THREE from "three";
 import { fetchSVG } from "../lib/svg-loader.js";
 
-const MAX_TEXTURE_PIXEL = 2048;
+const MAX_TEXTURE_PIXEL = 512; // GPU 업로드 비용 절감 — worker로 캔버스 드로우는 off-thread 처리
 let sharedRasterWorker = null;
 const pendingRasterRequests = new Map();
 

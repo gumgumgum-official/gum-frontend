@@ -1,9 +1,11 @@
 /**
- * 껌 카드 모달 오버레이: gum-cards-modal:open 수신 시 GumCardsModal 표시
- * 텐트 효과음은 이 컴포넌트가 아니라 openGumCardsModal() 호출 시 재생됨
+ * 껌 카드 모달 오버레이: gum-cards-modal:open 수신 시
+ * 1) TentSceneViewer 를 먼저 표시
+ * 2) TentSceneViewer 에서 클릭하면 GumCardsModal 표시
  */
 import { useState, useEffect, useCallback } from "react";
 import { GumCardsModal } from "./GumCardsModal.jsx";
+import { TentSceneViewer } from "./TentSceneViewer.jsx";
 import { playUiClickSound } from "../utils/common/playUiClickSound.js";
 import {
   dispatchGumCardsModalClose,
@@ -12,25 +14,37 @@ import {
 } from "../utils/stages/stage3/gumCardsModalLauncher.js";
 
 export function GumCardsModalOverlay() {
-  const [visible, setVisible] = useState(false);
+  // "closed" | "tent" | "cards"
+  const [phase, setPhase] = useState("closed");
 
-  const handleClose = useCallback(() => {
+  const closeAll = useCallback(() => {
     playUiClickSound();
-    setVisible(false);
+    setPhase("closed");
     dispatchGumCardsModalClose();
   }, []);
 
+  const openCards = useCallback(() => {
+    setPhase("cards");
+  }, []);
+
   useEffect(() => {
-    const onOpen = () => setVisible(true);
+    const onOpen = () => setPhase("tent");
     window.addEventListener(EVENT_OPEN, onOpen);
     return () => window.removeEventListener(EVENT_OPEN, onOpen);
   }, []);
 
   useEffect(() => {
-    const onClose = () => setVisible(false);
+    const onClose = () => setPhase("closed");
     window.addEventListener(EVENT_CLOSE, onClose);
     return () => window.removeEventListener(EVENT_CLOSE, onClose);
   }, []);
 
-  return <GumCardsModal open={visible} onClose={handleClose} />;
+  return (
+    <>
+      {phase === "tent" && (
+        <TentSceneViewer onClose={closeAll} onCardOpen={openCards} />
+      )}
+      <GumCardsModal open={phase === "cards"} onClose={closeAll} />
+    </>
+  );
 }

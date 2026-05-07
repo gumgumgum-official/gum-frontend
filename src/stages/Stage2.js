@@ -44,10 +44,10 @@ const GROUND_Y = 0.7;
 // island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
 const ISLAND_BOUNDS_INSET_RATIO = 0.08;
-// 스폰 시 그 안에서 다시 앞·뒤·좌우 살짝만 더 빼기 (섬 전체에 퍼지도록 작게)
-const SPAWN_INSET_RATIO = 0.05;
-const SPAWN_INSET_SIDE_RATIO = 0.06;
-const SPAWN_INSET_BOTTOM_RATIO = 0.1;
+// 스폰 시 그 안에서 다시 살짝 더 빼기 — 울타리 안이 기준이므로 작게 유지
+const SPAWN_INSET_RATIO = 0.14;
+const SPAWN_INSET_SIDE_RATIO = 0.1;
+const SPAWN_INSET_BOTTOM_RATIO = 0.18;
 const SPAWN_HEIGHT_MIN = 10; // 낙하 시작 높이 하한
 const SPAWN_HEIGHT_MAX = 30; // 최대 시작 높이
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
@@ -328,6 +328,21 @@ export function Stage2() {
   const processedHandwritingKeys = new Set();
   /** cleanup 이후 stale 비동기 작업(loadInitial, ingest)이 scene에 추가되지 않도록 차단 */
   let isStage2Active = false;
+  /** Realtime SVG 직렬 처리 큐 — 동시에 여러 SVG가 도착해도 한 번에 하나씩 처리 */
+  const svgQueue = [];
+  let svgQueueDraining = false;
+  const drainSvgQueue = async () => {
+    if (svgQueueDraining) return;
+    svgQueueDraining = true;
+    while (svgQueue.length > 0) {
+      if (!isStage2Active) break;
+      const fn = svgQueue.shift();
+      await fn();
+      if (svgQueue.length > 0)
+        await new Promise((r) => setTimeout(r, STAGGER_MS));
+    }
+    svgQueueDraining = false;
+  };
   let cameraRef = null;
   /** 섬 XZ 범위 — island.glb 로드 시 자동 계산됨 (검증: 예전 수치 fallback 없이 이 값만 사용) */
   let islandBounds = null;
@@ -413,7 +428,7 @@ export function Stage2() {
           {
             initial: false,
             groundY: characterWalkGroundY,
-            islandValidator,
+            islandValidator: null, // 레이캐스트 비용 과다 — AABB + exclusion zones으로 대체
             spawnExclusionZones,
           },
           () => characterMoveBounds ?? islandBounds,
@@ -761,7 +776,8 @@ export function Stage2() {
       // Handwriting: 실시간 수신 (누적 로드는 GLB 로드 후 섬 땅 높이 적용 뒤 호출)
       realtimeSubscription = subscribeHandwritingRealtime({
         onNewHandwriting: (metadata) => {
-          void ingestHandwriting(metadata, "realtime");
+          svgQueue.push(() => ingestHandwriting(metadata, "realtime"));
+          void drainSvgQueue();
         },
         onError: (error) => {
           console.error("[Stage2] Handwriting realtime error:", error);
@@ -832,6 +848,7 @@ export function Stage2() {
 
     cleanup(scene) {
       isStage2Active = false;
+      svgQueue.length = 0;
 
       // Realtime 구독 해제
       if (realtimeSubscription) {
@@ -1249,10 +1266,7 @@ function loadCharacters(
       runClip,
       bounds: walkBounds,
       groundY: rootYForWalk,
-      isPositionValid:
-        typeof islandValidator === "function"
-          ? (x, z) => islandValidator(x, z)
-          : null,
+      isPositionValid: null, // 스폰은 islandValidator로 검증 완료 — 이동 루프에서 매 프레임 레이캐스트 제거
       staticColliderBoxes: obstacleBoxes,
       options: {
         moveSpeed: 0.8,
@@ -1291,13 +1305,13 @@ function loadCharacters(
       logDuration("characters:loadWalk+Idle", tCharsStart);
       const walkGltf = {
         ...walkRes.value,
-        scene: walkRes.value.scene.clone(true),
+        scene: SkeletonUtils.clone(walkRes.value.scene),
       };
       const idleGltf =
         idleRes.status === "fulfilled"
           ? {
               ...idleRes.value,
-              scene: idleRes.value.scene.clone(true),
+              scene: SkeletonUtils.clone(idleRes.value.scene),
             }
           : null;
       if (idleRes.status === "rejected") {
@@ -1381,6 +1395,7 @@ function loadPropsFromConfig(
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files"; // session_id, storage_path, created_at, client_id
 const STAGGER_MS = 90; // 기본 간격 (동적 스케줄에서 기준값으로 사용)
+const MAX_FALLING_TEXTS = 40; // 씬에 동시에 존재할 수 있는 SVG 평면 최대 수
 
 // ------------------------------------------------------------
 // 글씨 스케일 정규화 (Stage3 방식)
@@ -1597,6 +1612,18 @@ async function createFallingText(
       ? optGroundY
       : GROUND_Y;
 
+  // 씬 SVG 수 상한 — 착지된 것 중 가장 오래된 것부터 제거
+  if (fallingTextsArr.length >= MAX_FALLING_TEXTS) {
+    const oldestIdx = fallingTextsArr.findIndex((ft) => ft.landed);
+    if (oldestIdx >= 0) {
+      const old = fallingTextsArr.splice(oldestIdx, 1)[0];
+      scene.remove(old.group);
+      disposeHandwritingSvgPlaneGroup(old.group);
+    } else {
+      return; // 아직 낙하 중인 것만 있으면 이번 SVG 스킵
+    }
+  }
+
   try {
     // 50% 확률로 최솟값, 나머지 50%는 전체 범위 내 균일 랜덤
     const randomFactor =
@@ -1642,9 +1669,19 @@ async function createFallingText(
         SPAWN_HEIGHT_MIN +
         Math.random() * (SPAWN_HEIGHT_MAX - SPAWN_HEIGHT_MIN);
 
+    // 착지 후 고정될 글자별 고유 방향 — 카메라 정면에서 좌우로 약간씩 틀어져 자유분방한 느낌
+    const yawJitter = (Math.random() - 0.5) * THREE.MathUtils.degToRad(64); // ±32°
+    const pitchJitter = 0; // 글자 자체를 앞뒤로 눕히지 않음 — 기울어지면 가독성 저하
+
     group.position.set(startX, startY, startZ);
     group.rotation.set(0, 0, 0);
-    setReadableRotationTowardCamera(group, camera, landingY);
+    setReadableRotationTowardCamera(
+      group,
+      camera,
+      landingY,
+      yawJitter,
+      pitchJitter,
+    );
 
     const speedFactor = 0.25 + Math.random() * 0.75;
     const gravity = FALL_GRAVITY_MAX * speedFactor;
@@ -1669,6 +1706,8 @@ async function createFallingText(
       baseGroundY: groundY, // 섬 지면 실제 Y (landing 후 위치 보정용)
       bounces: 0,
       landed: initial,
+      yawJitter,
+      pitchJitter,
     };
 
     fallingTextsArr.push(fallingText);
@@ -1739,7 +1778,13 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
       group.rotation.set(0, 0, 0);
       const baseY = ft.baseGroundY ?? GROUND_Y;
       group.position.y = baseY;
-      setReadableRotationTowardCamera(group, camera, baseY);
+      setReadableRotationTowardCamera(
+        group,
+        camera,
+        baseY,
+        ft.yawJitter ?? 0,
+        ft.pitchJitter ?? 0,
+      );
       group.updateMatrixWorld(true);
       const landedBox = new THREE.Box3().setFromObject(group);
       group.position.y += baseY - landedBox.min.y; // bottom이 baseY에 닿도록
@@ -1761,7 +1806,13 @@ function updateFallingTexts(delta, camera, fallingTextsArr) {
  * 가독성이 떨어진다. 수평 yaw로 카메라 쪽을 본 뒤, 시선의 고도에 맞춰 약간 눕혀(피치)
  * 평면이 시선에 가깝게 정면을 향하도록 한다.
  */
-function setReadableRotationTowardCamera(group, camera, _groundY) {
+function setReadableRotationTowardCamera(
+  group,
+  camera,
+  _groundY,
+  yawJitter = 0,
+  pitchJitter = 0,
+) {
   const toCam = new THREE.Vector3(
     camera.position.x - group.position.x,
     camera.position.y - group.position.y,
@@ -1771,10 +1822,10 @@ function setReadableRotationTowardCamera(group, camera, _groundY) {
   if (horizLen < 1e-6 && Math.abs(toCam.y) < 1e-6) return;
   toCam.normalize();
 
-  const yaw = Math.atan2(toCam.x, toCam.z);
+  const yaw = Math.atan2(toCam.x, toCam.z) + yawJitter;
   const elev = Math.atan2(toCam.y, Math.max(1e-6, horizLen));
   const tilt = THREE.MathUtils.clamp(
-    elev * LETTER_CAMERA_TILT_FACTOR,
+    elev * LETTER_CAMERA_TILT_FACTOR + pitchJitter,
     -LETTER_MAX_TILT_RAD,
     LETTER_MAX_TILT_RAD,
   );
@@ -1824,15 +1875,12 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
   const turnsY = 0.35 + Math.random() * 0.65; // 0.35~1.0 바퀴
 
   const signX = Math.random() < 0.5 ? -1 : 1;
-  const turnsX = Math.random() * 0.45; // 0~0.45 바퀴 (낙하 중 X 텀블)
-
-  const signZ = Math.random() < 0.5 ? -1 : 1;
-  const turnsZ = Math.random() * 0.35; // 0~0.35 바퀴 (낙하 중 Z 기울기)
+  const turnsX = Math.random() * 0.5; // 0~0.5 바퀴 (앞뒤 텀블)
 
   return {
     x: (signX * 2 * Math.PI * turnsX) / T,
     y: (sign * 2 * Math.PI * turnsY) / T,
-    z: (signZ * 2 * Math.PI * turnsZ) / T,
+    z: 0, // 좌우 roll 없음 — 땅에 박히는 느낌 방지
   };
 }
 
@@ -2009,33 +2057,21 @@ function getSpawnBounds(bounds) {
  *   z_gt는 MAX(임계값)
  */
 function buildSpawnExclusionZones(allModels) {
-  const MARGIN = 1.5;
-  const collected = { z_gt: [] };
+  const MARGIN = 2.0; // OBJ_ 오브젝트 주변 여유 반경
   const found = new Set();
+  const zones = [];
 
   allModels.forEach((m) => {
     m.traverse((obj) => {
+      if (!obj.name.startsWith("OBJ_")) return;
       if (found.has(obj.name)) return;
-      if (obj.name === "OBJ_Swing" || obj.name === "OBJ_Tree1") {
-        found.add(obj.name);
-        const pos = new THREE.Vector3();
-        obj.getWorldPosition(pos);
-        collected.z_gt.push(pos.z - MARGIN);
-        console.log(
-          `[Stage2] ${obj.name} 발견 z=${pos.z.toFixed(2)} → 제외 기준 Z > ${(pos.z - MARGIN).toFixed(2)}`,
-        );
-      }
+      found.add(obj.name);
+      const pos = new THREE.Vector3();
+      obj.getWorldPosition(pos);
+      zones.push({ type: "point", x: pos.x, z: pos.z, margin: MARGIN });
     });
   });
 
-  const zones = [];
-  if (collected.z_gt.length > 0) {
-    const threshold = Math.max(...collected.z_gt); // 제일 오른쪽 오브젝트 기준
-    zones.push({ axis: "z", op: "gt", threshold });
-    console.log(
-      `[Stage2] 글자 스폰 제외 확정 (화면 우측): Z > ${threshold.toFixed(2)}`,
-    );
-  }
   return zones;
 }
 
@@ -2073,12 +2109,13 @@ function pickSpawnXZ(
   const allTexts = fallingTextsArr || [];
 
   // 오브젝트 가시성 보호 제외구역 + validator 검사
+  const spawnW = maxX - minX;
+  const spawnD = maxZ - minZ;
   const isValidPos = (x, z) => {
     for (const zone of exclusionZones) {
-      const val = zone.axis === "x" ? x : z;
-      if (zone.op === "gt" ? val > zone.threshold : val < zone.threshold) {
+      // OBJ_ 오브젝트 원형 제외: 글자 가장자리까지 포함해 거리 체크
+      if (Math.hypot(x - zone.x, z - zone.z) < zone.margin + halfExtent)
         return false;
-      }
     }
     if (!islandValidator) return true;
     if (!islandValidator(x, z)) return false;
@@ -2113,10 +2150,11 @@ function pickSpawnXZ(
     return minGap;
   };
 
-  // 1단계: 충분한 간격(0.3m) → 2단계: 아주 살짝(0.05m) → 3단계: 거의 맞닿음(0) → 4단계: 약간 겹침 허용
-  const gapLevels = [0.3, 0.05, 0.0, -0.5];
+  // 1단계: 랜덤 넉넉한 간격(1.0~2.0m) → 2단계: 고정 여유 → 3단계: 거의 닿음 → 4단계: 최소 겹침
+  const randomGap = 1.0 + Math.random() * 1.0;
+  const gapLevels = [randomGap, 0.5, 0.0, -0.5];
   for (const minGap of gapLevels) {
-    for (let tryCount = 0; tryCount < 150; tryCount++) {
+    for (let tryCount = 0; tryCount < 40; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
       const z = minZ + Math.random() * (maxZ - minZ);
       if (!isValidPos(x, z)) continue;

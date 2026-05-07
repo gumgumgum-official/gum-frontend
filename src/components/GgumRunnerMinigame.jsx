@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./GgumRunnerMinigame.css";
 import { MINIGAME_AUDIO_CONFIG } from "../config/minigameAudioConfig.js";
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
+import { postScore, fetchLeaderboard } from "../lib/scoreApi.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { playUiClickSound } from "../utils/common/playUiClickSound.js";
 
@@ -56,9 +57,10 @@ export function GgumRunnerMinigame({ onClose }) {
   const [postGameStep, setPostGameStep] = useState("gameover");
   const [saveName, setSaveName] = useState("");
   const [saveFormError, setSaveFormError] = useState("");
-  /** `goal_list`에서만 `avatarSrc()`로 로드; 저장 화면은 슬롯 인덱스만 사용 */
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedSaveSlotIndex, setSelectedSaveSlotIndex] = useState(null);
   const [leaderboardRows, setLeaderboardRows] = useState([]);
+  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(false);
   const [myRank, setMyRank] = useState(null);
   const [goalScrollbar, setGoalScrollbar] = useState({
     thumbHeight: 24,
@@ -151,8 +153,10 @@ export function GgumRunnerMinigame({ onClose }) {
     setPostGameStep("gameover");
     setSaveName("");
     setSaveFormError("");
+    setIsSaving(false);
     setSelectedSaveSlotIndex(null);
     setLeaderboardRows([]);
+    setIsLeaderboardLoading(false);
     setMyRank(null);
   }, [stopMinigameBgm]);
 
@@ -170,13 +174,16 @@ export function GgumRunnerMinigame({ onClose }) {
       setPostGameStep("gameover");
       setSaveName("");
       setSaveFormError("");
+      setIsSaving(false);
       setSelectedSaveSlotIndex(null);
       setLeaderboardRows([]);
+      setIsLeaderboardLoading(false);
       setMyRank(null);
     },
   };
 
-  const handleSaveEnter = () => {
+  const handleSaveEnter = async () => {
+    if (isSaving) return;
     const name = saveName.trim();
     if (!name) {
       setSaveFormError("이름을 입력해 주세요.");
@@ -188,27 +195,55 @@ export function GgumRunnerMinigame({ onClose }) {
     }
     setSaveFormError("");
     if (fatalScore == null) return;
-    const rows = appendLeaderboardEntry({
+
+    setIsSaving(true);
+    setLeaderboardRows([]);
+    setIsLeaderboardLoading(true);
+    setPostGameStep("leaderboard");
+
+    const localRows = appendLeaderboardEntry({
       name,
       avatarKey: selectedAvatarKey,
       score: fatalScore,
     });
-    setLeaderboardRows(rows);
-    const latestMatchingRow = rows
-      .filter(
-        (row) =>
-          row.name === name &&
-          row.avatarKey === selectedAvatarKey &&
-          row.score === fatalScore,
-      )
-      .sort((a, b) => b.at - a.at)[0];
-    if (latestMatchingRow) {
-      const rank = rows.findIndex((row) => row.at === latestMatchingRow.at) + 1;
-      setMyRank(rank > 0 ? rank : null);
-    } else {
-      setMyRank(null);
-    }
-    setPostGameStep("leaderboard");
+
+    let savedUserId = name;
+    postScore(name, fatalScore)
+      .then((res) => {
+        if (res?.userId) savedUserId = res.userId;
+        return fetchLeaderboard();
+      })
+      .then((apiRows) => {
+        if (apiRows.length > 0) {
+          const displayRows = apiRows.map((row) => ({
+            name: row.userId,
+            score: row.totalScore,
+            avatarKey:
+              localRows.find((r) => r.name === row.userId)?.avatarKey ?? null,
+            at: row.id,
+          }));
+          setLeaderboardRows(displayRows);
+          const rank = displayRows.findIndex((r) => r.name === savedUserId) + 1;
+          setMyRank(rank > 0 ? rank : null);
+        } else {
+          setLeaderboardRows(localRows);
+          setMyRank(null);
+        }
+        setIsLeaderboardLoading(false);
+      })
+      .catch((err) => {
+        if (err.status === 409) {
+          setPostGameStep("save");
+          setIsSaving(false);
+          setSaveFormError(
+            "이미 사용 중인 닉네임입니다. 다른 이름을 입력해 주세요.",
+          );
+        } else {
+          setLeaderboardRows(localRows);
+          setMyRank(null);
+        }
+        setIsLeaderboardLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -881,6 +916,11 @@ export function GgumRunnerMinigame({ onClose }) {
                         alt=""
                         className="ggum-runner-sheet-art"
                       />
+                      {saveFormError ? (
+                        <p className="ggum-runner-save-error">
+                          {saveFormError}
+                        </p>
+                      ) : null}
                       <input
                         type="text"
                         className="ggum-runner-save-name-input"
@@ -893,11 +933,6 @@ export function GgumRunnerMinigame({ onClose }) {
                         maxLength={16}
                         autoComplete="off"
                       />
-                      {saveFormError ? (
-                        <p className="ggum-runner-save-error">
-                          {saveFormError}
-                        </p>
-                      ) : null}
                       <div className="ggum-runner-save-slots">
                         {SAVE_AVATAR_SLOTS.map((key, index) => (
                           <button
@@ -917,6 +952,7 @@ export function GgumRunnerMinigame({ onClose }) {
                         className="ggum-runner-save-hit ggum-runner-save-enter"
                         aria-label="기록 저장 및 순위 보기"
                         onClick={handleSaveEnter}
+                        disabled={isSaving}
                       />
                       <button
                         type="button"
@@ -968,27 +1004,37 @@ export function GgumRunnerMinigame({ onClose }) {
                   ref={goalListScrollRef}
                   className="ggum-runner-goal-list-scroll"
                 >
-                  {leaderboardRows.map((row, i) => (
-                    <div
-                      key={`${row.at}-${i}`}
-                      className={`ggum-runner-goal-row${myRank === i + 1 ? " ggum-runner-goal-row--mine" : ""}`}
-                    >
-                      <div className="ggum-runner-goal-row-thumb-wrap">
-                        <img
-                          src={avatarSrc(row.avatarKey)}
-                          alt=""
-                          className="ggum-runner-goal-row-thumb"
-                        />
-                      </div>
-                      <span className="ggum-runner-goal-row-rank">{i + 1}</span>
-                      <span className="ggum-runner-goal-row-name">
-                        {row.name}
-                      </span>
-                      <span className="ggum-runner-goal-row-score">
-                        {row.score}
-                      </span>
+                  {isLeaderboardLoading ? (
+                    <div className="ggum-runner-goal-loading">
+                      불러오는 중...
                     </div>
-                  ))}
+                  ) : (
+                    leaderboardRows.map((row, i) => (
+                      <div
+                        key={`${row.at ?? i}-${i}`}
+                        className={`ggum-runner-goal-row${myRank === i + 1 ? " ggum-runner-goal-row--mine" : ""}`}
+                      >
+                        <div className="ggum-runner-goal-row-thumb-wrap">
+                          {row.avatarKey ? (
+                            <img
+                              src={avatarSrc(row.avatarKey)}
+                              alt=""
+                              className="ggum-runner-goal-row-thumb"
+                            />
+                          ) : null}
+                        </div>
+                        <span className="ggum-runner-goal-row-rank">
+                          {i + 1}
+                        </span>
+                        <span className="ggum-runner-goal-row-name">
+                          {row.name}
+                        </span>
+                        <span className="ggum-runner-goal-row-score">
+                          {row.score}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
                 <div
                   className="ggum-runner-goal-custom-scrollbar"

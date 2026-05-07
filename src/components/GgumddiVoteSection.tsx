@@ -3,15 +3,21 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import { getSessionId } from "../lib/session.js";
 import {
-  GGUMDDI_MY_VOTE_STORAGE_PREFIX,
+  deleteMyVote,
+  fetchMyVote,
   fetchVoteResults,
+  getOrCreateVoteClientId,
+  GGUMDDI_MY_VOTE_STORAGE_PREFIX,
   postVote,
+  saveVoteClientId,
+  updateMyVote,
 } from "../lib/voteApi.js";
 import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 
@@ -45,21 +51,6 @@ const CANDIDATES: { id: VoteId; name: string; image: string; dot: string }[] = [
 
 /** 후보 점(dot)과 같은 단색 막대 (그라데이션 없음) */
 const BAR_FILLS = ["bg-[#FF8B33]", "bg-[#c4a882]", "bg-[#FF4A89]"] as const;
-function getMyVoteStorageKey() {
-  return `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:${getSessionId()}`;
-}
-
-function loadPersistedMyVote(): VoteId | null {
-  try {
-    const raw = localStorage.getItem(getMyVoteStorageKey());
-    if (raw === "1" || raw === "2" || raw === "3") {
-      return Number(raw) as VoteId;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
 
 type VoteBundle = {
   votes: Record<VoteId, number>;
@@ -69,9 +60,11 @@ type VoteBundle = {
 
 /** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 */
 export function GgumddiVoteSection({ className }: { className?: string }) {
+  const clientId = useMemo(() => getOrCreateVoteClientId(), []);
+
   const [bundle, setBundle] = useState<VoteBundle>({
     votes: { ...INITIAL_VOTES },
-    myVote: loadPersistedMyVote(),
+    myVote: null,
     totalVotes: 0,
   });
   const { votes, myVote, totalVotes } = bundle;
@@ -86,14 +79,14 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   useEffect(() => {
     let alive = true;
     setIsLoadingResults(true);
-    fetchVoteResults()
-      .then((aggregate) => {
+    Promise.all([fetchVoteResults(), fetchMyVote(clientId)])
+      .then(([aggregate, serverMyVote]) => {
         if (!alive) return;
-        setBundle((prev) => ({
+        setBundle({
           votes: aggregate.votes,
-          myVote: prev.myVote,
+          myVote: serverMyVote,
           totalVotes: aggregate.totalVotes,
-        }));
+        });
         setErrorMessage("");
       })
       .catch((err) => {
@@ -111,20 +104,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
     return () => {
       alive = false;
     };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const key = getMyVoteStorageKey();
-      if (myVote === null) {
-        localStorage.removeItem(key);
-      } else {
-        localStorage.setItem(key, String(myVote));
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [myVote]);
+  }, [clientId]);
 
   useLayoutEffect(() => {
     if (justVotedId === null) return;
@@ -135,31 +115,58 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
   const onVote = useCallback(
     async (id: VoteId) => {
       if (isVoting) return;
-      if (myVote !== null) {
-        setErrorMessage(
-          "후보 변경/취소 기능은 준비 중입니다. 지금은 1회 투표만 가능합니다.",
-        );
-        return;
-      }
       setIsVoting(true);
+      setErrorMessage("");
       try {
-        const response = await postVote(id);
-        setBundle({
-          votes: response.votes,
-          myVote: id,
-          totalVotes: response.totalVotes,
-        });
-        setJustVotedId(id);
-        setErrorMessage("");
+        if (myVote === null) {
+          // 첫 투표
+          const response = await postVote(id, { clientId });
+          if (response.clientId) saveVoteClientId(response.clientId);
+          setBundle({
+            votes: response.votes,
+            myVote: id,
+            totalVotes: response.totalVotes,
+          });
+          setJustVotedId(id);
+        } else if (myVote === id) {
+          // 같은 후보 재클릭 → 취소
+          const response = await deleteMyVote({ clientId });
+          setBundle({
+            votes: response.votes,
+            myVote: null,
+            totalVotes: response.totalVotes,
+          });
+        } else {
+          // 다른 후보 클릭 → 재투표
+          const response = await updateMyVote(id, { clientId });
+          setBundle({
+            votes: response.votes,
+            myVote: id,
+            totalVotes: response.totalVotes,
+          });
+          setJustVotedId(id);
+        }
       } catch (err) {
-        setErrorMessage(
-          err instanceof Error ? err.message : "투표 등록에 실패했습니다.",
-        );
+        const status = (err as { status?: number })?.status;
+        if (status === 409) {
+          // 서버와 상태 불일치 → 서버 상태로 동기화 후 재시도 안내
+          try {
+            const serverVote = await fetchMyVote(clientId);
+            setBundle((prev) => ({ ...prev, myVote: serverVote }));
+          } catch {
+            /* ignore */
+          }
+          setErrorMessage("투표 상태를 다시 확인했습니다. 다시 시도해주세요.");
+        } else {
+          setErrorMessage(
+            err instanceof Error ? err.message : "투표 처리에 실패했습니다.",
+          );
+        }
       } finally {
         setIsVoting(false);
       }
     },
-    [isVoting, myVote],
+    [isVoting, myVote, clientId],
   );
 
   useEffect(() => {
@@ -244,6 +251,12 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
               const tDelay = [50, 120, 190][cardIdx];
               const nameDelay = [100, 170, 240][cardIdx];
               const voted = myVote === id;
+              const otherVoted = myVote !== null && myVote !== id;
+              const hoverLabel = voted
+                ? "취소하기"
+                : otherVoted
+                  ? "변경하기"
+                  : "투표하기";
               return (
                 <div
                   key={id}
@@ -257,7 +270,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
                       popupOpen
                         ? "translate-y-0 scale-100"
                         : "translate-y-5 scale-[0.85]"
-                    } ${isVoting ? "cursor-wait opacity-80" : ""} ${voted ? "outline outline-[3px] outline-[#FFD700] outline-offset-2" : ""} ${
+                    } ${isVoting ? "cursor-wait opacity-80" : ""} ${voted ? "outline outline-[3px] outline-black outline-offset-2" : ""} ${
                       justVotedId === id ? "animate-ggumddi-vote-pop" : ""
                     }`}
                     style={{ transitionDelay: `${tDelay}ms` }}
@@ -270,13 +283,24 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
                       className="block w-full"
                     />
                     <span
-                      className={`absolute right-0 bottom-0 left-0 bg-black/75 py-2.5 px-2 text-center text-[clamp(12px,2.2vw,14px)] font-semibold text-white transition-transform duration-300 font-['Noto_Sans_KR',system-ui,sans-serif] ${
+                      className={`absolute right-0 bottom-0 left-0 py-2.5 px-2 text-center text-[clamp(12px,2.2vw,14px)] font-semibold text-white transition-transform duration-300 font-['Noto_Sans_KR',system-ui,sans-serif] ${
                         voted
-                          ? "translate-y-0 bg-[rgba(255,215,0,0.9)] text-[#1a1a2e]"
-                          : "translate-y-full group-hover/sub:translate-y-0"
+                          ? "translate-y-0 bg-[rgba(255,215,0,0.9)] text-[#1a1a2e] group-hover/sub:bg-[rgba(220,38,38,0.85)] group-hover/sub:text-white"
+                          : "bg-black/75 translate-y-full group-hover/sub:translate-y-0"
                       }`}
                     >
-                      {voted ? "투표 완료!" : "투표하기"}
+                      {voted ? (
+                        <>
+                          <span className="group-hover/sub:hidden">
+                            투표 완료!
+                          </span>
+                          <span className="hidden group-hover/sub:inline">
+                            {hoverLabel}
+                          </span>
+                        </>
+                      ) : (
+                        hoverLabel
+                      )}
                     </span>
                   </button>
                   <span

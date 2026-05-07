@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
-import { MinigameOverlay } from "../components/MinigameOverlay.jsx";
 import styles from "./Page.module.css";
 
 const KIOSK_STAGES = [3];
@@ -29,7 +28,6 @@ export function KioskPage() {
   return (
     <div className={styles.page}>
       <ThreeCanvas allowedStages={allowedStages} initialStage={3} />
-      <MinigameOverlay />
     </div>
   );
 }
