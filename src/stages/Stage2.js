@@ -776,7 +776,7 @@ export function Stage2() {
             // 전체 애니메이션 클립 무한 재생 (이름 필터 없이 전부)
             const clips = gltf.animations ?? [];
             console.log(
-              "[Stage2] beam_gum_tent_scene animations:",
+              "[Stage2] beam_animations:",
               clips.map((c) => c.name),
             );
             if (clips.length > 0) {
@@ -789,7 +789,7 @@ export function Stage2() {
               });
             } else {
               console.warn(
-                "[Stage2] beam_gum_tent_scene.glb에 애니메이션 클립 없음 — Blender export 확인 필요",
+                "[Stage2] gum_tent_scene.glb에 애니메이션 클립 없음 — Blender export 확인 필요",
               );
             }
 
