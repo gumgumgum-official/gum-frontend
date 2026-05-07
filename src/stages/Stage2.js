@@ -44,11 +44,10 @@ const GROUND_Y = 0.7;
 // island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
 const ISLAND_BOUNDS_INSET_RATIO = 0.08;
-// 스폰 시 그 안에서 다시 앞·뒤·좌우 살짝만 더 빼기 (섬 전체에 퍼지도록 작게)
-// 화면 기준: 위≈-X, 아래≈+X, 왼쪽≈-Z, 오른쪽≈+Z
-const SPAWN_INSET_RATIO = 0.02; // minZ(화면 왼쪽) — 왼쪽까지 넓게
-const SPAWN_INSET_SIDE_RATIO = 0.12; // X 양쪽(화면 위/아래) — 위 울타리 여유
-const SPAWN_INSET_BOTTOM_RATIO = 0.18; // maxZ(화면 오른쪽) — 오른쪽 울타리 여유
+// 스폰 시 그 안에서 다시 살짝 더 빼기 — 울타리 안이 기준이므로 작게 유지
+const SPAWN_INSET_RATIO = 0.14;
+const SPAWN_INSET_SIDE_RATIO = 0.06;
+const SPAWN_INSET_BOTTOM_RATIO = 0.16;
 const SPAWN_HEIGHT_MIN = 10; // 낙하 시작 높이 하한
 const SPAWN_HEIGHT_MAX = 30; // 최대 시작 높이
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
@@ -2058,33 +2057,21 @@ function getSpawnBounds(bounds) {
  *   z_gt는 MAX(임계값)
  */
 function buildSpawnExclusionZones(allModels) {
-  const MARGIN = 3.5;
-  const collected = { z_gt: [] };
+  const MARGIN = 2.0; // OBJ_ 오브젝트 주변 여유 반경
   const found = new Set();
+  const zones = [];
 
   allModels.forEach((m) => {
     m.traverse((obj) => {
+      if (!obj.name.startsWith("OBJ_")) return;
       if (found.has(obj.name)) return;
-      if (obj.name === "OBJ_Swing" || obj.name === "OBJ_Tree1") {
-        found.add(obj.name);
-        const pos = new THREE.Vector3();
-        obj.getWorldPosition(pos);
-        collected.z_gt.push(pos.z - MARGIN);
-        console.log(
-          `[Stage2] ${obj.name} 발견 z=${pos.z.toFixed(2)} → 제외 기준 Z > ${(pos.z - MARGIN).toFixed(2)}`,
-        );
-      }
+      found.add(obj.name);
+      const pos = new THREE.Vector3();
+      obj.getWorldPosition(pos);
+      zones.push({ type: "point", x: pos.x, z: pos.z, margin: MARGIN });
     });
   });
 
-  const zones = [];
-  if (collected.z_gt.length > 0) {
-    const threshold = Math.max(...collected.z_gt); // 제일 오른쪽 오브젝트 기준
-    zones.push({ axis: "z", op: "gt", threshold });
-    console.log(
-      `[Stage2] 글자 스폰 제외 확정 (화면 우측): Z > ${threshold.toFixed(2)}`,
-    );
-  }
   return zones;
 }
 
@@ -2122,12 +2109,13 @@ function pickSpawnXZ(
   const allTexts = fallingTextsArr || [];
 
   // 오브젝트 가시성 보호 제외구역 + validator 검사
+  const spawnW = maxX - minX;
+  const spawnD = maxZ - minZ;
   const isValidPos = (x, z) => {
     for (const zone of exclusionZones) {
-      const val = zone.axis === "x" ? x : z;
-      if (zone.op === "gt" ? val > zone.threshold : val < zone.threshold) {
+      // OBJ_ 오브젝트 원형 제외: 글자 가장자리까지 포함해 거리 체크
+      if (Math.hypot(x - zone.x, z - zone.z) < zone.margin + halfExtent)
         return false;
-      }
     }
     if (!islandValidator) return true;
     if (!islandValidator(x, z)) return false;
@@ -2163,9 +2151,9 @@ function pickSpawnXZ(
   };
 
   // 1단계: 여유간격 → 2단계: 거의 닿음 → 3단계: 살짝 겹침 → 4단계: 최대 겹침 하한
-  const gapLevels = [0.6, 0.2, -0.1, -0.4];
+  const gapLevels = [0.1, -0.2, -0.6, -1.2];
   for (const minGap of gapLevels) {
-    for (let tryCount = 0; tryCount < 60; tryCount++) {
+    for (let tryCount = 0; tryCount < 40; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
       const z = minZ + Math.random() * (maxZ - minZ);
       if (!isValidPos(x, z)) continue;

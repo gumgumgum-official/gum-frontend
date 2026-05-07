@@ -103,6 +103,14 @@ export const STAGE3_OBJECTS_CONFIG = {
     ],
     /** 텐트 클릭 시 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
     tentSoundVolume: 1.6,
+    /**
+     * 텐트 씬 뷰어 초기 카메라. OrbitControls로 원하는 각도를 찾은 뒤
+     * 콘솔 로그에 출력된 값을 여기에 붙여넣어 고정한다.
+     */
+    tentSceneCamera: {
+      position: [0, 2, 5],
+      target: [0, 0, 0],
+    },
   },
 
   /**
