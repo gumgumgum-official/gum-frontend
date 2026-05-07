@@ -118,7 +118,7 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
     const isDefaultCam =
       cfg.position[0] === 0 && cfg.position[1] === 2 && cfg.position[2] === 5;
 
-    getGLBLoader().load("/models/stage3/tent_scene.glb", {
+    getGLBLoader().load("/models/stage3/tent_scene_5.glb", {
       onLoad: (gltf) => {
         gltf.scene.traverse((obj) => {
           if (obj.isLight) obj.intensity *= 0.0005;

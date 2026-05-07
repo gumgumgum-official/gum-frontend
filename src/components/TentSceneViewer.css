@@ -45,6 +45,13 @@
   pointer-events: none;
 }
 
+.speech-bubble-stage6.tent-bubble {
+  white-space: normal;
+  max-width: min(94vw, 320px);
+  word-break: keep-all;
+  text-align: center;
+}
+
 .tent-scene-hint {
   color: rgba(255, 255, 255, 0.85);
   font-size: 0.85rem;
