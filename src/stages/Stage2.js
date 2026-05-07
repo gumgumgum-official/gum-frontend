@@ -734,7 +734,7 @@ export function Stage2() {
         loadGltfTemplateCached(resolvePublicAssetUrl(config.model.path))
           .then((gltf) => {
             logDuration("background:loadSingle", tBgStart);
-            const model = gltf.scene.clone(true);
+            const model = SkeletonUtils.clone(gltf.scene);
             applyModel(model);
 
             // 불꽃 메시 투명 처리 (셰이프 키 모프 타겟 기반)
@@ -747,6 +747,31 @@ export function Stage2() {
                 obj.material.alphaTest = 0.01;
               }
             });
+
+            // 흔들그네 어셈블리 전체(캐릭터 포함) 70% 축소
+            // SwingPivot의 부모를 루트로 삼아 통째로 스케일 — 이름과 무관한 자식(캐릭터 등)까지 포함
+            let swingAssemblyRoot = null;
+            model.traverse((obj) => {
+              if (swingAssemblyRoot) return;
+              if (obj.name === "SwingPivot") {
+                swingAssemblyRoot =
+                  obj.parent && obj.parent !== model ? obj.parent : obj;
+              }
+            });
+            if (swingAssemblyRoot) {
+              swingAssemblyRoot.scale.multiplyScalar(0.7);
+              console.log("[Stage2] swing 70% 축소:", swingAssemblyRoot.name);
+            } else {
+              console.warn(
+                "[Stage2] SwingPivot을 찾을 수 없음 — GLB 오브젝트 이름 확인 필요",
+              );
+              // fallback: 씬 전체에서 Swing 포함 최상위 노드 스케일
+              model.traverse((obj) => {
+                if (!obj.name.includes("Swing")) return;
+                if (obj.parent?.name?.includes("Swing")) return;
+                obj.scale.multiplyScalar(0.7);
+              });
+            }
 
             // 전체 애니메이션 클립 무한 재생 (이름 필터 없이 전부)
             const clips = gltf.animations ?? [];
