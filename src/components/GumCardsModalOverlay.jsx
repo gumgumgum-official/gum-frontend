@@ -41,7 +41,7 @@ export function GumCardsModalOverlay() {
 
   return (
     <>
-      {phase === "tent" && (
+      {(phase === "tent" || phase === "cards") && (
         <TentSceneViewer onClose={closeAll} onCardOpen={openCards} />
       )}
       <GumCardsModal open={phase === "cards"} onClose={closeAll} />
