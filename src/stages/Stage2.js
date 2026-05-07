@@ -46,8 +46,8 @@ const GROUND_Y = 0.7;
 const ISLAND_BOUNDS_INSET_RATIO = 0.08;
 // 스폰 시 그 안에서 다시 살짝 더 빼기 — 울타리 안이 기준이므로 작게 유지
 const SPAWN_INSET_RATIO = 0.14;
-const SPAWN_INSET_SIDE_RATIO = 0.06;
-const SPAWN_INSET_BOTTOM_RATIO = 0.16;
+const SPAWN_INSET_SIDE_RATIO = 0.1;
+const SPAWN_INSET_BOTTOM_RATIO = 0.18;
 const SPAWN_HEIGHT_MIN = 10; // 낙하 시작 높이 하한
 const SPAWN_HEIGHT_MAX = 30; // 최대 시작 높이
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
@@ -428,7 +428,7 @@ export function Stage2() {
           {
             initial: false,
             groundY: characterWalkGroundY,
-            islandValidator: null, // SVG 스폰은 AABB로 충분 — 레이캐스트 제거
+            islandValidator: null, // 레이캐스트 비용 과다 — AABB + exclusion zones으로 대체
             spawnExclusionZones,
           },
           () => characterMoveBounds ?? islandBounds,
@@ -2150,8 +2150,9 @@ function pickSpawnXZ(
     return minGap;
   };
 
-  // 1단계: 여유간격 → 2단계: 거의 닿음 → 3단계: 살짝 겹침 → 4단계: 최대 겹침 하한
-  const gapLevels = [0.1, -0.2, -0.6, -1.2];
+  // 1단계: 랜덤 넉넉한 간격(1.0~2.0m) → 2단계: 고정 여유 → 3단계: 거의 닿음 → 4단계: 최소 겹침
+  const randomGap = 1.0 + Math.random() * 1.0;
+  const gapLevels = [randomGap, 0.5, 0.0, -0.5];
   for (const minGap of gapLevels) {
     for (let tryCount = 0; tryCount < 40; tryCount++) {
       const x = minX + Math.random() * (maxX - minX);
