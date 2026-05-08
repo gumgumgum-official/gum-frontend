@@ -57,7 +57,12 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0e0c1c);
     scene.environmentIntensity = 0.85;
+    let unmounted = false;
     new EXRLoader().load("/hdri/sunny_rose_garden_1k.exr", (tex) => {
+      if (unmounted) {
+        tex.dispose();
+        return;
+      }
       tex.mapping = THREE.EquirectangularReflectionMapping;
       scene.environment = tex;
     });
@@ -101,6 +106,7 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
     window.addEventListener("resize", onResize);
 
     return () => {
+      unmounted = true;
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", onResize);
       controls.dispose();
