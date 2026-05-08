@@ -25,11 +25,23 @@ export function setupFountainFromModel(model, animations) {
   const state = { mixer: null, flowingTextures: [], running: true };
 
   if (animations.length > 0) {
+    console.log(
+      "[Stage3] island_scene clips:",
+      animations.map((c) => c.name),
+    );
     state.mixer = new THREE.AnimationMixer(model);
     animations.forEach((clip) => {
       const action = state.mixer.clipAction(clip);
       action.setLoop(THREE.LoopRepeat, Infinity);
+      action.clampWhenFinished = false;
       action.play();
+    });
+    // morph target 메시 frustum culling 비활성화 (불꽃 등 morph 애니메이션이 카메라 밖에서 멈추는 현상 방지)
+    model.traverse((obj) => {
+      const mesh = /** @type {any} */ (obj);
+      if (mesh.isMesh && mesh.morphTargetInfluences?.length > 0) {
+        mesh.frustumCulled = false;
+      }
     });
   }
 
