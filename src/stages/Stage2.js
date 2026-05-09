@@ -1997,6 +1997,18 @@ function pickSpawnXZ(
     return minGap;
   };
 
+  // 카메라가 +X 방향에서 바라보므로 X = 심도(depth) 축.
+  // Z가 충분히 가까운 글자끼리만 X 최소 간격을 강제 — Z가 멀면 겹쳐 보이지 않으므로 skip.
+  const depthGapOk = (x, z, minXGap) => {
+    for (const f of allTexts) {
+      const fR = typeof f.radius === "number" ? f.radius : 0;
+      const zDist = Math.abs(f.group.position.z - z);
+      if (zDist > newR + fR + 3.0) continue; // Z 멀면 카메라상 겹침 없음
+      if (Math.abs(f.group.position.x - x) < newR + fR + minXGap) return false;
+    }
+    return true;
+  };
+
   if (!validSpawnGrid || validSpawnGrid.length === 0) {
     console.error("[Stage2] validSpawnGrid 없음 — SPAWN_ZONE 메쉬 필요");
     return { x: 0, z: 0 };
@@ -2004,17 +2016,20 @@ function pickSpawnXZ(
 
   const randomGap = 1.8 + Math.random() * 1.2;
   const gapLevels = [randomGap, 1.2, 0.6, 0.0];
+  const depthGaps = [2.0, 1.5, 0.0, 0.0]; // gap이 0.6 이하로 떨어지면 depth 체크 포기
   const grid = validSpawnGrid;
   const N = grid.length;
   for (let li = 0; li < gapLevels.length; li++) {
     const minGap = gapLevels[li];
+    const minDepth = depthGaps[li];
     for (let t = 0; t < N; t++) {
       const idx = t + Math.floor(Math.random() * (N - t));
       const tmp = grid[t];
       grid[t] = grid[idx];
       grid[idx] = tmp;
       const { x, z } = grid[t];
-      if (edgeGap(x, z) >= minGap) return { x, z };
+      if (edgeGap(x, z) >= minGap && depthGapOk(x, z, minDepth))
+        return { x, z };
     }
   }
   let best = grid[0];
