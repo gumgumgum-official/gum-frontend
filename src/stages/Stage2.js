@@ -739,7 +739,7 @@ export function Stage2() {
 
             // 불꽃 메시 투명 처리 (셰이프 키 모프 타겟 기반)
             model.traverse((obj) => {
-              if (!obj.isMesh) return;
+              if (!(obj instanceof THREE.Mesh)) return;
               const n = obj.name ?? "";
               if (n.includes("Fire") || n.includes("fire")) {
                 obj.material.transparent = true;
@@ -1373,7 +1373,7 @@ function loadPropsFromConfig(
         propConfig.scale?.z ?? 1,
       );
       root.traverse((child) => {
-        if (child.isMesh) {
+        if (child instanceof THREE.Mesh) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
