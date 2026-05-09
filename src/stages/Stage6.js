@@ -244,6 +244,7 @@ export function Stage6() {
   /** @type {Array<THREE.Material & { emissive?: THREE.Color, emissiveIntensity?: number, userData?: Record<string, any> }>} */
   const telEmissiveMaterials = [];
   let isSceneInteractionLocked = false;
+  let isFinishFired = false;
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -631,11 +632,16 @@ export function Stage6() {
   }
 
   const handleKeyDown = (event) => {
-    if (isSceneInteractionLocked || isLoadingOverlayVisible()) {
+    if (
+      isSceneInteractionLocked ||
+      isLoadingOverlayVisible() ||
+      isFinishFired
+    ) {
       return;
     }
     if (event.key === "Enter") {
       event.preventDefault();
+      isFinishFired = true;
       window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
     }
   };
@@ -1160,6 +1166,7 @@ export function Stage6() {
       telRootRef = null;
       telEmissiveMaterials.length = 0;
       isSceneInteractionLocked = false;
+      isFinishFired = false;
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
       onInteractionLock = () => {
         isSceneInteractionLocked = true;

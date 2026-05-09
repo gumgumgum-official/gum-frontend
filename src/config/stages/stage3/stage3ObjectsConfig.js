@@ -15,7 +15,7 @@ export const STAGE3_STANDALONE_FLOWER_GLB_PATHS = [
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
-    path: "/models/stage3/scene_with_fountain_v6.glb",
+    path: "/models/stage3/island_scene.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -108,8 +108,8 @@ export const STAGE3_OBJECTS_CONFIG = {
      * 콘솔 로그에 출력된 값을 여기에 붙여넣어 고정한다.
      */
     tentSceneCamera: {
-      position: [0, 2, 5],
-      target: [0, 0, 0],
+      position: [-0.38, 6.169, 4.83],
+      target: [0.03, 3.474, -1.068],
     },
   },
 
