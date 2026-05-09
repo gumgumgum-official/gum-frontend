@@ -362,7 +362,7 @@ export function Stage2() {
   let spawnExclusionZones = [];
   /** 로드 타임 레이캐스트로 미리 계산한 유효 스폰 지점 배열 (섬 실제 형태 반영) */
   let validSpawnGrid = null;
-  /** beam_gum_tent_scene.glb 애니메이션 믹서 (3개 클립 동시 무한 재생) */
+  /** beam2.glb 내 OBJ_Fire 애니메이션 믹서 */
   let fireMixer = null;
 
   function updateIslandBoundsFromRoots(roots) {
@@ -760,6 +760,7 @@ export function Stage2() {
 
             // 흔들그네 어셈블리 전체(캐릭터 포함) 70% 축소
             // SwingPivot의 부모를 루트로 삼아 통째로 스케일 — 이름과 무관한 자식(캐릭터 등)까지 포함
+            /** @type {THREE.Object3D | null} */
             let swingAssemblyRoot = null;
             model.traverse((obj) => {
               if (swingAssemblyRoot) return;
@@ -2318,9 +2319,11 @@ function pickSpawnXZ(
       if (edgeGap(x, z) >= minGap && depthGapOk(x, minDepth)) return { x, z };
     }
   }
-  const steps = 18;
-  let best = { x: minX + (maxX - minX) / 2, z: minZ + (maxZ - minZ) / 2 };
+  const cx = (minX + maxX) * 0.5;
+  const cz = (minZ + maxZ) * 0.5;
+  let best = { x: cx, z: cz };
   let bestGap = edgeGap(best.x, best.z);
+  const steps = 12;
   for (let i = 0; i <= steps; i++) {
     for (let j = 0; j <= steps; j++) {
       const x = minX + (i / steps) * (maxX - minX);
