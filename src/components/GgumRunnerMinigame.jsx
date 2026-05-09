@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import "./GgumRunnerMinigame.css";
 import { MINIGAME_AUDIO_CONFIG } from "../config/minigameAudioConfig.js";
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
@@ -967,93 +968,96 @@ export function GgumRunnerMinigame({ onClose }) {
             )}
         </div>
       </div>
-      {fatalScore !== null && postGameStep === "leaderboard" && (
-        <div className="ggum-runner-goal-modal-layer">
-          <div className="ggum-runner-postgame-overlay ggum-runner-postgame-overlay--goal">
-            <div className="ggum-runner-sheet ggum-runner-goal-sheet">
-              <img
-                src="/assets/minigame/goal_list.png"
-                alt=""
-                className="ggum-runner-goal-art"
-              />
-              {saveName.trim() ? (
-                <span
-                  className="ggum-runner-goal-name-above-trophy"
-                  aria-label={`플레이어 이름 ${saveName.trim()}`}
-                >
-                  {saveName.trim()}
-                </span>
-              ) : null}
-              <div className="ggum-runner-goal-profile-slot">
-                {selectedAvatarKey ? (
-                  <img src={avatarSrc(selectedAvatarKey)} alt="" />
-                ) : null}
-              </div>
-              {myRank != null ? (
-                <span className="ggum-runner-goal-my-rank">{myRank}위</span>
-              ) : null}
-              <span className="ggum-runner-goal-my-score">{fatalScore}</span>
-              <button
-                type="button"
-                className="ggum-runner-goal-hit ggum-runner-goal-close"
-                aria-label="뒤로"
-                onClick={handleResetToStart}
-              />
-              <div className="ggum-runner-goal-list-wrap">
-                <div
-                  ref={goalListScrollRef}
-                  className="ggum-runner-goal-list-scroll"
-                >
-                  {isLeaderboardLoading ? (
-                    <div className="ggum-runner-goal-loading">
-                      불러오는 중...
-                    </div>
-                  ) : (
-                    leaderboardRows.map((row, i) => (
-                      <div
-                        key={`${row.at ?? i}-${i}`}
-                        className={`ggum-runner-goal-row${myRank === i + 1 ? " ggum-runner-goal-row--mine" : ""}`}
-                      >
-                        <div className="ggum-runner-goal-row-thumb-wrap">
-                          {row.avatarKey ? (
-                            <img
-                              src={avatarSrc(row.avatarKey)}
-                              alt=""
-                              className="ggum-runner-goal-row-thumb"
-                            />
-                          ) : null}
-                        </div>
-                        <span className="ggum-runner-goal-row-rank">
-                          {i + 1}
-                        </span>
-                        <span className="ggum-runner-goal-row-name">
-                          {row.name}
-                        </span>
-                        <span className="ggum-runner-goal-row-score">
-                          {row.score}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div
-                  className="ggum-runner-goal-custom-scrollbar"
-                  aria-hidden="true"
-                >
+      {fatalScore !== null &&
+        postGameStep === "leaderboard" &&
+        createPortal(
+          <div className="ggum-runner-goal-modal-layer ggum-runner-goal-modal-layer--portal">
+            <div className="ggum-runner-postgame-overlay ggum-runner-postgame-overlay--goal">
+              <div className="ggum-runner-sheet ggum-runner-goal-sheet">
+                <img
+                  src="/assets/minigame/goal_list_long.png"
+                  alt=""
+                  className="ggum-runner-goal-art"
+                />
+                {saveName.trim() ? (
                   <span
-                    className="ggum-runner-goal-custom-scrollbar-thumb"
-                    style={{
-                      opacity: goalScrollbar.visible ? 1 : 0,
-                      height: `${goalScrollbar.thumbHeight}px`,
-                      transform: `translateY(${goalScrollbar.thumbTop}px)`,
-                    }}
-                  />
+                    className="ggum-runner-goal-name-above-trophy"
+                    aria-label={`플레이어 이름 ${saveName.trim()}`}
+                  >
+                    {saveName.trim()}
+                  </span>
+                ) : null}
+                <div className="ggum-runner-goal-profile-slot">
+                  {selectedAvatarKey ? (
+                    <img src={avatarSrc(selectedAvatarKey)} alt="" />
+                  ) : null}
+                </div>
+                {myRank != null ? (
+                  <span className="ggum-runner-goal-my-rank">{myRank}위</span>
+                ) : null}
+                <span className="ggum-runner-goal-my-score">{fatalScore}</span>
+                <button
+                  type="button"
+                  className="ggum-runner-goal-hit ggum-runner-goal-close"
+                  aria-label="뒤로"
+                  onClick={handleResetToStart}
+                />
+                <div className="ggum-runner-goal-list-wrap">
+                  <div
+                    ref={goalListScrollRef}
+                    className="ggum-runner-goal-list-scroll"
+                  >
+                    {isLeaderboardLoading ? (
+                      <div className="ggum-runner-goal-loading">
+                        불러오는 중...
+                      </div>
+                    ) : (
+                      leaderboardRows.map((row, i) => (
+                        <div
+                          key={`${row.at ?? i}-${i}`}
+                          className={`ggum-runner-goal-row${myRank === i + 1 ? " ggum-runner-goal-row--mine" : ""}`}
+                        >
+                          <div className="ggum-runner-goal-row-thumb-wrap">
+                            {row.avatarKey ? (
+                              <img
+                                src={avatarSrc(row.avatarKey)}
+                                alt=""
+                                className="ggum-runner-goal-row-thumb"
+                              />
+                            ) : null}
+                          </div>
+                          <span className="ggum-runner-goal-row-rank">
+                            {i + 1}
+                          </span>
+                          <span className="ggum-runner-goal-row-name">
+                            {row.name}
+                          </span>
+                          <span className="ggum-runner-goal-row-score">
+                            {row.score}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div
+                    className="ggum-runner-goal-custom-scrollbar"
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="ggum-runner-goal-custom-scrollbar-thumb"
+                      style={{
+                        opacity: goalScrollbar.visible ? 1 : 0,
+                        height: `${goalScrollbar.thumbHeight}px`,
+                        transform: `translateY(${goalScrollbar.thumbTop}px)`,
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
