@@ -120,4 +120,4 @@ export const GUM_CARDS_PICK_SOUND_PATHS = [
 ];
 
 /** 카드 선택 효과음 볼륨 (0~1) */
-export const GUM_CARDS_PICK_SOUND_VOLUME = 0.12;
+export const GUM_CARDS_PICK_SOUND_VOLUME = 0.32;

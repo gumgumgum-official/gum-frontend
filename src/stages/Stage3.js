@@ -295,6 +295,47 @@ export function Stage3() {
       .replace(/[^a-z0-9]/g, "");
   }
   /**
+   * INT 오브젝트 하위에 껌딱지 캐릭터가 있으면 Click! 힌트 말풍선 대상에서 제외한다.
+   * (오브젝트 클릭 인터랙션 자체는 그대로 유지)
+   * @param {THREE.Object3D} root
+   */
+  function hasGgumCharacterDescendant(root) {
+    let found = false;
+    root.traverse((node) => {
+      if (found) return;
+      const token = normalizeIntNameToken(node?.name);
+      if (!token) return;
+      if (
+        token.includes("gumtoongji") ||
+        token.includes("ggumtoongji") ||
+        token.includes("ggumddi")
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  }
+  /**
+   * 벤치 계열 INT 오브젝트는 Click! 힌트 말풍선을 숨긴다.
+   * @param {THREE.Object3D} root
+   */
+  function isBenchIntObject(root) {
+    let found = false;
+    root.traverse((node) => {
+      if (found) return;
+      const token = normalizeIntNameToken(node?.name);
+      if (!token) return;
+      if (
+        token.includes("bench") ||
+        token.includes("chair") ||
+        token.includes("seat")
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  }
+  /**
    * GLB마다 INT_ 접미사 표기가 다름 (예: INT_notice vs INT_Notice, INT_IceCart).
    * 레이 히트·ref 등록 시 canonical 타깃으로 정규화한다.
    * @param {string} suffix - `INT_` 제외 접미사
@@ -1411,6 +1452,13 @@ export function Stage3() {
 
     islandModel.traverse((obj) => {
       if (typeof obj.name !== "string" || !obj.name.startsWith(INT_PREFIX)) {
+        return;
+      }
+      if (hasGgumCharacterDescendant(obj)) {
+        return;
+      }
+      if (isBenchIntObject(obj)) {
+        // 벤치 오브젝트는 Click! 힌트 말풍선을 노출하지 않는다.
         return;
       }
       const suffix = obj.name.slice(INT_PREFIX.length);

@@ -114,9 +114,14 @@ function spawnParticles(color) {
 }
 
 export function GumCardsModal({ open, onClose }) {
+  const OVERLAY_FADE_MS = 450;
   const [flippedCard, setFlippedCard] = useState(null);
   const [toast, setToast] = useState({ show: false, msg: "" });
+  const [shouldRender, setShouldRender] = useState(open);
+  const [isOverlayVisible, setIsOverlayVisible] = useState(false);
   const toastTimerRef = useRef(null);
+  const openRafRef = useRef(0);
+  const closeTimerRef = useRef(null);
   const gridRef = useRef(null);
   /** setState 업데이트 안에서 효과음 호출 시 Strict Mode 이중 호출 방지용 */
   const flippedCardRef = useRef(null);
@@ -131,18 +136,45 @@ export function GumCardsModal({ open, onClose }) {
 
   useEffect(() => {
     return () => {
+      if (openRafRef.current) cancelAnimationFrame(openRafRef.current);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
-    if (open && gridRef.current) {
+    if (openRafRef.current) {
+      cancelAnimationFrame(openRafRef.current);
+      openRafRef.current = 0;
+    }
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+
+    if (open) {
+      setShouldRender(true);
+      openRafRef.current = requestAnimationFrame(() => {
+        setIsOverlayVisible(true);
+      });
+      return;
+    }
+
+    setIsOverlayVisible(false);
+    closeTimerRef.current = setTimeout(() => {
+      setShouldRender(false);
+      closeTimerRef.current = null;
+    }, OVERLAY_FADE_MS);
+  }, [open]);
+
+  useEffect(() => {
+    if (isOverlayVisible && gridRef.current) {
       const tid = requestAnimationFrame(() => {
         gridRef.current?.classList.add("ready");
       });
       return () => cancelAnimationFrame(tid);
     }
-  }, [open]);
+  }, [isOverlayVisible]);
 
   useEffect(() => {
     flippedCardRef.current = flippedCard;
@@ -164,12 +196,12 @@ export function GumCardsModal({ open, onClose }) {
     showToast(`${flippedCard.name}를 오늘 하루 붙였어요 🩹`);
   };
 
-  if (!open) return null;
+  if (!shouldRender) return null;
 
   const modalContent = (
     <div className="gum-cards-root">
       <div
-        className={`gum-cards-overlay ${open ? "open" : ""}`}
+        className={`gum-cards-overlay ${isOverlayVisible ? "open" : ""}`}
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
         <div className="gum-cards-modal" onClick={(e) => e.stopPropagation()}>
