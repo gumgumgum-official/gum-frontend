@@ -362,6 +362,8 @@ export function Stage2() {
   let spawnExclusionZones = [];
   /** 로드 타임 레이캐스트로 미리 계산한 유효 스폰 지점 배열 (섬 실제 형태 반영) */
   let validSpawnGrid = null;
+  /** GLB 내 SPAWN_ZONE 메쉬 — 글자 스폰 허용 영역을 디자이너가 직접 정의 */
+  let spawnZoneMeshes = [];
   /** beam_gum_tent_scene.glb 애니메이션 믹서 (3개 클립 동시 무한 재생) */
   let fireMixer = null;
 
@@ -569,11 +571,15 @@ export function Stage2() {
         // THREE.Mesh.prototype.raycast.call(mesh, ...) 을 직접 사용해야 함.
         islandGroundMeshes = [];
         islandFenceMeshes = [];
+        spawnZoneMeshes = [];
         allModels.forEach((m) =>
           m.traverse((child) => {
             if (!child.isMesh) return;
             const nm = (child.name || "").toLowerCase();
-            if (nm.includes("fence") || nm.includes("울타리")) {
+            if (nm.includes("spawn_zone")) {
+              child.visible = false; // 렌더링 제외
+              spawnZoneMeshes.push(child);
+            } else if (nm.includes("fence") || nm.includes("울타리")) {
               islandFenceMeshes.push(child);
             } else {
               islandGroundMeshes.push(child);
@@ -673,20 +679,40 @@ export function Stage2() {
               ? cfgY
               : suggestedGroundY;
         }
-        // beam1.glb 메쉬로 섬 지면 + 울타리 근접 거절 + AABB inset 검증기 생성
-        islandValidator = buildIslandValidator(
-          islandGroundMeshes,
-          islandFenceMeshes,
-          characterWalkGroundY,
-          characterMoveBounds,
-        );
-        // 섬 실제 형태 기반 글자 스폰 그리드 — 레이캐스트를 로드 타임에 1회만 수행
-        validSpawnGrid = buildValidSpawnGrid(
-          islandGroundMeshes,
-          characterWalkGroundY,
-          islandBounds,
-          spawnExclusionZones,
-        );
+        // SPAWN_ZONE이 있으면 글자 스폰 + 캐릭터 이동 범위 모두 SPAWN_ZONE이 정의
+        if (spawnZoneMeshes.length > 0) {
+          const spawnBox = new THREE.Box3();
+          spawnZoneMeshes.forEach((m) => spawnBox.expandByObject(m));
+          const spawnBounds = {
+            minX: spawnBox.min.x,
+            maxX: spawnBox.max.x,
+            minZ: spawnBox.min.z,
+            maxZ: spawnBox.max.z,
+          };
+          characterMoveBounds = spawnBounds;
+          islandValidator = buildSpawnZoneValidator(
+            spawnZoneMeshes,
+            characterWalkGroundY,
+          );
+          validSpawnGrid = buildValidSpawnGrid(
+            spawnZoneMeshes,
+            characterWalkGroundY,
+            spawnBounds,
+          );
+        } else {
+          islandValidator = buildIslandValidator(
+            islandGroundMeshes,
+            islandFenceMeshes,
+            characterWalkGroundY,
+            characterMoveBounds,
+          );
+          validSpawnGrid = buildValidSpawnGrid(
+            islandGroundMeshes,
+            characterWalkGroundY,
+            islandBounds,
+            spawnExclusionZones,
+          );
+        }
         const refreshCharacterObstacleBoxes = () => {
           characterObstacleBoxes = buildStage2CharacterObstacleBoxes(
             [...allModels, ...propRoots],
@@ -934,6 +960,7 @@ export function Stage2() {
       characterMoveBounds = null;
       islandGroundMeshes = [];
       islandFenceMeshes = [];
+      spawnZoneMeshes = [];
       if (fireMixer) {
         fireMixer.stopAllAction();
         fireMixer.uncacheRoot(fireMixer.getRoot());
@@ -1934,6 +1961,28 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
 }
 
 /**
+ * SPAWN_ZONE 메쉬 기반 이동 범위 검증기 — 아래로 레이를 쏴서 SPAWN_ZONE 위면 유효.
+ * applyModel이 child.raycast를 비활성화하므로 prototype 직접 호출.
+ * @param {THREE.Mesh[]} spawnZoneMeshes
+ * @param {number} groundY
+ * @returns {((x: number, z: number) => boolean) | null}
+ */
+function buildSpawnZoneValidator(spawnZoneMeshes, groundY) {
+  if (!spawnZoneMeshes || spawnZoneMeshes.length === 0) return null;
+  const meshRaycast = THREE.Mesh.prototype.raycast;
+  const rc = new THREE.Raycaster();
+  const origin = new THREE.Vector3();
+  const down = new THREE.Vector3(0, -1, 0);
+  return (x, z) => {
+    origin.set(x, groundY + 100, z);
+    rc.set(origin, down);
+    const ints = [];
+    for (const m of spawnZoneMeshes) meshRaycast.call(m, rc, ints);
+    return ints.length > 0;
+  };
+}
+
+/**
  * beam1.glb 메쉬로 "이 XZ가 섬 울타리 안 유효 지점인가" 검증 함수를 생성한다.
  * - applyModel에서 child.raycast = () => {} 로 비활성화되어 있으므로
  *   THREE.Mesh.prototype.raycast.call(mesh, ...) 로 직접 호출한다.
@@ -2106,20 +2155,21 @@ function getSpawnBounds(bounds) {
  *   z_gt는 MAX(임계값)
  */
 /**
- * 스폰 영역 크기 조절: islandBounds에서 사방으로 안쪽으로 줄이는 거리(m).
- * 클수록 영역이 작아진다. 지면 메쉬 레이캐스트로 실제 섬 형태를 반영한다.
- */
-const SPAWN_GRID_SHRINK = 16.0;
-
-/**
  * 섬 지면 메쉬 위 유효 스폰 지점을 로드 타임에 레이캐스트로 미리 계산한다.
- * 섬 형태는 downward 레이캐스트로 판별하고, SPAWN_GRID_SHRINK로 영역 크기를 조절한다.
+ * SPAWN_ZONE 메쉬 사용 시 shrink=0 + 메쉬 bbox를 bounds로 넘긴다.
+ * @param {THREE.Mesh[]} groundMeshes 레이캐스트 대상 메쉬
+ * @param {number} groundY
+ * @param {{ minX, maxX, minZ, maxZ }} bounds 탐색 범위
+ * @param {Array<{x,z,margin}>} exclusionZones
+ * @param {number} [shrink=0] bounds에서 사방으로 추가 축소(m)
+ * @param {number} [step=1.0] 그리드 간격(m)
  */
 function buildValidSpawnGrid(
   groundMeshes,
   groundY,
   bounds,
   exclusionZones = [],
+  shrink = 0,
   step = 1.0,
 ) {
   if (!groundMeshes || groundMeshes.length === 0) return null;
@@ -2129,10 +2179,10 @@ function buildValidSpawnGrid(
   const origin = new THREE.Vector3();
   const down = new THREE.Vector3(0, -1, 0);
   const Y_FLOOR = groundY - 1.0;
-  const minX = b.minX + SPAWN_GRID_SHRINK;
-  const maxX = b.maxX - SPAWN_GRID_SHRINK;
-  const minZ = b.minZ + SPAWN_GRID_SHRINK;
-  const maxZ = b.maxZ - SPAWN_GRID_SHRINK;
+  const minX = b.minX + shrink;
+  const maxX = b.maxX - shrink;
+  const minZ = b.minZ + shrink;
+  const maxZ = b.maxZ - shrink;
   const points = [];
   for (let x = minX; x <= maxX; x += step) {
     for (let z = minZ; z <= maxZ; z += step) {
@@ -2156,7 +2206,7 @@ function buildValidSpawnGrid(
   }
   if (import.meta.env.DEV) {
     console.log(
-      `[Stage2] validSpawnGrid: ${points.length}개 유효 지점 (shrink=${SPAWN_GRID_SHRINK}m, step=${step}m)`,
+      `[Stage2] validSpawnGrid: ${points.length}개 유효 지점 (shrink=${shrink}m, step=${step}m)`,
     );
   }
   return points.length > 0 ? points : null;
@@ -2223,38 +2273,24 @@ function pickSpawnXZ(
     return true;
   };
 
-  // validSpawnGrid: 로드 타임에 레이캐스트로 미리 계산된 유효 지점 배열.
-  // 섬의 실제 형태(비직사각형)를 반영하므로 이 경로를 우선 사용.
+  // validSpawnGrid: SPAWN_ZONE 메쉬 기반 유효 지점 배열 — 이 경로는 그리드만 신뢰.
+  // edgeGap이 2D 원형 간격을 이미 보장하므로 추가 필터 없이 전체 그리드를 순회한다.
   if (validSpawnGrid && validSpawnGrid.length > 0) {
-    // 360도 원형 exclusion zone 체크 — 글자 실제 반경(halfExtent) 포함
-    const isNotExcluded = (x, z) => {
-      for (const zone of exclusionZones) {
-        if (Math.hypot(x - zone.x, z - zone.z) < zone.margin + halfExtent)
-          return false;
-      }
-      return true;
-    };
     const randomGap = 1.8 + Math.random() * 1.2;
     const gapLevels = [randomGap, 1.2, 0.6, 0.0];
-    const depthLevels = [2.0, 1.5, 1.0, 0.5];
-    // 매 시도마다 그리드를 랜덤 순서로 샘플링 (Fisher-Yates partial shuffle)
     const grid = validSpawnGrid;
     const N = grid.length;
-    const sampleSize = Math.min(N, 60);
     for (let li = 0; li < gapLevels.length; li++) {
       const minGap = gapLevels[li];
-      const minDepth = depthLevels[li];
-      for (let t = 0; t < sampleSize; t++) {
+      for (let t = 0; t < N; t++) {
         const idx = t + Math.floor(Math.random() * (N - t));
         const tmp = grid[t];
         grid[t] = grid[idx];
-        grid[idx] = tmp; // partial swap
+        grid[idx] = tmp;
         const { x, z } = grid[t];
-        if (!isNotExcluded(x, z)) continue;
-        if (edgeGap(x, z) >= minGap && depthGapOk(x, minDepth)) return { x, z };
+        if (edgeGap(x, z) >= minGap) return { x, z };
       }
     }
-    // 실패 시: 그리드 전체에서 가장자리 간격 최대 지점 반환 (exclusion zone 미제외 — 이미 모든 자리 포화)
     let best = grid[0];
     let bestGap = edgeGap(grid[0].x, grid[0].z);
     for (let i = 1; i < N; i++) {
