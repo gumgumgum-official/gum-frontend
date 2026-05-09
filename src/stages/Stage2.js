@@ -706,11 +706,14 @@ export function Stage2() {
             characterWalkGroundY,
             characterMoveBounds,
           );
+          // SPAWN_ZONE 없는 레거시/테스트 GLB용 fallback — 실운용은 SPAWN_ZONE 필수.
+          // shrink=2.0: 섬 경계 끝까지 잡히는 것을 최소한으로 방지.
           validSpawnGrid = buildValidSpawnGrid(
             islandGroundMeshes,
             characterWalkGroundY,
             islandBounds,
             spawnExclusionZones,
+            2.0,
           );
         }
         const refreshCharacterObstacleBoxes = () => {
