@@ -744,15 +744,16 @@ export function Stage2() {
 
             // 흔들그네 어셈블리 전체(캐릭터 포함) 70% 축소
             // SwingPivot의 부모를 루트로 삼아 통째로 스케일 — 이름과 무관한 자식(캐릭터 등)까지 포함
+            /** @type {import("three").Object3D | null} */
             let swingAssemblyRoot = null;
             model.traverse((obj) => {
-              if (swingAssemblyRoot) return;
+              if (swingAssemblyRoot !== null) return;
               if (obj.name === "SwingPivot") {
                 swingAssemblyRoot =
                   obj.parent && obj.parent !== model ? obj.parent : obj;
               }
             });
-            if (swingAssemblyRoot) {
+            if (swingAssemblyRoot !== null) {
               swingAssemblyRoot.scale.multiplyScalar(0.7);
               console.log("[Stage2] swing 70% 축소:", swingAssemblyRoot.name);
             } else {
@@ -1403,7 +1404,7 @@ function loadPropsFromConfig(
         propConfig.scale?.z ?? 1,
       );
       root.traverse((child) => {
-        if (child.isMesh) {
+        if (child instanceof THREE.Mesh) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
