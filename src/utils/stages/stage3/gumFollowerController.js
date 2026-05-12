@@ -36,9 +36,9 @@ export function createGumFollowersController({
   const gumBehaviorCfg = gumCfg?.behavior;
 
   const modelPath =
-    gumModelCfg?.modelPath ?? "/models/common/gum_walk_final.glb";
+    gumModelCfg?.modelPath ?? "/models/common/gum/gum_walk_final.glb";
   const idleModelPath =
-    gumModelCfg?.idleModelPath ?? "/models/common/gum_idle.glb";
+    gumModelCfg?.idleModelPath ?? "/models/common/gum/gum_idle.glb";
   const distance = gumBehaviorCfg?.distance ?? 2.2;
   const angleDeg = gumBehaviorCfg?.angleDeg ?? 45;
   const followLerpFactor = gumBehaviorCfg?.followLerpFactor ?? 8;

@@ -27,10 +27,10 @@ function getStage2PrewarmAbsoluteUrls() {
   }
 
   const charPath =
-    STAGE2_CONFIG.characterModelPath ?? "/models/common/gum_walk_final.glb";
+    STAGE2_CONFIG.characterModelPath ?? "/models/common/gum/gum_walk_final.glb";
   urls.push(resolvePublicAssetUrl(charPath));
   const charIdlePath =
-    STAGE2_CONFIG.characterIdleModelPath ?? "/models/common/gum_idle.glb";
+    STAGE2_CONFIG.characterIdleModelPath ?? "/models/common/gum/gum_idle.glb";
   urls.push(resolvePublicAssetUrl(charIdlePath));
 
   return [...new Set(urls)];

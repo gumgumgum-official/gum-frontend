@@ -30,11 +30,11 @@ function getStage3PrewarmAbsoluteUrls(options = {}) {
   }
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
-    "/models/common/gum_walk_final.glb";
+    "/models/common/gum/gum_walk_final.glb";
   urls.push(resolvePublicAssetUrl(gumPath));
   const gumIdlePath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.idleModelPath ??
-    "/models/common/gum_idle.glb";
+    "/models/common/gum/gum_idle.glb";
   urls.push(resolvePublicAssetUrl(gumIdlePath));
   if (includeIcecreamSpawnPaths) {
     for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {

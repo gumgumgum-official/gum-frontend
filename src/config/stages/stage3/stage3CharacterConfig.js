@@ -44,7 +44,7 @@ export const STAGE3_CHARACTER_CONFIG = {
      */
     gumFollowers: {
       models: {
-        modelPath: "/models/common/gum_walk_final.glb",
+        modelPath: "/models/common/gum/gum_walk_final.glb",
         scale: 1.4, // 껌딱지 모델 전체 크기 (기존 대비 4배)
       },
       behavior: {

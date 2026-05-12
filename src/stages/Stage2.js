@@ -1022,9 +1022,9 @@ function loadCharacters(
   obstacleBoxes = [],
 ) {
   const characterPath =
-    config.characterModelPath ?? "/models/common/gum_walk_final.glb";
+    config.characterModelPath ?? "/models/common/gum/gum_walk_final.glb";
   const characterIdlePath =
-    config.characterIdleModelPath ?? "/models/common/gum_idle.glb";
+    config.characterIdleModelPath ?? "/models/common/gum/gum_idle.glb";
   const characterPositions = config.characters ?? [
     { position: {} },
     { position: {} },

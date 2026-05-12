@@ -25,7 +25,7 @@ export const STAGE2_CONFIG = {
     receiveShadow: true,
   },
   /** 캐릭터 GLB 경로 (5명 모두 동일 모델) */
-  characterModelPath: "/models/common/gum_walk_final.glb",
+  characterModelPath: "/models/common/gum/gum_walk_final.glb",
   /** 캐릭터 스케일 (1 = 원본 크기) */
   characterScale: 1.7,
   /** 초기 위치를 고정 좌표로 사용 */
