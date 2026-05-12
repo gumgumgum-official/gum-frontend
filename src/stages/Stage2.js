@@ -32,8 +32,6 @@ import { getSessionId } from "../lib/session.js";
 
 // Phase 2: 고민 텍스트가 섬 위에 떨어져 쌓이는 기준
 // ----------------------------------------
-// [검증용] 예전 수동 측정값 주석 처리 — island.glb 자동 계산만 사용하는지 검증하려면 아래 사용 안 함.
-// 검증 끝나면 주석 해제하고 getSpawnBounds/loadCharacters fallback 다시 ISLAND_BOUNDS로.
 const LEGACY_ISLAND_BOUNDS = {
   minX: -8.06,
   maxX: 7.94,
@@ -44,10 +42,6 @@ const GROUND_Y = 0.7;
 // island.glb Box3는 메쉬를 감싸는 '사각형'이라 모서리가 섬 밖으로 나감 → 안쪽으로 줄인 범위만 사용
 /** 섬 박스에서 이 비율만큼 안쪽으로 줄인 영역만 캐릭터/스폰에 사용 (0.15 = 15%씩 각 변에서 제외) */
 const ISLAND_BOUNDS_INSET_RATIO = 0.08;
-// 스폰 시 그 안에서 다시 살짝 더 빼기 — 울타리 안이 기준이므로 작게 유지
-const SPAWN_INSET_RATIO = 0.14;
-const SPAWN_INSET_SIDE_RATIO = 0.1;
-const SPAWN_INSET_BOTTOM_RATIO = 0.18;
 const SPAWN_HEIGHT_MIN = 10; // 낙하 시작 높이 하한
 const SPAWN_HEIGHT_MAX = 30; // 최대 시작 높이
 // 속도: 아래 값이 맥시멈. 실제는 speedFactor(0.25~1.0) 곱해서 더 느리게 랜덤 적용
@@ -350,19 +344,15 @@ export function Stage2() {
   let characterMoveBounds = null;
   /** 배경 바운딩 기준 껌 캐릭터 발 Y (island4_1 등 큰 섬에서도 지면 위에 서게 함) */
   let characterWalkGroundY = GROUND_Y;
-  /** beam1.glb 섬 지면/오브제 Mesh (울타리 제외) — 다운레이캐스팅용 */
-  let islandGroundMeshes = [];
-  /** beam1.glb 울타리 Mesh — 수평 레이로 "링 내부" 판정용 */
-  let islandFenceMeshes = [];
   /** 오브제 통과 방지용 정적 충돌 박스 */
   let characterObstacleBoxes = [];
-  /** 위 두 배열로 만든 "이 XZ가 섬 울타리 안 유효 지점인가" 검증 함수 */
+  /** SPAWN_ZONE 메쉬 기반 "이 XZ가 유효 이동/스폰 지점인가" 검증 함수 */
   let islandValidator = null;
-  /** 글자 스폰 금지 구역 (오브젝트 가시성 보호) */
-  let spawnExclusionZones = [];
   /** 로드 타임 레이캐스트로 미리 계산한 유효 스폰 지점 배열 (섬 실제 형태 반영) */
   let validSpawnGrid = null;
-  /** beam2.glb 내 OBJ_Fire 애니메이션 믹서 */
+  /** GLB 내 SPAWN_ZONE 메쉬 — 글자 스폰 허용 영역을 디자이너가 직접 정의 */
+  let spawnZoneMeshes = [];
+  /** beam_gum_tent_scene.glb 애니메이션 믹서 (3개 클립 동시 무한 재생) */
   let fireMixer = null;
 
   function updateIslandBoundsFromRoots(roots) {
@@ -422,20 +412,11 @@ export function Stage2() {
         }
         processedHandwritingKeys.add(key);
         if (!isStage2Active) return;
-        await createFallingText(
-          metadata,
-          scene,
-          this.camera,
-          fallingTexts,
-          {
-            initial: false,
-            groundY: characterWalkGroundY,
-            islandValidator: null,
-            spawnExclusionZones,
-            validSpawnGrid,
-          },
-          () => characterMoveBounds ?? islandBounds,
-        );
+        await createFallingText(metadata, scene, this.camera, fallingTexts, {
+          initial: false,
+          groundY: characterWalkGroundY,
+          validSpawnGrid,
+        });
       };
 
       scene.fog = new THREE.Fog(
@@ -552,11 +533,8 @@ export function Stage2() {
           scene,
           this.camera,
           fallingTexts,
-          () => characterMoveBounds ?? islandBounds,
           (metadata) => ingestHandwriting(metadata, "initial"),
           characterWalkGroundY,
-          islandValidator,
-          spawnExclusionZones,
         );
         logDuration("loadInitialHandwritings", tHandwritingStart);
       };
@@ -564,23 +542,18 @@ export function Stage2() {
       const finishBackground = (allModels, islandModel) => {
         if (!isStage2Active) return;
 
-        // beam1.glb Mesh 수집 — 울타리(fence/울타리)와 그 외 지면/오브제 분리.
-        // applyModel에서 child.raycast = () => {} 가 설정되므로
+        // SPAWN_ZONE 메쉬 수집 — applyModel에서 child.raycast = () => {} 로 비활성화되므로
         // THREE.Mesh.prototype.raycast.call(mesh, ...) 을 직접 사용해야 함.
-        islandGroundMeshes = [];
-        islandFenceMeshes = [];
+        spawnZoneMeshes = [];
         allModels.forEach((m) =>
           m.traverse((child) => {
             if (!child.isMesh) return;
-            const nm = (child.name || "").toLowerCase();
-            if (nm.includes("fence") || nm.includes("울타리")) {
-              islandFenceMeshes.push(child);
-            } else {
-              islandGroundMeshes.push(child);
+            if ((child.name || "").toLowerCase().includes("spawn_zone")) {
+              child.visible = false;
+              spawnZoneMeshes.push(child);
             }
           }),
         );
-        spawnExclusionZones = buildSpawnExclusionZones(allModels);
         const box = new THREE.Box3();
         allModels.forEach((m) => box.expandByObject(m));
         const center = box.getCenter(new THREE.Vector3());
@@ -673,20 +646,31 @@ export function Stage2() {
               ? cfgY
               : suggestedGroundY;
         }
-        // beam1.glb 메쉬로 섬 지면 + 울타리 근접 거절 + AABB inset 검증기 생성
-        islandValidator = buildIslandValidator(
-          islandGroundMeshes,
-          islandFenceMeshes,
-          characterWalkGroundY,
-          characterMoveBounds,
-        );
-        // 섬 실제 형태 기반 글자 스폰 그리드 — 레이캐스트를 로드 타임에 1회만 수행
-        validSpawnGrid = buildValidSpawnGrid(
-          islandGroundMeshes,
-          characterWalkGroundY,
-          islandBounds,
-          spawnExclusionZones,
-        );
+        // SPAWN_ZONE이 있으면 글자 스폰 + 캐릭터 이동 범위 모두 SPAWN_ZONE이 정의
+        if (spawnZoneMeshes.length > 0) {
+          const spawnBox = new THREE.Box3();
+          spawnZoneMeshes.forEach((m) => spawnBox.expandByObject(m));
+          const spawnBounds = {
+            minX: spawnBox.min.x,
+            maxX: spawnBox.max.x,
+            minZ: spawnBox.min.z,
+            maxZ: spawnBox.max.z,
+          };
+          characterMoveBounds = spawnBounds;
+          islandValidator = buildSpawnZoneValidator(
+            spawnZoneMeshes,
+            characterWalkGroundY,
+          );
+          validSpawnGrid = buildValidSpawnGrid(
+            spawnZoneMeshes,
+            characterWalkGroundY,
+            spawnBounds,
+          );
+        } else {
+          console.error(
+            "[Stage2] SPAWN_ZONE 메쉬 없음 — beam4.glb에 SPAWN_ZONE이 있어야 합니다.",
+          );
+        }
         const refreshCharacterObstacleBoxes = () => {
           characterObstacleBoxes = buildStage2CharacterObstacleBoxes(
             [...allModels, ...propRoots],
@@ -749,7 +733,7 @@ export function Stage2() {
 
             // 불꽃 메시 투명 처리 (셰이프 키 모프 타겟 기반)
             model.traverse((obj) => {
-              if (!(obj instanceof THREE.Mesh)) return;
+              if (!obj.isMesh) return;
               const n = obj.name ?? "";
               if (n.includes("Fire") || n.includes("fire")) {
                 obj.material.transparent = true;
@@ -760,7 +744,6 @@ export function Stage2() {
 
             // 흔들그네 어셈블리 전체(캐릭터 포함) 70% 축소
             // SwingPivot의 부모를 루트로 삼아 통째로 스케일 — 이름과 무관한 자식(캐릭터 등)까지 포함
-            /** @type {THREE.Object3D | null} */
             let swingAssemblyRoot = null;
             model.traverse((obj) => {
               if (swingAssemblyRoot) return;
@@ -829,7 +812,8 @@ export function Stage2() {
             );
             return;
           }
-          const spawn = getSpawnBounds(islandBounds);
+          const spawn = characterMoveBounds;
+          if (!spawn) return;
           const { minX, maxX, minZ, maxZ } = spawn;
           fallingTexts.forEach((ft) => {
             const speedFactor = 0.25 + Math.random() * 0.75; // 0.25~1.0 (현재=맥시멈)
@@ -899,7 +883,6 @@ export function Stage2() {
       });
       fallingTexts.length = 0;
       processedHandwritingKeys.clear();
-      spawnExclusionZones = [];
       validSpawnGrid = null;
 
       if (gumSpeechBubbles) {
@@ -933,8 +916,7 @@ export function Stage2() {
       cameraRef = null;
       islandBounds = null;
       characterMoveBounds = null;
-      islandGroundMeshes = [];
-      islandFenceMeshes = [];
+      spawnZoneMeshes = [];
       if (fireMixer) {
         fireMixer.stopAllAction();
         fireMixer.uncacheRoot(fireMixer.getRoot());
@@ -1022,9 +1004,9 @@ function loadCharacters(
   obstacleBoxes = [],
 ) {
   const characterPath =
-    config.characterModelPath ?? "/models/common/gum/gum_walk_final.glb";
+    config.characterModelPath ?? "/models/common/gum_walk_final.glb";
   const characterIdlePath =
-    config.characterIdleModelPath ?? "/models/common/gum/gum_idle.glb";
+    config.characterIdleModelPath ?? "/models/common/gum_idle.glb";
   const characterPositions = config.characters ?? [
     { position: {} },
     { position: {} },
@@ -1421,7 +1403,7 @@ function loadPropsFromConfig(
         propConfig.scale?.z ?? 1,
       );
       root.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
+        if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
@@ -1459,11 +1441,8 @@ async function loadInitialHandwritings(
   scene,
   camera,
   fallingTextsArr,
-  getIslandBounds,
   onMetadata,
   groundY = GROUND_Y,
-  islandValidator = null,
-  spawnExclusionZones = [],
 ) {
   if (!supabase) {
     console.warn("[Stage2] Supabase 없음, 누적 로드 스킵");
@@ -1539,14 +1518,10 @@ async function loadInitialHandwritings(
       if (typeof onMetadata === "function") {
         await onMetadata(metadata);
       } else {
-        await createFallingText(
-          metadata,
-          scene,
-          camera,
-          fallingTextsArr,
-          { initial: false, groundY, islandValidator, spawnExclusionZones },
-          getIslandBounds,
-        );
+        await createFallingText(metadata, scene, camera, fallingTextsArr, {
+          initial: false,
+          groundY,
+        });
       }
     }
   } catch (err) {
@@ -1647,13 +1622,10 @@ async function createFallingText(
   camera,
   fallingTextsArr,
   options = {},
-  getIslandBounds,
 ) {
   const {
     initial = false,
     groundY: optGroundY,
-    islandValidator,
-    spawnExclusionZones = [],
     validSpawnGrid: optValidSpawnGrid = null,
   } = options;
   const groundY =
@@ -1701,15 +1673,9 @@ async function createFallingText(
     const halfW = Math.max(0, (preBox.max.x - preBox.min.x) / 2);
     const landingY = groundY + Math.hypot(halfW, halfH);
 
-    const bounds =
-      typeof getIslandBounds === "function" ? getIslandBounds() : null;
     const { x: startX, z: startZ } = pickSpawnXZ(
       fallingTextsArr,
-      initial,
-      bounds,
-      islandValidator ?? null,
       planeW,
-      spawnExclusionZones,
       planeH,
       optValidSpawnGrid,
     );
@@ -1935,194 +1901,36 @@ function computeFallRotationVelocities(startY, groundY, initialVy, gravity) {
 }
 
 /**
- * beam1.glb 메쉬로 "이 XZ가 섬 울타리 안 유효 지점인가" 검증 함수를 생성한다.
- * - applyModel에서 child.raycast = () => {} 로 비활성화되어 있으므로
- *   THREE.Mesh.prototype.raycast.call(mesh, ...) 로 직접 호출한다.
- *
- * 울타리가 연속된 벽이 아니라 개별 post(fence2, fence17~49) 구조이기 때문에
- * 수평 레이 기반 point-in-polygon은 post 사이 틈으로 빠져 오판정한다.
- * 따라서 PiP 대신 다음 3단계로 검증한다:
- * - (A) 지면 검사: 아래로 레이 쏴서 Y가 groundY 이상이면 섬 지면/오브제 위로 간주.
- * - (B) AABB inset 검사: outerBounds(=characterMoveBounds)에 방향별 inset을 적용해
- *   외곽 경계 안에 있는지 확인. 울타리 bbox가 링을 감싸므로 이것만으로도 대부분
- *   외부 점을 거절 가능. -X/-Z 쪽 inset ↑ (사용자 피드백: 윗쪽/왼쪽 더 보수적).
- * - (C) 보수적 마진: 8방향 수평 레이로 울타리까지 거리 측정, 방향별 margin 이내에
- *   울타리가 있으면 거절. 울타리 post에 가깝게 붙는 것을 방지.
- * @param {THREE.Mesh[]} groundMeshes
- * @param {THREE.Mesh[]} fenceMeshes
+ * SPAWN_ZONE 메쉬 기반 이동 범위 검증기 — 아래로 레이를 쏴서 SPAWN_ZONE 위면 유효.
+ * applyModel이 child.raycast를 비활성화하므로 prototype 직접 호출.
+ * @param {THREE.Mesh[]} spawnZoneMeshes
  * @param {number} groundY
- * @param {{minX:number,maxX:number,minZ:number,maxZ:number}|null} outerBounds
  * @returns {((x: number, z: number) => boolean) | null}
  */
-function buildIslandValidator(groundMeshes, fenceMeshes, groundY, outerBounds) {
-  if (!groundMeshes || groundMeshes.length === 0) return null;
+function buildSpawnZoneValidator(spawnZoneMeshes, groundY) {
+  if (!spawnZoneMeshes || spawnZoneMeshes.length === 0) return null;
   const meshRaycast = THREE.Mesh.prototype.raycast;
-  const Y_FLOOR = groundY - 1.0;
-  // 울타리로부터 최소 이격 거리 + AABB inset — 방향별.
-  // 사용자 피드백 1: "윗부분(-Z)이랑 왼쪽(-X) 쪽에 마진 더 필요" → -X/-Z ↑
-  // 사용자 피드백 2: "양옆으로 마진 더 줘야해" → +X/-X 모두 ↑
-  const MARGIN_POS_X = 6.0;
-  const MARGIN_NEG_X = 8.0;
-  const MARGIN_POS_Z = 3.5;
-  const MARGIN_NEG_Z = 6.0;
-  // 8방향 마진 검사 (대각선 포함). 각 방향에 해당 거리 매칭.
-  const S = Math.SQRT1_2;
-  const DIRS8 = [
-    { dir: new THREE.Vector3(1, 0, 0), margin: MARGIN_POS_X },
-    { dir: new THREE.Vector3(-1, 0, 0), margin: MARGIN_NEG_X },
-    { dir: new THREE.Vector3(0, 0, 1), margin: MARGIN_POS_Z },
-    { dir: new THREE.Vector3(0, 0, -1), margin: MARGIN_NEG_Z },
-    {
-      dir: new THREE.Vector3(S, 0, S),
-      margin: Math.max(MARGIN_POS_X, MARGIN_POS_Z),
-    },
-    {
-      dir: new THREE.Vector3(S, 0, -S),
-      margin: Math.max(MARGIN_POS_X, MARGIN_NEG_Z),
-    },
-    {
-      dir: new THREE.Vector3(-S, 0, S),
-      margin: Math.max(MARGIN_NEG_X, MARGIN_POS_Z),
-    },
-    {
-      dir: new THREE.Vector3(-S, 0, -S),
-      margin: Math.max(MARGIN_NEG_X, MARGIN_NEG_Z),
-    },
-  ];
-  const rcDown = new THREE.Raycaster();
-  const rcHoriz = new THREE.Raycaster();
+  const rc = new THREE.Raycaster();
   const origin = new THREE.Vector3();
   const down = new THREE.Vector3(0, -1, 0);
-
-  // AABB inset 사전 계산 (outerBounds 있을 때만).
-  let insetMinX = -Infinity,
-    insetMaxX = Infinity,
-    insetMinZ = -Infinity,
-    insetMaxZ = Infinity;
-  if (
-    outerBounds &&
-    Number.isFinite(outerBounds.minX) &&
-    Number.isFinite(outerBounds.maxX) &&
-    Number.isFinite(outerBounds.minZ) &&
-    Number.isFinite(outerBounds.maxZ)
-  ) {
-    insetMinX = outerBounds.minX + MARGIN_NEG_X;
-    insetMaxX = outerBounds.maxX - MARGIN_POS_X;
-    insetMinZ = outerBounds.minZ + MARGIN_NEG_Z;
-    insetMaxZ = outerBounds.maxZ - MARGIN_POS_Z;
-  }
-
-  // 울타리 메쉬의 실제 Y 범위 계산 → 수평 레이 Y는 mid-Y 사용.
-  let fenceMidY = groundY + 1.0;
-  let fenceMinY = Infinity;
-  let fenceMaxY = -Infinity;
-  if (fenceMeshes && fenceMeshes.length > 0) {
-    const bbox = new THREE.Box3();
-    for (const m of fenceMeshes) {
-      bbox.setFromObject(m);
-      if (bbox.min.y < fenceMinY) fenceMinY = bbox.min.y;
-      if (bbox.max.y > fenceMaxY) fenceMaxY = bbox.max.y;
-    }
-    if (Number.isFinite(fenceMinY) && Number.isFinite(fenceMaxY)) {
-      fenceMidY = (fenceMinY + fenceMaxY) / 2;
-    }
-  }
-
   return (x, z) => {
-    // (A) 지면 검사
     origin.set(x, groundY + 100, z);
-    rcDown.set(origin, down);
-    const dInts = [];
-    for (const m of groundMeshes) meshRaycast.call(m, rcDown, dInts);
-    if (dInts.length === 0) return false;
-    dInts.sort((a, b) => a.distance - b.distance);
-    if (dInts[0].point.y < Y_FLOOR) return false;
-
-    // (B) AABB inset 검사
-    if (x < insetMinX || x > insetMaxX || z < insetMinZ || z > insetMaxZ) {
-      return false;
-    }
-
-    if (!fenceMeshes || fenceMeshes.length === 0) return true;
-
-    // (C) 보수적 마진: 방향별 최단 울타리 거리 >= 해당 방향 margin
-    origin.set(x, fenceMidY, z);
-    for (const entry of DIRS8) {
-      rcHoriz.set(origin, entry.dir);
-      rcHoriz.far = entry.margin;
-      const near = [];
-      for (const m of fenceMeshes) meshRaycast.call(m, rcHoriz, near);
-      if (near.length > 0) return false;
-    }
-    return true;
+    rc.set(origin, down);
+    const ints = [];
+    for (const m of spawnZoneMeshes) meshRaycast.call(m, rc, ints);
+    return ints.length > 0;
   };
 }
-
-/**
- * 스폰용 XZ 범위 — island.glb 범위에서 inset만 적용 (inset 작으면 섬 전체에 고르게 퍼짐)
- */
-function getSpawnBounds(bounds) {
-  const b = getSafeIslandBounds(bounds);
-  const fullW = b.maxX - b.minX;
-  const fullD = b.maxZ - b.minZ;
-  const insetX = fullW * SPAWN_INSET_SIDE_RATIO;
-  const insetZTop = fullD * SPAWN_INSET_RATIO;
-  const insetZBottom = fullD * SPAWN_INSET_BOTTOM_RATIO;
-  const safeSpawn = {
-    minX: b.minX + insetX,
-    maxX: b.maxX - insetX,
-    minZ: b.minZ + insetZTop,
-    maxZ: b.maxZ - insetZBottom,
-  };
-  if (safeSpawn.minX >= safeSpawn.maxX || safeSpawn.minZ >= safeSpawn.maxZ) {
-    return { ...b };
-  }
-  return safeSpawn;
-}
-
-/**
- * 글자끼리 겹치지 않도록 x,z 선택. 각 글자의 바운딩 원 반경 기반으로 가장자리 간격 확보.
- * islandValidator가 있으면 섬 지면 위 유효 지점만 허용 (바다·울타리 밖 제외).
- * validator가 있을 때는 inset 없이 전체 bounds를 탐색 범위로 사용 (validator가 실제 경계를 담당).
- * 자리가 없으면 랜덤 겹침 반환하지 않고, "가장 가까운 글자와의 거리가 최대인" 지점을 반환.
- * @param {Array} fallingTextsArr
- * @param {boolean} _isInitial
- * @param {{ minX: number, maxX: number, minZ: number, maxZ: number } | null} _bounds
- * @param {((x: number, z: number) => boolean) | null} [islandValidator]
- */
-/**
- * 로드된 모델에서 이름이 지정된 오브젝트를 찾아 글자 스폰 제외 구역을 생성한다.
- *
- * 카메라 기준 (position: 107.7, 70.2, -44.4 → lookAt: -14.9, 5.6, -11.1):
- * - 화면 오른쪽 ≈ 월드 +Z 방향
- * - 화면 위쪽   ≈ 월드 -X 방향 (카메라가 +X에서 바라봄)
- *
- * 규칙:
- * - OBJ_Swing, OBJ_Tree1: 해당 오브젝트보다 Z가 큰 영역(화면 우측)에 글자 스폰 금지
- *
- * 주의:
- * - setFromObject 대신 getWorldPosition 사용: 자식 트리 전체 bbox가 반환되면
- *   임계값이 엉뚱해질 수 있음.
- * - 같은 방향 규칙이 여러 개면 가장 관대한 값(제외 영역 최소화)으로 합산:
- *   z_gt는 MAX(임계값)
- */
-/**
- * 스폰 영역 크기 조절: islandBounds에서 사방으로 안쪽으로 줄이는 거리(m).
- * 클수록 영역이 작아진다. 지면 메쉬 레이캐스트로 실제 섬 형태를 반영한다.
- */
-const SPAWN_GRID_SHRINK = 16.0;
 
 /**
  * 섬 지면 메쉬 위 유효 스폰 지점을 로드 타임에 레이캐스트로 미리 계산한다.
- * 섬 형태는 downward 레이캐스트로 판별하고, SPAWN_GRID_SHRINK로 영역 크기를 조절한다.
+ * SPAWN_ZONE 메쉬와 bbox를 넘긴다.
+ * @param {THREE.Mesh[]} groundMeshes 레이캐스트 대상 메쉬
+ * @param {number} groundY
+ * @param {{ minX, maxX, minZ, maxZ }} bounds 탐색 범위
+ * @param {number} [step=1.0] 그리드 간격(m)
  */
-function buildValidSpawnGrid(
-  groundMeshes,
-  groundY,
-  bounds,
-  exclusionZones = [],
-  step = 1.0,
-) {
+function buildValidSpawnGrid(groundMeshes, groundY, bounds, step = 1.0) {
   if (!groundMeshes || groundMeshes.length === 0) return null;
   const b = getSafeIslandBounds(bounds);
   const meshRaycast = THREE.Mesh.prototype.raycast;
@@ -2130,21 +1938,10 @@ function buildValidSpawnGrid(
   const origin = new THREE.Vector3();
   const down = new THREE.Vector3(0, -1, 0);
   const Y_FLOOR = groundY - 1.0;
-  const minX = b.minX + SPAWN_GRID_SHRINK;
-  const maxX = b.maxX - SPAWN_GRID_SHRINK;
-  const minZ = b.minZ + SPAWN_GRID_SHRINK;
-  const maxZ = b.maxZ - SPAWN_GRID_SHRINK;
+  const { minX, maxX, minZ, maxZ } = b;
   const points = [];
   for (let x = minX; x <= maxX; x += step) {
     for (let z = minZ; z <= maxZ; z += step) {
-      let excluded = false;
-      for (const zone of exclusionZones) {
-        if (Math.hypot(x - zone.x, z - zone.z) < zone.margin + 2.0) {
-          excluded = true;
-          break;
-        }
-      }
-      if (excluded) continue;
       origin.set(x, groundY + 100, z);
       rcDown.set(origin, down);
       const ints = [];
@@ -2157,50 +1954,22 @@ function buildValidSpawnGrid(
   }
   if (import.meta.env.DEV) {
     console.log(
-      `[Stage2] validSpawnGrid: ${points.length}개 유효 지점 (shrink=${SPAWN_GRID_SHRINK}m, step=${step}m)`,
+      `[Stage2] validSpawnGrid: ${points.length}개 유효 지점 (step=${step}m)`,
     );
   }
   return points.length > 0 ? points : null;
 }
 
-function buildSpawnExclusionZones(allModels) {
-  const MARGIN = 3.5; // OBJ_ 오브젝트 주변 여유 반경
-  const found = new Set();
-  const zones = [];
-
-  allModels.forEach((m) => {
-    m.traverse((obj) => {
-      if (!obj.name.startsWith("OBJ_")) return;
-      if (found.has(obj.name)) return;
-      found.add(obj.name);
-      const pos = new THREE.Vector3();
-      obj.getWorldPosition(pos);
-      zones.push({ type: "point", x: pos.x, z: pos.z, margin: MARGIN });
-    });
-  });
-
-  return zones;
-}
-
 function pickSpawnXZ(
   fallingTextsArr,
-  _isInitial,
-  _bounds,
-  islandValidator,
   letterWidth = 0,
-  exclusionZones = [],
   letterHeight = 0,
   validSpawnGrid = null,
 ) {
-  // 글자 바운딩 원 반경: 어떤 회전각에서도 코너가 울타리를 벗어나지 않으려면
-  // half-width/half-height 중 큰 값이 아니라 대각선(hypot)을 써야 함.
-  // 섬 울타리가 원형이라 cardinal 4방향 체크만으론 대각 코너가 울타리를 뚫을 수 있음.
   const newR = Math.hypot(letterWidth / 2, letterHeight / 2);
-  const halfExtent = newR; // bounds inset + 8방향 fence 체크 모두 동일 반경 사용
   const allTexts = fallingTextsArr || [];
 
-  // 바운딩 원 기반 간격: dist - r_new - r_existing = 실제 가장자리 간격
-  // 양수 = 떨어져 있음, 음수 = 겹침
+  // 바운딩 원 기반 간격: dist - r_new - r_existing = 실제 가장자리 간격 (양수=떨어짐, 음수=겹침)
   const edgeGap = (x, z) => {
     if (allTexts.length === 0) return Infinity;
     let minGap = Infinity;
@@ -2214,126 +1983,48 @@ function pickSpawnXZ(
     return minGap;
   };
 
-  // X축(카메라 심도/앞뒤) 최소 간격 별도 체크 — edgeGap 왜곡 없이 오클루전 방지
-  const depthGapOk = (x, minXGap) => {
+  // 카메라가 +X 방향에서 바라보므로 X = 심도(depth) 축.
+  // Z가 충분히 가까운 글자끼리만 X 최소 간격을 강제 — Z가 멀면 겹쳐 보이지 않으므로 skip.
+  const depthGapOk = (x, z, minXGap) => {
     for (const f of allTexts) {
-      const xDist = Math.abs(f.group.position.x - x);
       const fR = typeof f.radius === "number" ? f.radius : 0;
-      if (xDist < newR + fR + minXGap) return false;
+      const zDist = Math.abs(f.group.position.z - z);
+      if (zDist > newR + fR + 3.0) continue; // Z 멀면 카메라상 겹침 없음
+      if (Math.abs(f.group.position.x - x) < newR + fR + minXGap) return false;
     }
     return true;
   };
 
-  // validSpawnGrid: 로드 타임에 레이캐스트로 미리 계산된 유효 지점 배열.
-  // 섬의 실제 형태(비직사각형)를 반영하므로 이 경로를 우선 사용.
-  if (validSpawnGrid && validSpawnGrid.length > 0) {
-    // 360도 원형 exclusion zone 체크 — 글자 실제 반경(halfExtent) 포함
-    const isNotExcluded = (x, z) => {
-      for (const zone of exclusionZones) {
-        if (Math.hypot(x - zone.x, z - zone.z) < zone.margin + halfExtent)
-          return false;
-      }
-      return true;
-    };
-    const randomGap = 1.8 + Math.random() * 1.2;
-    const gapLevels = [randomGap, 1.2, 0.6, 0.0];
-    const depthLevels = [2.0, 1.5, 1.0, 0.5];
-    // 매 시도마다 그리드를 랜덤 순서로 샘플링 (Fisher-Yates partial shuffle)
-    const grid = validSpawnGrid;
-    const N = grid.length;
-    const sampleSize = Math.min(N, 60);
-    for (let li = 0; li < gapLevels.length; li++) {
-      const minGap = gapLevels[li];
-      const minDepth = depthLevels[li];
-      for (let t = 0; t < sampleSize; t++) {
-        const idx = t + Math.floor(Math.random() * (N - t));
-        const tmp = grid[t];
-        grid[t] = grid[idx];
-        grid[idx] = tmp; // partial swap
-        const { x, z } = grid[t];
-        if (!isNotExcluded(x, z)) continue;
-        if (edgeGap(x, z) >= minGap && depthGapOk(x, minDepth)) return { x, z };
-      }
-    }
-    // 실패 시: 그리드 전체에서 가장자리 간격 최대 지점 반환 (exclusion zone 미제외 — 이미 모든 자리 포화)
-    let best = grid[0];
-    let bestGap = edgeGap(grid[0].x, grid[0].z);
-    for (let i = 1; i < N; i++) {
-      const g = edgeGap(grid[i].x, grid[i].z);
-      if (g > bestGap) {
-        bestGap = g;
-        best = grid[i];
-      }
-    }
-    return best;
+  if (!validSpawnGrid || validSpawnGrid.length === 0) {
+    console.error("[Stage2] validSpawnGrid 없음 — SPAWN_ZONE 메쉬 필요");
+    return { x: 0, z: 0 };
   }
 
-  // fallback: validSpawnGrid 없을 때 기존 AABB 기반 직사각형 샘플링
-  const base = islandValidator
-    ? getSafeIslandBounds(_bounds)
-    : getSpawnBounds(_bounds);
-  const rawSpawn = {
-    minX: base.minX + halfExtent,
-    maxX: base.maxX - halfExtent,
-    minZ: base.minZ + halfExtent,
-    maxZ: base.maxZ - halfExtent,
-  };
-  const spawn = {
-    minX: rawSpawn.minX < rawSpawn.maxX ? rawSpawn.minX : base.minX,
-    maxX: rawSpawn.minX < rawSpawn.maxX ? rawSpawn.maxX : base.maxX,
-    minZ: rawSpawn.minZ < rawSpawn.maxZ ? rawSpawn.minZ : base.minZ,
-    maxZ: rawSpawn.minZ < rawSpawn.maxZ ? rawSpawn.maxZ : base.maxZ,
-  };
-  const { minX, maxX, minZ, maxZ } = spawn;
-  const isValidPos = (x, z) => {
-    for (const zone of exclusionZones) {
-      if (Math.hypot(x - zone.x, z - zone.z) < zone.margin + halfExtent)
-        return false;
-    }
-    if (!islandValidator) return true;
-    if (!islandValidator(x, z)) return false;
-    if (halfExtent > 0) {
-      const s = 0.7071067811865476;
-      const R = halfExtent + 1.2;
-      if (!islandValidator(x + R, z)) return false;
-      if (!islandValidator(x - R, z)) return false;
-      if (!islandValidator(x, z + R)) return false;
-      if (!islandValidator(x, z - R)) return false;
-      if (!islandValidator(x + R * s, z + R * s)) return false;
-      if (!islandValidator(x + R * s, z - R * s)) return false;
-      if (!islandValidator(x - R * s, z + R * s)) return false;
-      if (!islandValidator(x - R * s, z - R * s)) return false;
-    }
-    return true;
-  };
   const randomGap = 1.8 + Math.random() * 1.2;
   const gapLevels = [randomGap, 1.2, 0.6, 0.0];
-  const depthLevels = [2.0, 1.5, 1.0, 0.5];
+  const depthGaps = [2.0, 1.5, 0.0, 0.0]; // gap이 0.6 이하로 떨어지면 depth 체크 포기
+  const grid = validSpawnGrid;
+  const N = grid.length;
   for (let li = 0; li < gapLevels.length; li++) {
     const minGap = gapLevels[li];
-    const minDepth = depthLevels[li];
-    for (let tryCount = 0; tryCount < 40; tryCount++) {
-      const x = minX + Math.random() * (maxX - minX);
-      const z = minZ + Math.random() * (maxZ - minZ);
-      if (!isValidPos(x, z)) continue;
-      if (edgeGap(x, z) >= minGap && depthGapOk(x, minDepth)) return { x, z };
+    const minDepth = depthGaps[li];
+    for (let t = 0; t < N; t++) {
+      const idx = t + Math.floor(Math.random() * (N - t));
+      const tmp = grid[t];
+      grid[t] = grid[idx];
+      grid[idx] = tmp;
+      const { x, z } = grid[t];
+      if (edgeGap(x, z) >= minGap && depthGapOk(x, z, minDepth))
+        return { x, z };
     }
   }
-  const cx = (minX + maxX) * 0.5;
-  const cz = (minZ + maxZ) * 0.5;
-  let best = { x: cx, z: cz };
-  let bestGap = edgeGap(best.x, best.z);
-  const steps = 12;
-  for (let i = 0; i <= steps; i++) {
-    for (let j = 0; j <= steps; j++) {
-      const x = minX + (i / steps) * (maxX - minX);
-      const z = minZ + (j / steps) * (maxZ - minZ);
-      if (!isValidPos(x, z)) continue;
-      const g = edgeGap(x, z);
-      if (g > bestGap) {
-        bestGap = g;
-        best = { x, z };
-      }
+  let best = grid[0];
+  let bestGap = edgeGap(grid[0].x, grid[0].z);
+  for (let i = 1; i < N; i++) {
+    const g = edgeGap(grid[i].x, grid[i].z);
+    if (g > bestGap) {
+      bestGap = g;
+      best = grid[i];
     }
   }
   return best;
