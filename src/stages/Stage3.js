@@ -75,6 +75,7 @@ import {
   playRandomCrackSound,
   playCrackFinalSound,
   playFlowerMagicSound,
+  playDropSound,
   disposeStage3CrackSound,
 } from "../utils/stages/stage3/playCrackSound.js";
 import {
@@ -96,9 +97,9 @@ const STAGE3_LETTER_LANDING_LIFT = 0.3;
 const STAGE3_GRAVITY = -35;
 const STAGE3_INITIAL_VY = -12;
 const LETTER_BOUNCE_RESTITUTION = 0.4;
-const HITS_TO_DESTROY = 20;
+const HITS_TO_DESTROY = 12;
 /** 본격 shatter 이전, 글자 표면에 금만 가는 타격 횟수 — 이후 1회 추가 타격으로 최종 파열 */
-const CRACK_HITS_BEFORE_SHATTER = 19;
+const CRACK_HITS_BEFORE_SHATTER = 11;
 /** 최종 shatter 시 글자를 쪼갤 조각 수 — 글자 크기/삼각형 수에 비해 너무 많으면 작게 튀어서 가치 감소 */
 const FINAL_SHATTER_PIECE_COUNT = 8;
 /** 한 번 타격 시 잘려 나가는 로컬 x 구간 비율 (fragment 재타격에서만 사용) */
@@ -426,10 +427,10 @@ export function Stage3() {
     introTopViewCommitted: false,
     elapsed: 0,
     transitionElapsed: 0,
-    /** 인트로 회전 구간 길이 — 클수록 같은 sweep 각에서 더 천천히 회전 */
+    /** 인트로 회전 구간 길이 */
     durationSec: 4.5,
     transitionSec: 2.0,
-    /** 시계방향으로 도는 각(rad). durationSec 단축에 맞춰 속도 유지하도록 각도도 함께 축소 */
+    /** 시계방향으로 도는 각(rad) */
     sweepAngleRad: Math.PI * 0.39,
     center: new THREE.Vector3(),
     radius: 20,
@@ -586,6 +587,7 @@ export function Stage3() {
   }
 
   function startCameraIntro(center, bounds) {
+    void bounds;
     if (!cameraRef) return;
     cameraIntro.active = true;
     cameraIntro.transitioning = false;
@@ -593,29 +595,20 @@ export function Stage3() {
     cameraIntro.introTopViewCommitted = false;
     cameraIntro.elapsed = 0;
     cameraIntro.transitionElapsed = 0;
-    cameraIntro.center.copy(center);
-    const size = new THREE.Vector3();
-    bounds.getSize(size);
-    const horizontalSize = Math.max(size.x, size.z);
-    // 수평 반경을 살짝 줄여 더 “정수리에 가깝게”
-    cameraIntro.radius = Math.max(13, horizontalSize * 0.76);
-    // 더 높은 위치 + 시선은 바운딩 중심보다 약간 아래(섬 윗면 쪽)로 두어 내려다보기 강화
-    cameraIntro.height = center.y + Math.max(60, size.y * 1.2 + 16);
-    const minY = bounds.min.y;
-    const maxY = bounds.max.y;
-    const targetLookY = center.y - Math.min(size.y * 0.14, 4);
-    cameraIntro.lookAtY = THREE.MathUtils.clamp(
-      targetLookY,
-      minY + size.y * 0.05,
-      maxY - 0.3,
-    );
-    // 궤도 각: x = center.x + sin(θ)*r, z = center.z + cos(θ)*r, 시간에 따라 θ 감소 = 시계방향 스윕
-    // 시작점을 시계 반대 방향으로 약 60° 옮김 → θ에 π/3 더하기
-    const baseAngle = Math.atan2(
-      cameraRef.position.x - center.x,
-      cameraRef.position.z - center.z,
-    );
-    cameraIntro.startAngle = baseAngle + Math.PI / 2;
+
+    // config의 시작·끝 위치에서 원형 궤도 파라미터를 역산
+    const sp = config.camera.introStartPos;
+    const ep = config.camera.introEndPos;
+    const lk = config.camera.introLookAt;
+    cameraIntro.center.set(lk.x, center.y, lk.z);
+    cameraIntro.radius = Math.sqrt((sp.x - lk.x) ** 2 + (sp.z - lk.z) ** 2);
+    cameraIntro.height = sp.y;
+    cameraIntro.lookAtY = lk.y;
+    cameraIntro.startAngle = Math.atan2(sp.x - lk.x, sp.z - lk.z);
+    const endAngle = Math.atan2(ep.x - lk.x, ep.z - lk.z);
+    let sweep = cameraIntro.startAngle - endAngle;
+    if (sweep < 0) sweep += Math.PI * 2;
+    cameraIntro.sweepAngleRad = sweep;
 
     const orbit = debugControls?.getOrbitControls?.();
     if (orbit) orbit.enabled = false;
@@ -2668,9 +2661,11 @@ export function Stage3() {
         s.group.position.y = s.landingY;
         s.velocity.y = -s.velocity.y * LETTER_BOUNCE_RESTITUTION;
         s.bounces = (s.bounces ?? 0) + 1;
+        playDropSound();
         return;
       }
 
+      if ((s.bounces ?? 0) === 0) playDropSound();
       s.group.position.y = s.landingY;
       s.velocity.y = 0;
       s.velocity.rotationX = 0;
@@ -3229,8 +3224,12 @@ export function Stage3() {
    * 글자 앞면(extrude의 +Z cap)에 실재하는 정점들을 캐시해서 반환.
    * 랜덤 bbox 좌표를 쓰면 SVG 밖 허공에 금이 가버리므로, 반드시 실제 면 정점을 앵커로 사용한다.
    */
-  function getLetterFrontCapVertices(state) {
-    if (state.cachedFrontVerts) return state.cachedFrontVerts;
+  /**
+   * 앞면(front cap) 삼각형 edges만 수집. 양 끝점이 동일 삼각형 안에 있으므로
+   * 선분 전체가 SVG 채움 영역 내에 보장된다. z를 살짝 앞으로 밀어 z-fighting 방지.
+   */
+  function getLetterFrontCapTriangleEdges(state) {
+    if (state.cachedFrontEdges) return state.cachedFrontEdges;
     let maxZ = -Infinity;
     const meshes = [];
     state.group.traverse((c) => {
@@ -3242,99 +3241,172 @@ export function Stage3() {
         }
       }
     });
-    const verts = [];
     const eps = 1e-3;
+    const lineZ = maxZ + 0.01;
+    const allEdges = [];
+    let minY = Infinity,
+      maxY = -Infinity;
+
     for (const m of meshes) {
       const pos = m.geometry.getAttribute("position");
+      const idx = m.geometry.index;
       if (!pos) continue;
+      const data = idx ? idx.array : null;
+      const count = data ? data.length : pos.count;
+      const isFront = new Uint8Array(pos.count);
       for (let i = 0; i < pos.count; i++) {
         if (Math.abs(pos.getZ(i) - maxZ) < eps) {
-          verts.push(new THREE.Vector3(pos.getX(i), pos.getY(i), maxZ));
+          isFront[i] = 1;
+          const y = pos.getY(i);
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
         }
       }
+      for (let i = 0; i < count; i += 3) {
+        const a = data ? data[i] : i;
+        const b = data ? data[i + 1] : i + 1;
+        const c = data ? data[i + 2] : i + 2;
+        if (!isFront[a] || !isFront[b] || !isFront[c]) continue;
+        const va = new THREE.Vector3(pos.getX(a), pos.getY(a), lineZ);
+        const vb = new THREE.Vector3(pos.getX(b), pos.getY(b), lineZ);
+        const vc = new THREE.Vector3(pos.getX(c), pos.getY(c), lineZ);
+        const lab = va.distanceTo(vb);
+        const lbc = vb.distanceTo(vc);
+        const lca = vc.distanceTo(va);
+        // 극도로 납작한 삼각형(earcut bridge triangle)은 획 내부 삼각형이 아닐 가능성이 높다
+        const perim = lab + lbc + lca;
+        const longest = Math.max(lab, lbc, lca);
+        if (perim < 0.02 || longest / perim > 0.72) continue;
+        // 삼각형에서 가장 긴 edge 1개만 수집 → 획 결 방향으로 정렬된 선이 됨
+        let s, e, len;
+        if (lab >= lbc && lab >= lca) {
+          s = va;
+          e = vb;
+          len = lab;
+        } else if (lbc >= lca) {
+          s = vb;
+          e = vc;
+          len = lbc;
+        } else {
+          s = vc;
+          e = va;
+          len = lca;
+        }
+        if (len > 0.01) allEdges.push({ start: s, end: e, length: len });
+      }
     }
-    state.cachedFrontVerts = verts;
-    return verts;
+
+    // 글자 높이 기준 상한선: bridge edge는 일반 획 내 edge보다 훨씬 길다
+    const charH = Math.max(maxY - minY, 0.1);
+    const maxLen = Math.min(0.42, charH * 0.14);
+    const edges = allEdges.filter((e) => e.length <= maxLen);
+
+    state.cachedFrontEdges = edges;
+    return edges;
   }
 
-  /** 지그재그 line 한 획 추가. start→end 사이에 4세그먼트, 측면 퍼턴 랜덤. */
+  /** 직선에 가까운 균열선 1획. 평행선 2개로 ~1.3× 굵기 시뮬레이션(WebGL linewidth 미지원 우회). */
   function addCrackSegment(state, start, end) {
-    const segs = 4;
+    const segs = 3;
     const dir = end.clone().sub(start);
     const dirLen = Math.max(dir.length(), 1e-6);
-    const perp = new THREE.Vector3(-dir.y, dir.x, 0)
-      .normalize()
-      .multiplyScalar(dirLen * 0.22);
-    const positions = [];
+    const perpDir = new THREE.Vector3(-dir.y, dir.x, 0).normalize();
+    const jitter = perpDir.clone().multiplyScalar(dirLen * 0.08);
+
+    // 지터 포인트를 먼저 확정 — 두 평행선이 동일 경로를 공유
+    const pts = [];
     for (let i = 0; i <= segs; i++) {
       const t = i / segs;
       const base = start.clone().lerp(end, t);
       if (i !== 0 && i !== segs) {
-        base.add(perp.clone().multiplyScalar((Math.random() - 0.5) * 2));
+        base.add(jitter.clone().multiplyScalar((Math.random() - 0.5) * 2));
       }
-      positions.push(base.x, base.y, base.z);
+      pts.push(base);
     }
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(positions, 3),
-    );
+
     const mat = new THREE.LineBasicMaterial({
       color: 0xffffff,
       transparent: true,
       opacity: 0,
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
     });
-    const line = new THREE.Line(geom, mat);
-    line.renderOrder = 10;
-    state.group.add(line);
+
+    if (!state.crackMeshes) state.crackMeshes = [];
+
+    // 0 offset + 0.012 offset 평행선 → 시각적으로 ~1.3× 굵어 보임
+    const THICKNESS = 0.012;
+    for (let side = 0; side < 2; side++) {
+      const ox = perpDir.x * THICKNESS * side;
+      const oy = perpDir.y * THICKNESS * side;
+      const pos = [];
+      for (const p of pts) pos.push(p.x + ox, p.y + oy, p.z);
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      const line = new THREE.Line(geom, mat);
+      line.renderOrder = 10;
+      state.group.add(line);
+      state.crackMeshes.push(line);
+    }
+
     gsap.to(mat, {
       opacity: 1,
-      duration: 0.12,
+      duration: 0.1,
       ease: "power2.out",
-      // 페이드 인 끝난 뒤 transparent를 꺼서 알파 블렌딩을 완전히 제거 — 뒤의 검정 글자가 비쳐
-      // 크랙이 회색빛으로 보이는 투과 현상 방지. 이후 렌더링은 순수 불투명 라인.
       onComplete: () => {
         mat.transparent = false;
         mat.needsUpdate = true;
       },
     });
-    if (!state.crackMeshes) state.crackMeshes = [];
-    state.crackMeshes.push(line);
   }
 
   /**
-   * 앵커 위에서 2~3방향으로 퍼지는 "크랙 클러스터"를 만든다.
-   * 한 점에서 갈라져 나가는 별 모양 균열 패턴.
-   */
-  function addCrackCluster(state, anchor) {
-    const branchCount = 2 + Math.floor(Math.random() * 3); // 3~5
-    for (let b = 0; b < branchCount; b++) {
-      const angle = Math.random() * Math.PI * 2;
-      const len = 0.22 + Math.random() * 0.5;
-      const end = new THREE.Vector3(
-        anchor.x + Math.cos(angle) * len,
-        anchor.y + Math.sin(angle) * len,
-        anchor.z,
-      );
-      addCrackSegment(state, anchor, end);
-    }
-  }
-
-  /**
-   * 한 타격당 클러스터 생성. hitCount가 커질수록 완만하게 증가.
-   * hit 0: 3, hit 2: 4, hit 4: 5, ... 최대 10.
-   * 최대 10 클러스터 × 3~5 branch = 30~50 line per hit.
+   * 한 타격당 삼각형 edge를 기반으로 연결된 균열 패턴 생성.
+   * 동일 삼각형의 꼭짓점을 잇는 edge만 사용하므로 SVG 바깥으로 선이 나가지 않는다.
+   * depthTest: true가 두 번째 방어선.
    */
   function addCrackHit(state) {
     if (!state?.group) return;
-    const verts = getLetterFrontCapVertices(state);
-    if (verts.length === 0) return;
-    const clusterCount = Math.min(10, 3 + Math.floor(state.hitCount / 2));
-    for (let i = 0; i < clusterCount; i++) {
-      const anchor = verts[Math.floor(Math.random() * verts.length)];
-      addCrackCluster(state, anchor);
+    const edges = getLetterFrontCapTriangleEdges(state);
+    if (edges.length === 0) return;
+
+    const CONNECT_R = 0.25;
+    const used = new Set();
+
+    // 클러스터 2개 실행 → 타격당 균열 양 2×
+    for (let cluster = 0; cluster < 2; cluster++) {
+      let root,
+        tries = 0;
+      do {
+        root = edges[Math.floor(Math.random() * edges.length)];
+        tries++;
+      } while (used.has(root) && tries < 12);
+      if (!root || used.has(root)) continue;
+      used.add(root);
+      addCrackSegment(state, root.start, root.end);
+
+      const pivot = Math.random() < 0.5 ? root.start : root.end;
+      const connected = edges.filter(
+        (e) =>
+          !used.has(e) &&
+          (e.start.distanceTo(pivot) < CONNECT_R ||
+            e.end.distanceTo(pivot) < CONNECT_R),
+      );
+      const extraCount = Math.min(
+        connected.length,
+        1 + Math.floor(state.hitCount / 5),
+      );
+      for (let i = 0; i < extraCount; i++) {
+        let pick,
+          t = 0;
+        do {
+          pick = connected[Math.floor(Math.random() * connected.length)];
+          t++;
+        } while (used.has(pick) && t < 8);
+        if (!pick || used.has(pick)) break;
+        used.add(pick);
+        addCrackSegment(state, pick.start, pick.end);
+      }
     }
   }
 
@@ -3458,6 +3530,7 @@ export function Stage3() {
 
   function onEnterHit() {
     if (!sceneRef) return;
+    if (textDestroyed) return;
     const target = getHitTarget();
     // 펀치 애니: 클립 100%(끝 프레임)에 타격 — 역재생이면 해당 포즈가 시작 시점이라 지연 0에 가깝게 맞춤
     character?.playHammerCue?.(() => {
@@ -4212,7 +4285,7 @@ export function Stage3() {
       }
 
       if (import.meta.env.DEV) {
-        // dev-only cleanup diagnostics intentionally muted to reduce console noise.
+        // dev-only cleanup intentionally empty
       }
     },
   };

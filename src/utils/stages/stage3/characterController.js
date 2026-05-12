@@ -93,6 +93,8 @@ export function createCharacterController({
   let punchAction = null;
   let isPunchPlaying = false;
   let impactTimeoutId = null;
+  /** 스폰 시점의 캐릭터 yaw — 펀치 시 항상 이 방향을 바라보게 고정 */
+  let spawnFacingYaw = 0;
 
   // 경계 clamp 값 — setup()에서 1회 계산, update() 매 프레임 재사용
   let _minCx = 0,
@@ -273,6 +275,7 @@ export function createCharacterController({
           if (spawnYaw != null) {
             characterModel.rotation.y = spawnYaw;
           }
+          spawnFacingYaw = characterModel.rotation.y;
           if (idleCharacterModel) {
             idleCharacterModel.position.set(spawnX, characterYPosition, spawnZ);
             if (spawnYaw != null) {
@@ -597,6 +600,7 @@ export function createCharacterController({
       );
       punchCharacterModel.position.copy(src.position);
       punchCharacterModel.rotation.copy(src.rotation);
+      punchCharacterModel.rotation.y = spawnFacingYaw;
       characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
       punchCharacterModel.visible = true;

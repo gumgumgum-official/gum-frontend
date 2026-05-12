@@ -3,6 +3,7 @@
  * 크랙: crack1/crack2 중 랜덤(직전과 다르게). 마지막 파열: crack_final 1종.
  */
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
+import { applyExtendedAudioVolume } from "../../common/audioGain.js";
 import { STAGE3_AUDIO_CONFIG } from "../../../config/stages/stage3/stage3AudioConfig.js";
 
 const CRACK_PATHS = [
@@ -14,23 +15,21 @@ const FLOWER_MAGIC_PATHS = [
   "/static/sounds/text_crack/flower_magic.mp3",
   "/static/sounds/text_crack/flower_magic2.mp3",
 ];
-const getCrackVolume = () => Number(STAGE3_AUDIO_CONFIG.crackVolume ?? 0.027);
+const DROP_PATH = "/static/sounds/text_crack/drop.mp3";
+const getCrackVolume = () => Number(STAGE3_AUDIO_CONFIG.crackVolume ?? 1.6);
 const getCrackFinalVolume = () =>
-  Number(STAGE3_AUDIO_CONFIG.crackFinalVolume ?? 0.027);
+  Number(STAGE3_AUDIO_CONFIG.crackFinalVolume ?? 1.6);
 const getFlowerMagicVolume = () =>
-  Number(STAGE3_AUDIO_CONFIG.flowerMagicVolume ?? 0.027);
+  Number(STAGE3_AUDIO_CONFIG.flowerMagicVolume ?? 1.6);
+const getDropVolume = () => Number(STAGE3_AUDIO_CONFIG.dropVolume ?? 1.6);
 
 let lastCrackIdx = -1;
+/** @type {HTMLAudioElement | null} */
+let dropAudio = null;
 /** @type {HTMLAudioElement | null} */
 let crackFinalAudio = null;
 /** @type {HTMLAudioElement[]} */
 let flowerMagicAudios = [];
-
-function clamp01(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(1, Math.max(0, n));
-}
 
 /**
  * 히트마다 호출. 매번 새로운 Audio 객체로 재생해 연타 시 겹쳐도 잘리지 않게.
@@ -45,7 +44,7 @@ export function playRandomCrackSound() {
   lastCrackIdx = idx;
   try {
     const a = new window.Audio(resolvePublicAssetUrl(CRACK_PATHS[idx]));
-    a.volume = clamp01(getCrackVolume());
+    applyExtendedAudioVolume(a, getCrackVolume());
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
   } catch {
@@ -66,9 +65,9 @@ export function playFlowerMagicSound() {
       return a;
     });
   }
-  const vol = clamp01(getFlowerMagicVolume());
+  const vol = getFlowerMagicVolume();
   for (const a of flowerMagicAudios) {
-    a.volume = vol;
+    applyExtendedAudioVolume(a, vol);
     a.pause();
     a.currentTime = 0;
     const p = a.play();
@@ -83,10 +82,24 @@ export function playCrackFinalSound() {
     crackFinalAudio.preload = "auto";
     crackFinalAudio.src = resolvePublicAssetUrl(CRACK_FINAL_PATH);
   }
-  crackFinalAudio.volume = clamp01(getCrackFinalVolume());
+  applyExtendedAudioVolume(crackFinalAudio, getCrackFinalVolume());
   crackFinalAudio.pause();
   crackFinalAudio.currentTime = 0;
   const p = crackFinalAudio.play();
+  if (p && typeof p.catch === "function") p.catch(() => {});
+}
+
+/** 글자가 바닥에 첫 착지하는 순간 1회 재생. */
+export function playDropSound() {
+  if (!dropAudio) {
+    dropAudio = new window.Audio();
+    dropAudio.preload = "auto";
+    dropAudio.src = resolvePublicAssetUrl(DROP_PATH);
+  }
+  applyExtendedAudioVolume(dropAudio, getDropVolume());
+  dropAudio.pause();
+  dropAudio.currentTime = 0;
+  const p = dropAudio.play();
   if (p && typeof p.catch === "function") p.catch(() => {});
 }
 
@@ -95,6 +108,11 @@ export function disposeStage3CrackSound() {
     crackFinalAudio.pause();
     crackFinalAudio.src = "";
     crackFinalAudio = null;
+  }
+  if (dropAudio) {
+    dropAudio.pause();
+    dropAudio.src = "";
+    dropAudio = null;
   }
   for (const a of flowerMagicAudios) {
     a.pause();

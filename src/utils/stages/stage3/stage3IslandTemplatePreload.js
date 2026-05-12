@@ -13,7 +13,7 @@ import { loadFountainGltfPatched } from "./fountainGlbPatch.js";
 
 export { resolvePublicAssetUrl as resolveStage3PublicModelUrl };
 
-const FOUNTAIN_GLB_PATH = "scene_with_fountain_v6.glb";
+const FOUNTAIN_GLB_PATH = "island11.glb";
 
 /**
  * @param {string} modelPathFromConfig - config.model.path

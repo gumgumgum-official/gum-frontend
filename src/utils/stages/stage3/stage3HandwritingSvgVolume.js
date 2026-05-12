@@ -65,7 +65,7 @@ export async function createHandwritingSvgVolumeGroup(svgPublicUrl, options) {
 
     const extrudeSettings = {
       depth,
-      curveSegments: 24,
+      curveSegments: 64,
       bevelEnabled: false,
       steps: 1,
     };

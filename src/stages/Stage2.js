@@ -676,7 +676,7 @@ export function Stage2() {
           );
         } else {
           console.error(
-            "[Stage2] SPAWN_ZONE 메쉬 없음 — beam4.glb에 SPAWN_ZONE이 있어야 합니다.",
+            "[Stage2] SPAWN_ZONE 메쉬 없음 — beam5.glb에 SPAWN_ZONE이 있어야 합니다.",
           );
         }
         const refreshCharacterObstacleBoxes = () => {
