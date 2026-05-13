@@ -102,6 +102,8 @@ const HITS_TO_DESTROY = 12;
 const CRACK_HITS_BEFORE_SHATTER = 11;
 /** 최종 shatter 시 글자를 쪼갤 조각 수 — 글자 크기/삼각형 수에 비해 너무 많으면 작게 튀어서 가치 감소 */
 const FINAL_SHATTER_PIECE_COUNT = 8;
+/** 꽃 간 최소 거리(m) — 이 거리보다 가까우면 위치를 밀어낸다 */
+const FLOWER_MIN_DISTANCE = 1.1;
 /** 한 번 타격 시 잘려 나가는 로컬 x 구간 비율 (fragment 재타격에서만 사용) */
 const FRACTION_PER_HIT = 0.45;
 const HIT_RANGE = 20; // ilbuni로부터 이 거리 이내면 타격 가능 (관대하게)
@@ -232,6 +234,9 @@ export function Stage3() {
    * @type {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb[] | null}
    */
   let stage3CollidersRef = null;
+  /** 꽃 스폰 제외 박스: INT_/OBJ_/DECO_ 전체 (stage3CollidersRef는 DECO_ 일부만 포함) */
+  /** @type {{minX:number,maxX:number,minZ:number,maxZ:number}[]|null} */
+  let flowerExclusionBoxes = null;
   /** 글자가 착지한 뒤 colliders에 추가한 AABB 엔트리 (shatter/reset 시 splice로 제거) */
   /** @type {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb | null} */
   let letterColliderBox = null;
@@ -347,6 +352,8 @@ export function Stage3() {
   let worryCompletionCelebrationDone = false;
   /** 첫 꽃이 피어나는 시점에 flower_magic 효과음 1회만 재생 — 이후 꽃들은 무음 */
   let flowerMagicPlayed = false;
+  /** 꽃 겹침 방지용 스폰 위치 기록 */
+  const spawnedFlowerXZ = [];
   /** @type {HTMLDivElement | null} */
   let stampUiRoot = null;
   /** @type {HTMLDivElement | null} */
@@ -3087,13 +3094,32 @@ export function Stage3() {
 
   function spawnFlowerAt(x, z, groundY) {
     if (!sceneRef) return;
-    // 텐트·돗자리 등 정적 오브젝트 AABB 안이면 꽃 스폰 금지
-    if (stage3CollidersRef) {
-      for (const box of stage3CollidersRef) {
+    // 겹침 방지: 기존 꽃과 너무 가까우면 밀어낸다 (최대 4회 시도)
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let conflict = false;
+      for (const pos of spawnedFlowerXZ) {
+        const dx = x - pos.x,
+          dz = z - pos.z;
+        if (dx * dx + dz * dz < FLOWER_MIN_DISTANCE * FLOWER_MIN_DISTANCE) {
+          const angle = Math.random() * Math.PI * 2;
+          x = pos.x + Math.cos(angle) * FLOWER_MIN_DISTANCE;
+          z = pos.z + Math.sin(angle) * FLOWER_MIN_DISTANCE;
+          conflict = true;
+          break;
+        }
+      }
+      if (!conflict) break;
+    }
+    // INT_/OBJ_/DECO_ 오브젝트 위에는 꽃 스폰 금지
+    const _excBoxes = flowerExclusionBoxes ?? stage3CollidersRef;
+    if (_excBoxes) {
+      for (const box of _excBoxes) {
         if (x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ)
           return;
       }
     }
+    // 오브젝트 체크 통과 후에만 위치 기록 (차단된 위치는 기록하지 않아 다른 꽃이 그 공간 활용 가능)
+    spawnedFlowerXZ.push({ x, z });
     const url = pickRandomFlowerAssetUrl();
     const gy = groundY ?? stage3GroundY;
     void loadGltfTemplateCached(url)
@@ -3602,6 +3628,7 @@ export function Stage3() {
       isStampPosterZoomOpen = false;
       worryCompletionCelebrationDone = false;
       flowerMagicPlayed = false;
+      spawnedFlowerXZ.length = 0;
       stage3IntroFlowStarted = false;
       cameraShakeEndTime = 0;
       // hammerFloatElapsed = 0;
@@ -3799,6 +3826,33 @@ export function Stage3() {
           });
           // 런타임에 letter AABB를 push/splice할 수 있도록 상위 스코프에 참조 보관
           stage3CollidersRef = islandStaticColliders;
+          // 꽃 스폰 제외: INT_/OBJ_/DECO_ 모든 오브젝트 AABB 수집
+          flowerExclusionBoxes = [];
+          const _flowerExcTmp = new THREE.Box3();
+          model.traverse((obj) => {
+            if (!(obj instanceof THREE.Mesh)) return;
+            let p = /** @type {THREE.Object3D|null} */ (obj);
+            while (p) {
+              const n = typeof p.name === "string" ? p.name.toUpperCase() : "";
+              if (
+                n.startsWith("INT_") ||
+                n.startsWith("OBJ_") ||
+                n.startsWith("DECO_")
+              ) {
+                _flowerExcTmp.setFromObject(obj);
+                if (!_flowerExcTmp.isEmpty()) {
+                  flowerExclusionBoxes.push({
+                    minX: _flowerExcTmp.min.x,
+                    maxX: _flowerExcTmp.max.x,
+                    minZ: _flowerExcTmp.min.z,
+                    maxZ: _flowerExcTmp.max.z,
+                  });
+                }
+                break;
+              }
+              p = p.parent;
+            }
+          });
           if (import.meta.env.DEV) {
             // dev-only collider diagnostics intentionally muted to reduce console noise.
           }
