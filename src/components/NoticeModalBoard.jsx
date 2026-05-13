@@ -4,6 +4,7 @@ import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConf
 import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
 import { playUiClickSound } from "../utils/common/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
+import { GuestbookEmbed } from "./GuestbookEmbed";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const NOTICE_POSTER = NOTICE.posterImages;
@@ -34,7 +35,6 @@ const POSTER_BASE = {
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
   const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "guestbook" | null
-  const [iframeLoaded, setIframeLoaded] = useState(false);
   const closeWithSound = useCallback(() => {
     playUiClickSound();
     onClose();
@@ -53,15 +53,8 @@ export function NoticeModalBoard({ isOpen, onClose }) {
   }, [isOpen, closeWithSound, zoomedPoster]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setZoomedPoster(null);
-      setIframeLoaded(false);
-    }
+    if (!isOpen) setZoomedPoster(null);
   }, [isOpen]);
-
-  useEffect(() => {
-    if (zoomedPoster !== "guestbook") setIframeLoaded(false);
-  }, [zoomedPoster]);
 
   return (
     <AnimatePresence>
@@ -391,7 +384,10 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  padding: 24,
+                  paddingTop: 16,
+                  paddingBottom: "12vh",
+                  paddingLeft: 24,
+                  paddingRight: 24,
                 }}
               >
                 <motion.div
@@ -410,34 +406,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     maxHeight: "85vh",
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setZoomedPoster(null)}
-                    aria-label="닫기"
-                    style={{
-                      position: "absolute",
-                      top: -12,
-                      right: -12,
-                      width: 36,
-                      height: 36,
-                      borderRadius: "50%",
-                      border: "2px solid #78350f",
-                      background:
-                        "linear-gradient(145deg, #a16207 0%, #713f12 100%)",
-                      color: "#fef3c7",
-                      fontSize: "1.2rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                      zIndex: 10,
-                    }}
-                  >
-                    ×
-                  </button>
-
                   {zoomedPoster === "feast" && (
                     <div
                       style={{
@@ -463,47 +431,8 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   {zoomedPoster === "vote" && <GgumddiVoteSection />}
 
                   {zoomedPoster === "guestbook" && (
-                    <div
-                      style={{
-                        position: "relative",
-                        width: "min(900px, 94vw)",
-                        height: "min(82vh, 680px)",
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
-                        background: "#fff",
-                      }}
-                    >
-                      {!iframeLoaded && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "#fff0f6",
-                            zIndex: 1,
-                          }}
-                        >
-                          <span
-                            style={{ fontSize: "0.9rem", color: "#ff5fa2" }}
-                          >
-                            불러오는 중…
-                          </span>
-                        </div>
-                      )}
-                      <iframe
-                        src="https://retro-remake-realm.lovable.app/guestbook"
-                        title="방명록"
-                        onLoad={() => setIframeLoaded(true)}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          border: "none",
-                          display: "block",
-                        }}
-                      />
+                    <div style={{ width: "min(960px, 88vw)" }}>
+                      <GuestbookEmbed onClose={() => setZoomedPoster(null)} />
                     </div>
                   )}
                 </motion.div>
