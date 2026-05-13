@@ -83,6 +83,12 @@ import {
   updateFountain,
   disposeFountain,
 } from "../utils/stages/stage3/fountainEffect.js";
+import {
+  notifyStage3GpuReady,
+  onceStage3Revealed,
+  requestStage3Reveal,
+  resetStage3RevealGate,
+} from "../utils/stages/stage3/stage3RevealGate.js";
 
 const HANDWRITING_BUCKET = "handwriting";
 const HANDWRITING_TABLE = "handwriting_files";
@@ -3686,13 +3692,17 @@ export function Stage3() {
       );
       scene.background = skyBackgroundTexture;
 
-      keyboard.mount();
-      window.addEventListener("keydown", handleStageKeyDown, { capture: true });
-      canvas.addEventListener("pointerdown", handlePointerDown, {
-        capture: true,
+      onceStage3Revealed(() => {
+        keyboard.mount();
+        window.addEventListener("keydown", handleStageKeyDown, {
+          capture: true,
+        });
+        canvas.addEventListener("pointerdown", handlePointerDown, {
+          capture: true,
+        });
+        canvas.addEventListener("pointermove", handlePointerMove);
+        canvas.addEventListener("pointerleave", handlePointerLeave);
       });
-      canvas.addEventListener("pointermove", handlePointerMove);
-      canvas.addEventListener("pointerleave", handlePointerLeave);
 
       window.addEventListener(
         NOTICE_MODAL_USER_CLOSED_EVENT,
@@ -3720,20 +3730,29 @@ export function Stage3() {
         },
       });
 
-      // gum_server: start → 그다음 current 폴링 (예약만 있고 start 전이면 서버는 idle)
-      void (async () => {
-        try {
-          const ok = await postMonitorStart();
-          if (!ok) {
-            console.warn(
-              "[Stage3] monitor start 실패 — 폴링은 계속 (fallback 가능)",
-            );
+      // gum_server: start → 그다음 current 폴링 — 캔버스가 보여질 때까지 지연
+      // (start화면에서 캔버스가 hidden 상태일 때 monitor를 busy로 만들지 않기 위함)
+      onceStage3Revealed(() => {
+        void (async () => {
+          try {
+            const ok = await postMonitorStart();
+            if (!ok) {
+              console.warn(
+                "[Stage3] monitor start 실패 — 폴링은 계속 (fallback 가능)",
+              );
+            }
+          } catch (e) {
+            console.warn("[Stage3] monitor start 예외:", e);
           }
-        } catch (e) {
-          console.warn("[Stage3] monitor start 예외:", e);
-        }
-        startMonitorPolling();
-      })();
+          startMonitorPolling();
+        })();
+      });
+
+      // canvas가 이미 보이는 상태(dev·kiosk 직접 진입)면 즉시 reveal 게이트를 연다.
+      // start화면에서 visibility:hidden으로 실행 중일 때는 AppLayout이 /kiosk 진입 시 열어준다.
+      if (window.getComputedStyle(canvas).visibility !== "hidden") {
+        requestStage3Reveal();
+      }
 
       loadStage3Background({
         scene,
@@ -3747,9 +3766,6 @@ export function Stage3() {
           backgroundModel = model;
           ensureStage3UiMounted();
           updateStampMarksFilled();
-          if (isStage3Active) {
-            playStage3IntroAudioTwice();
-          }
           debugControls.setOrbitTarget(center);
           cameraRef = this.camera;
           stage3GroundY = backgroundMaxY;
@@ -3880,12 +3896,14 @@ export function Stage3() {
             },
           );
 
-          // 섬 GLB는 backgroundLoader에서 이미 `scene.add(model)`로 들어와 있기 때문에,
-          // 카메라 인트로 시작 타이밍을 뒤로 미루면 섬(특히 하단)이 회전 시작 전 잠깐 보일 수 있음.
-          // 따라서 gumFollowers.init() 같은 비동기 로딩보다 먼저 카메라 인트로를 활성화한다.
-          if (isStage3Active) {
+          // 캔버스가 visible 될 때 인트로 오디오 + 카메라 인트로를 함께 시작.
+          // keyboard/monitor는 별도 onceStage3Revealed로 이미 등록되어 있으므로
+          // 여기서는 오디오·카메라만 처리한다.
+          onceStage3Revealed(() => {
+            if (!isStage3Active) return;
+            playStage3IntroAudioTwice();
             startCameraIntro(center, backgroundBounds);
-          }
+          });
 
           scheduleDeferredStage3Setup(() => {
             if (!isStage3Active) return;
@@ -3925,6 +3943,18 @@ export function Stage3() {
               console.warn("[Stage3] 아이스크림 preload 오류:", e ?? "");
             }
           });
+
+          // 셰이더 컴파일 + 텍스처 GPU 업로드 워밍업.
+          // compileAsync 후 한 번 render()해야 실제 텍스처가 VRAM으로 올라간다.
+          void renderer
+            .compileAsync(scene, this.camera)
+            .then(() => {
+              renderer.render(scene, this.camera);
+              notifyStage3GpuReady();
+            })
+            .catch(() => {
+              notifyStage3GpuReady();
+            });
         },
       });
 
@@ -4123,6 +4153,7 @@ export function Stage3() {
 
     cleanup(scene) {
       isStage3Active = false;
+      resetStage3RevealGate();
       stopStage3IntroAudio();
       gumCancelled = true;
       pendingEggDiscoverySubtitle = null;

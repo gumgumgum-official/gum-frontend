@@ -12,10 +12,8 @@ import {
 } from "../lib/monitorCurrentApi.js";
 import { resetClientForNextKioskVisitor } from "../utils/common/resetClientForNextKioskVisitor.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
-import {
-  warmStage3GltfTemplateUrls,
-  waitForStage3GltfTemplatesReady,
-} from "../utils/stages/stage3/stage3GltfWarmup.js";
+import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import { waitForStage3GpuReady } from "../utils/stages/stage3/stage3RevealGate.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
 import { IntroStoryOverlay } from "../components/IntroStoryOverlay.jsx";
@@ -60,10 +58,9 @@ export function StartPage() {
     introBgm: null,
     introBgmFadeTimer: null,
   });
-  /** Stage6 완주 후: reset + Stage3 GLB 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
+  /** Stage6 완주 후: reset + Stage3 GPU 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
-  const stage3WarmupPromiseRef = useRef(null);
 
   const stopIntroBgm = useCallback(() => {
     if (introBgmStopTimerRef.current) {
@@ -343,6 +340,21 @@ export function StartPage() {
     if (params.get("complete") === "1") return;
     getGLBLoader().preloadDecoders();
     warmStage3GltfTemplateUrls();
+    // 인트로 이미지 HTTP 캐시 워밍업 — 첫 브라우저 로드 시 reveal 버벅임 방지
+    const introImageUrls = [
+      "/assets/intro_story/1.svg",
+      "/assets/intro_story/2.svg",
+      "/assets/intro_story/3.svg",
+      "/assets/intro_story/4.svg",
+      "/assets/intro_story/5.svg",
+      "/assets/intro_story/6.svg",
+      "/assets/intro_story/7.svg",
+      "/assets/island.svg",
+    ];
+    introImageUrls.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
   }, [location.search]);
 
   useEffect(() => {
@@ -433,13 +445,6 @@ export function StartPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const ensureStage3Warmup = useCallback(() => {
-    if (!stage3WarmupPromiseRef.current) {
-      stage3WarmupPromiseRef.current = waitForStage3GltfTemplatesReady();
-    }
-    return stage3WarmupPromiseRef.current;
-  }, []);
-
   const navigateToKioskAfterWarmup = useCallback(async () => {
     if (isCompletingKioskSession) {
       return;
@@ -450,22 +455,13 @@ export function StartPage() {
     startNavigationLockedRef.current = true;
     setIsPreparingKiosk(true);
     try {
-      await ensureStage3Warmup();
-      navigate(`/kiosk${location.search}`);
-    } catch (e) {
-      console.warn("[StartPage] Stage3 GLB 프리로드 실패 — 그대로 진행:", e);
-      stage3WarmupPromiseRef.current = waitForStage3GltfTemplatesReady();
-      try {
-        await stage3WarmupPromiseRef.current;
-      } catch {
-        // fallback: 웜업 실패가 이어져도 진입은 막지 않는다.
-      }
+      await waitForStage3GpuReady();
       navigate(`/kiosk${location.search}`);
     } finally {
       setIsPreparingKiosk(false);
       startNavigationLockedRef.current = false;
     }
-  }, [ensureStage3Warmup, isCompletingKioskSession, location.search, navigate]);
+  }, [isCompletingKioskSession, location.search, navigate]);
 
   const handleIntroEnter = useCallback(async () => {
     const enterBuf = audioBuffersRef.current.enterSfx;
@@ -530,11 +526,10 @@ export function StartPage() {
         // ignore
       }
     })();
-    void ensureStage3Warmup();
+    void waitForStage3GpuReady();
     setIsStartFadingOut(true);
     setIsIntroOpen(true);
   }, [
-    ensureStage3Warmup,
     ensureAudioCtx,
     isCompletingKioskSession,
     isIntroOpen,
@@ -560,7 +555,7 @@ export function StartPage() {
           try {
             await resetClientForNextKioskVisitor();
             getGLBLoader().preloadDecoders();
-            await waitForStage3GltfTemplatesReady();
+            await waitForStage3GpuReady();
             setToastMessage(null);
             params.delete("complete");
             const nextQuery = params.toString();
