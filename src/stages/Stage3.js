@@ -101,7 +101,7 @@ const HITS_TO_DESTROY = 12;
 /** 본격 shatter 이전, 글자 표면에 금만 가는 타격 횟수 — 이후 1회 추가 타격으로 최종 파열 */
 const CRACK_HITS_BEFORE_SHATTER = 11;
 /** 최종 shatter 시 글자를 쪼갤 조각 수 — 글자 크기/삼각형 수에 비해 너무 많으면 작게 튀어서 가치 감소 */
-const FINAL_SHATTER_PIECE_COUNT = 8;
+const FINAL_SHATTER_PIECE_COUNT = 32;
 /** 꽃 간 최소 거리(m) — 이 거리보다 가까우면 위치를 밀어낸다 */
 const FLOWER_MIN_DISTANCE = 1.1;
 /** 한 번 타격 시 잘려 나가는 로컬 x 구간 비율 (fragment 재타격에서만 사용) */
@@ -3225,14 +3225,14 @@ export function Stage3() {
       slot.group.rotation.set(0, 0, 0);
       const mul = FRAGMENT_BURST_IMPULSE_MUL;
       slot.velocity.set(
-        (Math.random() - 0.5) * 6 * mul,
-        (Math.random() * 2 + 3) * mul,
-        (Math.random() - 0.5) * 6 * mul,
+        (Math.random() - 0.5) * 9 * mul,
+        (Math.random() * 3 + 4) * mul,
+        (Math.random() - 0.5) * 9 * mul,
       );
       slot.angularVelocity.set(
-        (Math.random() - 0.5) * 4 * mul,
-        (Math.random() - 0.5) * 4 * mul,
-        (Math.random() - 0.5) * 4 * mul,
+        (Math.random() - 0.5) * 6 * mul,
+        (Math.random() - 0.5) * 6 * mul,
+        (Math.random() - 0.5) * 6 * mul,
       );
       sceneRef.add(slot.group);
       fragments.push({
@@ -3500,14 +3500,14 @@ export function Stage3() {
           const rmul = FRAGMENT_BURST_IMPULSE_MUL;
           slot.group.position.copy(fragCenter);
           slot.velocity.set(
-            (Math.random() - 0.5) * 5 * rmul,
+            (Math.random() - 0.5) * 7.5 * rmul,
             (Math.random() * 1.5 + 2.5) * rmul,
-            (Math.random() - 0.5) * 5 * rmul,
+            (Math.random() - 0.5) * 7.5 * rmul,
           );
           slot.angularVelocity.set(
-            (Math.random() - 0.5) * 3 * rmul,
-            (Math.random() - 0.5) * 3 * rmul,
-            (Math.random() - 0.5) * 3 * rmul,
+            (Math.random() - 0.5) * 4.5 * rmul,
+            (Math.random() - 0.5) * 4.5 * rmul,
+            (Math.random() - 0.5) * 4.5 * rmul,
           );
           sceneRef.add(slot.group);
           fragments.push({
