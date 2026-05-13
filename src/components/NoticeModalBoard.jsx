@@ -33,7 +33,8 @@ const POSTER_BASE = {
  * @param {function} props.onClose
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
-  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "icecream" | null
+  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "guestbook" | null
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const closeWithSound = useCallback(() => {
     playUiClickSound();
     onClose();
@@ -52,8 +53,15 @@ export function NoticeModalBoard({ isOpen, onClose }) {
   }, [isOpen, closeWithSound, zoomedPoster]);
 
   useEffect(() => {
-    if (!isOpen) setZoomedPoster(null);
+    if (!isOpen) {
+      setZoomedPoster(null);
+      setIframeLoaded(false);
+    }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (zoomedPoster !== "guestbook") setIframeLoaded(false);
+  }, [zoomedPoster]);
 
   return (
     <AnimatePresence>
@@ -301,18 +309,18 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 </div>
               </motion.div>
 
-              {/* 포스터 3: 아이스크림 포스터 */}
+              {/* 포스터 3: 방명록 */}
               <motion.div
                 role="button"
                 tabIndex={0}
                 onClick={() => {
                   playRandomNoticePaperSound(NOTICE.paperSoundPaths);
-                  setZoomedPoster("icecream");
+                  setZoomedPoster("guestbook");
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     playRandomNoticePaperSound(NOTICE.paperSoundPaths);
-                    setZoomedPoster("icecream");
+                    setZoomedPoster("guestbook");
                   }
                 }}
                 whileHover={{ scale: 1.02 }}
@@ -454,22 +462,45 @@ export function NoticeModalBoard({ isOpen, onClose }) {
 
                   {zoomedPoster === "vote" && <GgumddiVoteSection />}
 
-                  {zoomedPoster === "icecream" && (
+                  {zoomedPoster === "guestbook" && (
                     <div
                       style={{
+                        position: "relative",
+                        width: "min(900px, 94vw)",
+                        height: "min(82vh, 680px)",
                         borderRadius: 16,
                         overflow: "hidden",
                         boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
+                        background: "#fff",
                       }}
                     >
-                      <img
-                        src={THIRD_POSTER_SRC}
-                        alt="아이스크림 포스터"
-                        draggable={false}
+                      {!iframeLoaded && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "#fff0f6",
+                            zIndex: 1,
+                          }}
+                        >
+                          <span
+                            style={{ fontSize: "0.9rem", color: "#ff5fa2" }}
+                          >
+                            불러오는 중…
+                          </span>
+                        </div>
+                      )}
+                      <iframe
+                        src="https://retro-remake-realm.lovable.app/guestbook"
+                        title="방명록"
+                        onLoad={() => setIframeLoaded(true)}
                         style={{
                           width: "100%",
-                          maxHeight: "80vh",
-                          objectFit: "contain",
+                          height: "100%",
+                          border: "none",
                           display: "block",
                         }}
                       />
