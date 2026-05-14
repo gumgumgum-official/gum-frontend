@@ -65,4 +65,20 @@ export const GUM_CARD_STICK_FOLLOWER_BY_NUM = {
     ...GUM_CARD_STICK_FOLLOWER_SHARED,
     idleModelPath: "/models/common/gum/taro_gum/gum_flashlight.glb",
   },
+  "03": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
+    idleModelPath: "/models/common/gum/taro_gum/gum_star.glb",
+  },
+  "04": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
+    idleModelPath: "/models/common/gum/taro_gum/gum_cloud.glb",
+  },
+  "05": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
+    idleModelPath: "/models/common/gum/taro_gum/gum_loudspeaker.glb",
+  },
+  "06": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
+    idleModelPath: "/models/common/gum/taro_gum/gum_boat.glb",
+  },
 };
