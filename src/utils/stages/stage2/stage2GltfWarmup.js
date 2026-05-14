@@ -2,7 +2,7 @@
  * Stage2에 쓰이는 GLB URL을 앱 기동 직후 백그라운드에서 파싱까지 시작한다.
  */
 
-import { STAGE2_CONFIG } from "../../../config/stages/stage2.js";
+import { STAGE2_CONFIG } from "../../../config/stages/stage2/stage2.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,

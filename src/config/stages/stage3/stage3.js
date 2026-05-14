@@ -1,11 +1,11 @@
 // Phase 3: 부셔버리자
-/// <reference path="../../types.js" />
+/// <reference path="../../../types.js" />
 
-import { STAGE3_CHARACTER_CONFIG } from "./stage3/stage3CharacterConfig.js";
-import { STAGE3_OBJECTS_CONFIG } from "./stage3/stage3ObjectsConfig.js";
-import { STAGE3_AUDIO_CONFIG } from "./stage3/stage3AudioConfig.js";
+import { STAGE3_CHARACTER_CONFIG } from "./stage3CharacterConfig.js";
+import { STAGE3_OBJECTS_CONFIG } from "./stage3ObjectsConfig.js";
+import { STAGE3_AUDIO_CONFIG } from "./stage3AudioConfig.js";
 
-/** @type {import("../../types.js").Stage3Config} */
+/** @type {import("../../../types.js").Stage3Config} */
 export const STAGE3_CONFIG = {
   /**
    * 낙하 글자 시작 XZ (월드; island GLB 원점 기준).

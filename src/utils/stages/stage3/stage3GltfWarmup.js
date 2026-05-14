@@ -1,7 +1,7 @@
 /**
  * Stage3에 쓰이는 GLB URL을 앱 기동 직후 백그라운드에서 파싱까지 시작한다.
  */
-import { STAGE3_CONFIG } from "../../../config/stages/stage3.js";
+import { STAGE3_CONFIG } from "../../../config/stages/stage3/stage3.js";
 import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
 import {
   loadGltfTemplateCached,

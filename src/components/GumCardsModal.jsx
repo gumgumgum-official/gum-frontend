@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
-import { CARDS } from "../config/gumCardsConfig.js";
+import { CARDS } from "../config/stages/stage3/gumCardsConfig.js";
 import { playRandomGumCardPickSound } from "../utils/common/playGumCardPickSound.js";
 import "./GumCardsModal.css";
 

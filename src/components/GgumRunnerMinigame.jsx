@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./GgumRunnerMinigame.css";
-import { MINIGAME_AUDIO_CONFIG } from "../config/minigameAudioConfig.js";
+import { MINIGAME_AUDIO_CONFIG } from "../config/stages/stage3/minigameAudioConfig.js";
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
 import { postScore, fetchLeaderboard } from "../lib/scoreApi.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";

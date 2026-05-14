@@ -21,7 +21,7 @@ import {
 import { createStage2GumSpeechBubbles } from "../utils/stages/stage2/stage2GumSpeechBubbles.js";
 import { STAGE2_GUM_SPEECH_LINES } from "../config/stages/stage2/gumSpeechLines.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
-import { STAGE2_CONFIG } from "../config/stages/stage2.js";
+import { STAGE2_CONFIG } from "../config/stages/stage2/stage2.js";
 import { subscribeHandwritingRealtime } from "../utils/handwriting/handwritingRealtime.js";
 import {
   createHandwritingSvgPlaneGroup,

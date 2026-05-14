@@ -1,6 +1,6 @@
 // Phase 2: 고민 시각화 (Beam Projector, 둥근 섬)
 
-/** @type {import("../../types.js").Stage2Config} */
+/** @type {import("../../../types.js").Stage2Config} */
 export const STAGE2_CONFIG = {
   camera: {
     fov: 25.0,

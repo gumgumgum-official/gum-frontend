@@ -11,7 +11,7 @@ import {
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
-import { GUM_CARD_STICK_FOLLOWER_BY_NUM } from "../../../config/gumCardStickFollowers.js";
+import { GUM_CARD_STICK_FOLLOWER_BY_NUM } from "../../../config/stages/stage3/gumCardStickFollowers.js";
 
 /**
  * @param {{

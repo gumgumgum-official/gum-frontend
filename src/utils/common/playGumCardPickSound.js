@@ -2,7 +2,7 @@ import { resolvePublicAssetUrl } from "./gltfTemplateCache.js";
 import {
   GUM_CARDS_PICK_SOUND_PATHS,
   GUM_CARDS_PICK_SOUND_VOLUME,
-} from "../../config/gumCardsConfig.js";
+} from "../../config/stages/stage3/gumCardsConfig.js";
 
 /** 카드 모달에서 카드를 선택(뒤집기)할 때 `GUM_CARDS_PICK_SOUND_PATHS` 중 랜덤 재생 */
 export function playRandomGumCardPickSound() {

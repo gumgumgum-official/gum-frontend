@@ -30,7 +30,7 @@ import {
 import { createHandwritingSvgVolumeGroup } from "../utils/stages/stage3/stage3HandwritingSvgVolume.js";
 // @ts-ignore -- cannon-es is installed, but JS check mode may fail module type resolution in editor.
 import * as CANNON from "cannon-es";
-import { STAGE3_CONFIG } from "../config/stages/stage3.js";
+import { STAGE3_CONFIG } from "../config/stages/stage3/stage3.js";
 import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import {
   closeMinigame,
