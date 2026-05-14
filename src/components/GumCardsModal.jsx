@@ -113,7 +113,7 @@ function spawnParticles(color) {
   return particles;
 }
 
-export function GumCardsModal({ open, onClose }) {
+export function GumCardsModal({ open, onClose, onStick }) {
   const OVERLAY_FADE_MS = 450;
   const [flippedCard, setFlippedCard] = useState(null);
   const [toast, setToast] = useState({ show: false, msg: "" });
@@ -192,6 +192,7 @@ export function GumCardsModal({ open, onClose }) {
 
   const handleStick = () => {
     if (!flippedCard) return;
+    onStick?.(flippedCard);
     spawnParticles(flippedCard.accent);
     showToast(`${flippedCard.name}를 오늘 하루 붙였어요 🩹`);
   };

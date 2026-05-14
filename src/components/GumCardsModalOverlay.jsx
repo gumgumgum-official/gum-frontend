@@ -12,6 +12,7 @@ import {
   EVENT_OPEN,
   EVENT_CLOSE,
 } from "../utils/stages/stage3/gumCardsModalLauncher.js";
+import { dispatchGumCardsStick } from "../events/gumCardsEvents.js";
 
 function sendTentDebugLog(
   location,
@@ -97,12 +98,24 @@ export function GumCardsModalOverlay() {
     );
   }, [phase]);
 
+  const handleGumCardStick = useCallback(
+    (card) => {
+      dispatchGumCardsStick(card.num);
+      closeAll();
+    },
+    [closeAll],
+  );
+
   return (
     <>
       {(phase === "tent" || phase === "cards") && (
         <TentSceneViewer onClose={closeAll} onCardOpen={openCards} />
       )}
-      <GumCardsModal open={phase === "cards"} onClose={closeAll} />
+      <GumCardsModal
+        open={phase === "cards"}
+        onClose={closeAll}
+        onStick={handleGumCardStick}
+      />
     </>
   );
 }

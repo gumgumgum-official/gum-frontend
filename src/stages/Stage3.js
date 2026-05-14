@@ -42,6 +42,7 @@ import {
   dispatchGumCardsModalClose,
   onGumCardsModalClose,
 } from "../utils/stages/stage3/gumCardsModalLauncher.js";
+import { GUM_CARDS_STICK_EVENT } from "../events/gumCardsEvents.js";
 import { supabase } from "../lib/supabase/client.js";
 import { getSessionId } from "../lib/session.js";
 import {
@@ -452,8 +453,21 @@ export function Stage3() {
   ]);
   let character = null;
   let gumFollowers = null;
+  /** gumFollowers 생성 전에 도착한 카드 붙이기 이벤트 버퍼 */
+  /** @type {string[]} */
+  const pendingGumStickCardNums = [];
   /** 껌딱지 init(GLB await) 도중 cleanup 시 scene.add 방지용 */
   let gumCancelled = false;
+
+  function handleGumCardsStickEvent(ev) {
+    const cardNum = ev.detail?.cardNum;
+    if (typeof cardNum !== "string") return;
+    if (gumFollowers?.addStickFollower) {
+      gumFollowers.addStickFollower(cardNum);
+    } else {
+      pendingGumStickCardNums.push(cardNum);
+    }
+  }
   /**
    * 카메라 인트로 상태
    * - stage 시작 시 섬 전체를 위에서 시계방향으로 천천히(부분 호) 보여준 뒤
@@ -3654,6 +3668,8 @@ export function Stage3() {
         flushPendingEggDiscoverySubtitle();
       });
 
+      window.addEventListener(GUM_CARDS_STICK_EVENT, handleGumCardsStickEvent);
+
       debugControls = createStageDebugControls({
         scene,
         camera: this.camera,
@@ -3823,6 +3839,8 @@ export function Stage3() {
               yaw: character?.getYaw?.() ?? null,
               moving: character?.getIsMoving?.() ?? false,
             }),
+            getHeadAnchorWorld: (out) =>
+              character?.getHeadAnchorWorld?.(out) ?? false,
             renderer,
             getCamera: () => this.camera ?? null,
           });
@@ -3833,6 +3851,17 @@ export function Stage3() {
               isCancelled: () => !isStage3Active || gumCancelled,
               staticColliderBoxes: islandStaticColliders,
               walkableMeshes: stage3WalkableMeshes,
+            })
+            .then(() => {
+              if (!gumFollowers || !isStage3Active) return;
+              const q = pendingGumStickCardNums.splice(
+                0,
+                pendingGumStickCardNums.length,
+              );
+              for (const cardNum of q) {
+                if (typeof cardNum === "string")
+                  gumFollowers.addStickFollower(cardNum);
+              }
             })
             .catch((e) => {
               if (import.meta.env.DEV) {
@@ -4066,6 +4095,11 @@ export function Stage3() {
         unlistenGumCardsForEggSubtitle();
         unlistenGumCardsForEggSubtitle = null;
       }
+      window.removeEventListener(
+        GUM_CARDS_STICK_EVENT,
+        handleGumCardsStickEvent,
+      );
+      pendingGumStickCardNums.length = 0;
       disposeStage3Ui();
       cameraIntro.active = false;
       cameraIntro.transitioning = false;
