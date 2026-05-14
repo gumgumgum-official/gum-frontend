@@ -35,38 +35,34 @@
  * @property {GumCardStickFollowerBehaviorSpec} [behavior]
  */
 
+/**
+ * `idleModelPath` 제외 — 카드별로 동일
+ * @type {Pick<GumCardStickFollowerSpec, "scale" | "behavior">}
+ */
+const GUM_CARD_STICK_FOLLOWER_SHARED = {
+  scale: 1.4 / 2,
+  behavior: {
+    attachMode: "headFloat",
+    headAnchor: "capsuleTop",
+    headLocalOffset: [0.22, 2.1, 0.12],
+    floatAmplitudeM: 0.07,
+    floatFrequencyHz: 0.55,
+    cameraFaceYawOffsetDeg: 0,
+    tiltForwardDeg: 22,
+    headingYawEase: 2.35,
+    headFallbackYOffsetM: 3.7,
+    animationSpeed: 1,
+  },
+};
+
 /** @type {Readonly<Record<string, GumCardStickFollowerSpec>>} */
 export const GUM_CARD_STICK_FOLLOWER_BY_NUM = {
   "01": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
     idleModelPath: "/models/common/gum/taro_gum/gum_magnifier.glb",
-    scale: 1.4 / 2,
-    behavior: {
-      attachMode: "headFloat",
-      headAnchor: "capsuleTop",
-      headLocalOffset: [0.22, 2.1, 0.12],
-      floatAmplitudeM: 0.07,
-      floatFrequencyHz: 0.55,
-      cameraFaceYawOffsetDeg: 0,
-      tiltForwardDeg: 22,
-      headingYawEase: 2.35,
-      headFallbackYOffsetM: 3.7,
-      animationSpeed: 1,
-    },
   },
   "02": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
     idleModelPath: "/models/common/gum/taro_gum/gum_flashlight.glb",
-    scale: 1.4 / 2,
-    behavior: {
-      attachMode: "headFloat",
-      headAnchor: "capsuleTop",
-      headLocalOffset: [0.22, 2.1, 0.12],
-      floatAmplitudeM: 0.07,
-      floatFrequencyHz: 0.55,
-      cameraFaceYawOffsetDeg: 0,
-      tiltForwardDeg: 22,
-      headingYawEase: 2.35,
-      headFallbackYOffsetM: 3.7,
-      animationSpeed: 1,
-    },
   },
 };
