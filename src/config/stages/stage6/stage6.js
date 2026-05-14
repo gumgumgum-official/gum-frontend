@@ -1,6 +1,6 @@
 // Phase 6: 헤어짐 (공항 배경, 배웅)
 
-import { STAGE3_CHARACTER_CONFIG } from "./stage3/stage3CharacterConfig.js";
+import { STAGE3_CHARACTER_CONFIG } from "../stage3/stage3CharacterConfig.js";
 
 /**
  * Stage6 유저 GLB 시각 스케일 (Stage3 `character.scale`에 곱함).
@@ -12,7 +12,7 @@ const STAGE6_USER_GROUND_OFFSET_MIN = 0.1;
 /** Stage3(5)보다 느리게 — 고정 카메라 실내 이동 속도 */
 const STAGE6_MOVE_SPEED = 1.85;
 
-/** @type {import("../../types.js").Stage6Config} */
+/** @type {import("../../../types.js").Stage6Config} */
 export const STAGE6_CONFIG = {
   camera: {
     fov: 60,

@@ -11,7 +11,7 @@ import {
   resolvePublicAssetUrl,
 } from "../utils/common/gltfTemplateCache.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
-import { STAGE6_CONFIG } from "../config/stages/stage6.js";
+import { STAGE6_CONFIG } from "../config/stages/stage6/stage6.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC,

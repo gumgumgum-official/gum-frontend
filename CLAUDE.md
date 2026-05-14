@@ -67,7 +67,7 @@ Three.js 코드에서 React UI를 열거나 닫을 때 `window.dispatchEvent(new
 
 - `src/config/stages/stage2.js` → `STAGE2_CONFIG`
 - `src/config/stages/stage3/stage3.js` → `STAGE3_CONFIG`
-- `src/config/stages/stage6.js` → `STAGE6_CONFIG`
+- `src/config/stages/stage6/stage6.js` → `STAGE6_CONFIG`
 - `src/config/appConfig.js` → `APP_CONFIG` (렌더러 설정, 조명 등)
 
 ### GLB 오브젝트 명명 규칙
