@@ -81,6 +81,29 @@ export function createGumFollowersController({
   const stickQueue = [];
   const attachedStickCards = new Set();
   const loadingStickCards = new Set();
+  /** 스틱 껌 비동기 로드가 겹칠 때 이전 로드 결과를 버리기 위한 토큰 */
+  let stickLoadToken = 0;
+
+  function disposeStickFollowerEntry(f) {
+    scene.remove(f.model);
+    if (f.idleModel) scene.remove(f.idleModel);
+    f.mixer.stopAllAction();
+    if (f.idleMixer) f.idleMixer.stopAllAction();
+  }
+
+  /** id `S` + 숫자 카드 전용 — 기존 스틱 1마리 제거(교체 붙이기) */
+  function removeAllStickCardFollowers() {
+    for (let i = followers.length - 1; i >= 0; i--) {
+      const f = followers[i];
+      if (!/^S\d+$/.test(String(f.id ?? ""))) continue;
+      disposeStickFollowerEntry(f);
+      followers.splice(i, 1);
+    }
+    attachedStickCards.clear();
+    for (const k of [...loadingStickCards]) {
+      if (GUM_CARD_STICK_FOLLOWER_BY_NUM[k]) loadingStickCards.delete(k);
+    }
+  }
 
   /**
    * @type {{ id: string, side: -1|0|1, model: THREE.Group, idleModel: THREE.Group|null, mixer: THREE.AnimationMixer, idleMixer: THREE.AnimationMixer|null, walkAction: THREE.AnimationAction|null, idleAction: THREE.AnimationAction|null, offsetYaw: number|null, breakDriftScalar: number, resolvedGroundY: number, groundMissFrames: number, modelGroundLift: number, pendingInitialAlign: boolean, attachMode?: 'headFloat', headFloat?: { headLocalOffset: THREE.Vector3, floatAmplitudeM: number, floatFrequencyHz: number, cameraFaceYawOffsetDeg: number, tiltForwardDeg: number, headingYawEase: number, headFallbackYOffsetM: number, floatPhase: number }, walkInIntroActive?: boolean, walkInIntroAwaitModalClose?: boolean, walkInIntroApproachLerp?: number, walkInIntroMaxSpeedMps?: number, walkInIntroArriveRadiusM?: number, slotDistance?: number, slotFollowLerpFactor?: number, slotFacingLerpFactor?: number, slotAngleDeg?: number|null, _devStickIntroStartedAt?: number }[]}
@@ -308,6 +331,9 @@ export function createGumFollowersController({
     if (attachedStickCards.has(cardNum) || loadingStickCards.has(cardNum)) {
       return;
     }
+    stickLoadToken += 1;
+    const token = stickLoadToken;
+    removeAllStickCardFollowers();
     loadingStickCards.add(cardNum);
     const loadStartedAt = import.meta.env.DEV
       ? (globalThis.performance?.now?.() ?? 0)
@@ -330,6 +356,7 @@ export function createGumFollowersController({
         const idlePath = resolvePublicAssetUrl(relIdle);
         const idleGltf = await loadGltfTemplateCached(idlePath);
         if (!isReady) return;
+        if (token !== stickLoadToken) return;
 
         const baseIdle = idleGltf.scene;
         const scale = spec.scale ?? modelScale;
@@ -363,6 +390,8 @@ export function createGumFollowersController({
           headFallbackYOffsetM: beh.headFallbackYOffsetM ?? 1.6,
           floatPhase: Math.random() * Math.PI * 2,
         };
+
+        if (token !== stickLoadToken) return;
 
         appendHeadFloatStickFollower({
           id: `S${cardNum}`,
@@ -402,6 +431,7 @@ export function createGumFollowersController({
         loadGltfTemplateCached(idlePath).catch(() => null),
       ]);
       if (!isReady) return;
+      if (token !== stickLoadToken) return;
 
       const baseWalk = gltf.scene;
       const baseIdle = idleGltf?.scene ?? null;
@@ -489,6 +519,8 @@ export function createGumFollowersController({
       if (beh.facingLerpFactor != null)
         appendOpts.slotFacingLerpFactor = beh.facingLerpFactor;
       if (beh.angleDeg != null) appendOpts.slotAngleDeg = beh.angleDeg;
+
+      if (token !== stickLoadToken) return;
 
       appendOneFollower(appendOpts);
       if (import.meta.env.DEV) {
@@ -1097,6 +1129,7 @@ export function createGumFollowersController({
       stickQueue.length = 0;
       attachedStickCards.clear();
       loadingStickCards.clear();
+      stickLoadToken = 0;
     },
 
     /**

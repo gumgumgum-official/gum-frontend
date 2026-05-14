@@ -1,269 +1,196 @@
-# Stage3 껌 카드 「붙이기」: 3D 팔로워 + 타로 껌딱지(머리 위 비행)
+# Stage3 타로카드 껌딱지 「붙이기」구현 명세
 
-
-
-이 문서는 다음 두 설계안을 하나로 정리한 것이다.
-
-
-
-- 껌카드 붙이기 3D 팔로워 (모달 → 이벤트 → 동적 팔로워 추가)
-
-- 타로 껌딱지 동반 (유저 머리 위·카메라 정면 포즈·**idle GLB만**·씬에서 비행)
-
-
-
-관련 코드는 주로 `src/utils/stages/stage3/gumFollowerController.js`, `src/config/gumCardStickFollowers.js`, `src/events/gumCardsEvents.js`, `src/components/GumCardsModal*.jsx`, `src/stages/Stage3.js`에 있다.
-
-
+텐트에서 타로 카드 모달을 연 뒤, 카드를 뒤집고 **「이 껌딱지 나한테 붙이기」**를 누르면 Stage3 씬에 **스틱 껌딱지 1마리**가 생긴다. 지면 A/B 껌딱지와 별개이며, **머리 위(headFloat)** 만 다룬다.
 
 ---
 
+## 1. 사용자·데이터 흐름
 
-
-## 1. 껌 카드 「붙이기」→ 3D 껌딱지 추가 (Stage3)
-
-
-
-### 1.1 맥락
-
-
-
-- 텐트 클릭 → `openGumCardsModal` (`src/utils/stages/stage3/gumCardsModalLauncher.js`) → React `GumCardsModalOverlay`가 `GumCardsModal`을 연다.
-
-- 3D 껌딱지 2마리는 Stage3 전용 `createGumFollowersController`에서 `STAGE3_CHARACTER_CONFIG.character.gumFollowers`의 `gum_walk_final.glb` + 기본 idle `gum_idle.glb`로 초기화된다.
-
-- 기존에는 `GumCardsModal`의 붙이기 동작이 파티클·토스트만 하고 모달을 닫지 않으며 씬과 통신하지 않았다.
-
-
-
-구현 범위는 **Stage3 + React 모달 + 껌 팔로워 컨트롤러**이며, Stage2 빔 씬과는 별개다.
-
-
-
-### 1.2 목표 동작
-
-
-
-1. 카드를 뒤집은 뒤 **「이 껌딱지 나한테 붙이기」** 클릭 시: 모달(및 텐트 오버레이)이 닫히고, 선택한 카드 식별자(`card.num`)가 씬으로 전달된다.
-
-2. 예시 **카드 `01`(타로 껌딱지)** 에 대해:
-
-   - **타로 껌 메시만 로드한다.** `public/models/common/gum/taro_gum/taro_gum.glb` 를 쓴다. **지면 걸음·달리기 연출은 쓰지 않고**, 움직임은 Three.js 루트 변환으로만 준다(필요 시 GLB 내 짧은 idle 클립만 재생 가능).
-
-   - 캐릭터의 움직임은 전부 **Three.js에서 루트 오브젝트 변환**(위치·회전·가벼운 사인/원 궤도 등)으로만 표현해, **머리 위를 날아다니는 느낌**을 낸다.
-
-3. **A/B보다 뒤·느리게** 같은 지면 슬롯 추종이 아니라, **§2**의 동반 규칙(머리 위 오프셋·카메라 정면 등)을 따른다. 다른 카드가 나중에 지면 팔로워 패턴을 쓰면 그때 `distance` / `followLerpFactor` / `side` 등을 맵에서 분기하면 된다.
-
-
-
-### 1.3 React ↔ Three 통신
-
-
-
-이벤트 이름은 `src/events/` 아래 상수로 고정한다.
-
-
-
-- `src/events/gumCardsEvents.js` — 예: `GUM_CARDS_STICK_EVENT`, `detail: { cardNum: string }`.
-
-- `GumCardsModal`: `onStick(card)` 콜백 prop. `handleStick`에서 `onStick(flippedCard)` 호출.
-
-- `GumCardsModalOverlay`: `onStick`에서 `window.dispatchEvent(new CustomEvent(..., { detail }))` 후 `closeAll()`로 텐트 단계까지 닫기.
-
-
+1. `GumCardsModal`에서 붙이기 → `GumCardsModalOverlay`의 `onStick`이 `dispatchGumCardsStick(card.num)` 호출 후 `closeAll()` (텐트까지 닫힘).
+2. `window`에 `GUM_CARDS_STICK_EVENT` (`gum:cardsStick`)가 올라가고, `detail.cardNum`은 `gumCardsConfig`의 `card.num`과 동일한 문자열 (`"01"`, `"02"` …).
+3. `Stage3`가 이벤트를 받아 `gumFollowers.addStickFollower(cardNum)` 호출.
+4. `gumFollowers.init()`이 아직 끝나지 않았으면 `cardNum`을 `stickQueue`에 넣고, `init` 완료 시 큐를 순서대로 비운다.
 
 ```mermaid
-
 sequenceDiagram
+  participant Modal as GumCardsModal
+  participant Overlay as GumCardsModalOverlay
+  participant Win as window
+  participant S3 as Stage3
+  participant Ctrl as gumFollowerController
 
-  participant User
-
-  participant GumCardsModal
-
-  participant Window
-
-  participant Stage3
-
-  participant GumCtrl as gumFollowerController
-
-
-
-  User->>GumCardsModal: 붙이기 클릭
-
-  GumCardsModal->>Window: CustomEvent stick detail.cardNum
-
-  GumCardsModal->>GumCardsModalOverlay: onStick / closeAll
-
-  Window->>Stage3: listener
-
-  Stage3->>GumCtrl: addStickFollower(cardNum)
-
-  GumCtrl->>GumCtrl: load idle GLB async, push follower
-
+  Modal->>Overlay: onStick(card)
+  Overlay->>Win: dispatchGumCardsStick(card.num)
+  Overlay->>Overlay: closeAll()
+  Win->>S3: GUM_CARDS_STICK_EVENT
+  S3->>Ctrl: addStickFollower(cardNum)
+  Ctrl->>Ctrl: 기존 S* 제거 후 GLB 로드·append (단일 슬롯)
 ```
 
+---
 
+## 2. 이벤트·상수
 
-### 1.4 카드별 다른 캐릭터 (확장)
-
-
-
-**단일 소스**: 카드 번호 → 3D 에셋·행동 오버라이드 매핑.
-
-
-
-- 설정 모듈: `src/config/gumCardStickFollowers.js` — `GUM_CARD_STICK_FOLLOWER_BY_NUM`.
-
-  - 키: `card.num` (`"01"` … `"08"`).
-
-  - 값: `{ modelPath?, idleModelPath, scale?, behavior?: { … } }`. 타로 껌처럼 **idle만 쓰는 슬롯**은 `modelPath`(walk)를 생략하거나 동일 키로 idle만 두고, 컨트롤러에서 **walk 클립·믹서 분기를 타지 않게** 한다.
-
-- `src/config/gumCardsConfig.js`의 UI용 `CARDS`는 그대로 두고, **3D만** 위 맵에서 조회한다.
-
-- 맵에 없는 번호는 무시하거나 토스트만 — 초기에는 `01`만 처리해도 된다.
-
-
-
-### 1.5 `gumFollowerController.js` 변경 요약
-
-
-
-`init()`에서 한 쌍의 GLB만 로드해 A/B를 만든다. 동적 카드 껌은 카드마다 다른 경로·행동이므로 `followers[]` 항목에 **슬롯별 오버라이드**를 두고, 공통 `update` 루프에서 항목 타입(지면 추종 vs 머리 위 비행)에 따라 분기한다.
-
-
-
-- **`addStickFollower(cardNum)`** (async): 맵 조회 → **해당 카드가 idle-only면 idle GLB만** 로드 → 믹서 없이 단일 메시/스킨만 씬에 붙여도 된다.
-
-- **`cleanup()`**: scene 제거 + mixer stop(있을 때만) + 동적 항목 포함 전부 정리.
-
-- **초기화 순서**: `gumFollowers.init()` 완료 전 요청이 올 수 있으므로, `isReady`가 false면 **큐에 넣었다가 init 완료 시 처리**한다.
-
-- **중복 붙이기**: 세션당 카드당 1마리 등 정책을 한 줄로 정한다.
-
-
-
-### 1.6 타입·문서
-
-
-
-- `src/types.js`: 스틱 팔로워 설정에 `idleModelPath`만 필수인 케이스를 JSDoc으로 구분할 수 있다.
-
-- 선택: 스틱 맵용 `@typedef`를 설정 파일 상단에 둔다.
-
-
-
-### 1.7 검증·주의
-
-
-
-- 브라우저: `/dev`에서 Stage3, 텐트 → 카드 → `01` 선택 → 붙이기 → 모달 종료 + 타로 껌이 **유저 머리 위**에서 idle 자세로 비행.
-
-- `npm run lint`.
-
-- `GumCardsModalOverlay.jsx`의 로컬호스트 디버그 `fetch` 블록은 기능과 무관하면 건드리지 않는 편이 diff를 깔끔하게 유지한다.
-
-
+| 항목 | 값 |
+|------|-----|
+| 파일 | `src/events/gumCardsEvents.js` |
+| 이벤트명 상수 | `GUM_CARDS_STICK_EVENT` → `"gum:cardsStick"` |
+| `detail` | `{ cardNum: string }` |
+| 디스패치 함수 | `dispatchGumCardsStick(cardNum)` |
 
 ---
 
+## 3. 카드 번호 → 3D 스펙 (단일 소스)
 
-
-## 2. 타로 카드 껌딱지: 유저 머리 위 비행 (idle 전용)
-
-
-
-### 2.1 하지 않는 것 (이전안 폐기)
-
-
-
-- 멀리 떨어진 XZ에 스폰한 뒤 **걷기 메시·걷기 애니**로 슬롯 `_target`까지 접근하는 **걸어오기 인트로**는 쓰지 않는다.
-
-- 타로 껌딱지용으로 **walk GLB**와 walk/idle 믹서 전환, `walkInIntroActive` 류의 지면 접근 루프는 설계 대상에서 제외한다.
-
-
-
-### 2.2 목표 UX
-
-
-
-1. 모달에서 붙인 직후, 해당 껌딱지는 **유저 캐릭터 머리 위** 근처에 나타난다. 수평 위치는 슬롯 정중앙 뒤가 아니라, **머리 기준으로 약간 사선**(예: 머리 정점에서 카메라 쪽·좌우 한쪽으로 소폭 비껴 배치)이어도 좋다. 정확한 오프셋은 아트/카메라 FOV에 맞춰 튜닝한다.
-
-2. **자세**: 메시가 **카메라를 향하고**(billboard 또는 yaw만 카메라 맞춤), 동시에 **카메라 기준 좌측**을 바라보는 느낌이 나도록 고개·yaw 보정을 준다(모델 프리팹이 정면이 아니면 부모 그룹에 추가 회전).
-
-3. **비행**: 매 프레임 유저 본 또는 캡슐 상단 등 **앵커 월드 좌표**에 로컬 오프셋을 더한 뒤, 작은 **상하·좌우 흔들림 또는 타원 궤도**를 더해 “머리 위를 맴돈다”는 인상을 준다. 이 변위는 전부 **오브젝트 transform**이며, **애니 클립 재생은 idle 루프만**(있을 경우) 또는 정적 포즈만으로 충분하다.
-
-
-
-### 2.3 구현 요약 (`gumFollowerController.js`)
-
-
-
-1. **팔로워 구분**: 스틱 항목에 `mode: 'headFloat'` 같은 플래그 또는 `behavior.attachMode`로 지면 팔로워와 분리한다.
-
-2. **로드**: `idleModelPath`만 로드. AnimationMixer가 필요 없으면 생략한다.
-
-3. **`update`**
-
-   - 유저 루트/머리 본 월드 행렬에서 기준점을 구한다.
-
-   - 카메라 `position`과 `getWorldDirection`으로 카메라 정면 벡터를 구하고, 껌 루트의 quaternion을 **카메라 바라보기 + 좌측 시선 보정**에 맞춘다.
-
-   - 시간 `t`에 따른 소幅 오프셋을 더해 최종 `position`을 설정한다. AABB 슬라이드·`sampleGroundY`·지면 `_target` 접근은 이 모드에서는 사용하지 않는다.
-
-4. **설정** — `src/config/gumCardStickFollowers.js`의 동작 스펙 예시(이름은 구현에 맞게 통일):
-
-   - `headAnchor` — `"skull"` 등 본 이름 또는 `"capsuleTop"`
-
-   - `headLocalOffset` — 머리 기준 사선 오프셋 `[x,y,z]`
-
-   - `floatAmplitudeM` / `floatFrequencyHz` — 날아다니는 느낌 강도
-
-   - `cameraFaceYawOffsetDeg` — “카메라 좌측을 본다”는 체감용 추가 yaw
-
-
-
-### 2.4 모달·로드 순서 (검증용)
-
-
-
-1. **「붙이기」 클릭** 후 이벤트로 `cardNum`이 Stage3에 전달되고 모달이 닫힌다.
-
-2. **idle GLB**가 비동기로 끝나는 즉시 씬에 붙이고, 다음 `update`부터 머리 앵커·카메라 정면·비행 오프셋을 적용한다.
-
-3. **개발 로그** (예): `[GumCardsStick] dispatch` → `[GumFollowers] stick head-float appended` 등.
-
-
-
-### 2.5 검증
-
-
-
-- 카드 붙이기 후: 타로 껌이 **walk 없이** idle 메시만으로 머리 위를 맴돈다.
-
-- 카메라를 돌려도 대략 정면·좌측 시선 느낌이 유지되는지 확인한다.
-
-- `npm run lint`.
-
-
-
----
-
-
-
-## 3. 두 기능의 관계
-
-
-
-| 구간 | 역할 |
-
+| 항목 | 설명 |
 |------|------|
+| 파일 | `src/config/gumCardStickFollowers.js` |
+| 맵 이름 | `GUM_CARD_STICK_FOLLOWER_BY_NUM` |
+| 키 | `card.num`과 동일한 문자열 (예: `"01"`, `"02"`) |
+| 맵에 없는 `cardNum` | `addStickFollower`에서 무시(경고 로그만) |
 
-| §1 | 모달·이벤트·맵·동적 GLB 로드·카드별 분기(지면 팔로워 vs idle-only 등) |
+### 3.1 스펙 객체 (`GumCardStickFollowerSpec`)
 
-| §2 | 타로 껌: **idle 전용** + 유저 머리 위 앵커 + 카메라 정면 포즈 + transform 비행 |
+타로 스틱은 **`behavior.attachMode === "headFloat"`** 만 사용한다.
 
+| 필드 | headFloat에서의 의미 |
+|------|------------------------|
+| `idleModelPath` | **필수에 가깝게 사용.** 로더는 `spec.idleModelPath ?? spec.modelPath`로 경로를 고른다. (이름은 `idle`이지만 walk 포함 GLB를 가리켜도 됨.) |
+| `scale` | 루트 `Object3D`에 `setScalar` 적용. 생략 시 Stage3 `gumFollowers.models.scale`. |
+| `behavior` | 아래 표 참고. |
 
+### 3.2 `behavior` (headFloat)
 
-실제 구현에서는 **§1으로 추가된 팔로워** 중 타로 카드에 해당하는 항목만 **§2의 머리 위 비행** 모드로 갱신하고, “멀리서 걸어와 합류” UX는 사용하지 않는다.
+| 필드 | 타입 | 기본(코드) | 설명 |
+|------|------|------------|------|
+| `attachMode` | `"headFloat"` | — | 지면 추종이 아님을 표시. |
+| `headLocalOffset` | `[x,y,z]` | `[0, 0.4, 0]` | **유저 yaw**로만 회전시킨 뒤 머리 앵커에 더하는 오프셋(m). Y가 위로. |
+| `floatAmplitudeM` | number | `0.06` | 떠다님 진폭(m). |
+| `floatFrequencyHz` | number | `0.5` | `elapsedSec * 2π * freq`에 넣는 떠다님 주파수. |
+| `cameraFaceYawOffsetDeg` | number | `0` | 목표 yaw = `userYaw + rad(이 값)`. 유저와 같은 방향 + GLB 전방 보정. |
+| `tiltForwardDeg` | number | `0` | `rotation.x` 목표(도). |
+| `headingYawEase` | number | `2.75` | yaw 보간: `turn = 1 - exp(-ease * delta)`, `lerpAngle(current, target, turn)`. 클수록 빠름. |
+| `headFallbackYOffsetM` | number | `1.6` | `getHeadAnchorWorld` 실패 시 `userPos.y +` 이 값으로 대체 앵커. |
+| `animationSpeed` | number | 스케일 기반 | GLB에 클립이 있으면 idle 믹서 `timeScale`. |
+| `headAnchor` | string | (미사용) | JSDoc용; 실제 앵커는 캐릭터 `getHeadAnchorWorld`. |
 
+### 3.3 에셋 경로 (현재 예시)
 
+- 공통 디렉터리: `public/models/common/gum/taro_gum/`
+- `01`: `gum_magnifier.glb`
+- `02`: `gum_flashlight.glb`
+
+Vite에서는 URL이 `/models/common/gum/taro_gum/...` 형태.
+
+---
+
+## 4. `createGumFollowersController` (핵심)
+
+파일: `src/utils/stages/stage3/gumFollowerController.js`
+
+### 4.1 생성 인자 (스틱 관련)
+
+| 인자 | 용도 |
+|------|------|
+| `getUserState` | `{ position, yaw, moving }` — headFloat 위치·회전에 사용. |
+| `getHeadAnchorWorld(out: Vector3): boolean` | 머리 월드 좌표. 실패 시 `headFallbackYOffsetM` 사용. |
+| `getCamera` | (headFloat yaw에는 현재 미사용, 다른 팔로워용으로 전달 가능) |
+
+### 4.2 스틱 팔로워 식별
+
+- `followers[]` 항목의 `id`는 **`S` + `cardNum`** (정규식 `^S\d+$`). 예: `S01`, `S02`.
+- 기본 A/B 팔로워는 `id`가 `A`, `B` — 스틱만 `S*`로 걸러서 제거·갱신한다.
+
+### 4.3 단일 슬롯·교체·로드 경합
+
+1. **`addStickFollower(cardNum)`**  
+   - 맵에 없으면 return.  
+   - `attachedStickCards.has(cardNum) || loadingStickCards.has(cardNum)` 이면 return (같은 카드 중복 붙이기·중복 로드 방지).  
+   - `!isReady`이면 `stickQueue.push(cardNum)` 후 return.
+
+2. **`loadAndAddStickFollower(cardNum)`** (async)  
+   - 위 중복 검사를 통과한 뒤:  
+   - `stickLoadToken += 1`, `const token = stickLoadToken`.  
+   - **`removeAllStickCardFollowers()`**: `id`가 `^S\d+$`인 항목만 씬 제거·믹서 정지·`followers`에서 splice, `attachedStickCards.clear()`, `loadingStickCards`에서 맵에 정의된 카드 키 제거.  
+   - `loadingStickCards.add(cardNum)` 후 GLB 로드.
+
+3. **`stickLoadToken`**  
+   - `await` 이후마다 `if (token !== stickLoadToken) return` 으로 append 생략.  
+   - 사용자가 빠르게 `01`→`02`를 누르면 **늦게 끝난 이전 로드가 씬에 다시 붙지 않게** 한다.
+
+4. **`cleanup()`**  
+   - 전 팔로워 제거 후 `stickLoadToken = 0` 포함 스틱 관련 Set/큐 초기화.
+
+### 4.4 headFloat 로드 (`attachMode === "headFloat"`)
+
+1. 경로: `resolvePublicAssetUrl(idleModelPath ?? modelPath)`.
+2. `loadGltfTemplateCached` → `!isReady` 또는 `token` 불일치 시 return.
+3. 애니: 이름 정규식 `idle|stand|wait|pose|breath|rest` 우선, 없으면 첫 클립.
+4. `appendHeadFloatStickFollower`: `SkeletonUtils.clone`, 그림자, `AnimationMixer`, `followers.push`, `scene.add(model)`, `attachMode: "headFloat"`, `headFloat` 설정 객체 저장.
+5. 성공 시 `attachedStickCards.add(cardNum)`.  
+6. `finally`에서 `loadingStickCards.delete(cardNum)`.
+
+### 4.5 `update` 안 headFloat (`updateHeadFloatFollower`)
+
+매 프레임 `userPos` / `userYaw` 필요 (`getUserState`가 null이면 전체 `update` 조기 return — 스틱도 갱신 안 됨).
+
+**위치**
+
+1. `haveHead = getHeadAnchorWorld(_stickHeadAnchor)`  
+2. 실패 시: `_stickHeadAnchor.copy(userPos)`, `y += headFallbackYOffsetM`.  
+3. `_stickHeadOffsetLocal.copy(headFloat.headLocalOffset)` 후 `makeRotationY(userYaw)`로 회전만 적용해 `_stickHeadAnchor`에 가산.  
+4. `t = elapsedSec * 2π * floatFrequencyHz + floatPhase`  
+   `bob = ( cos(t*0.9)*amp*0.85, sin(t*1.1)*amp, sin(t*0.75)*amp*0.65 )`  
+5. `model.position = anchor + bob`.
+
+**회전**
+
+1. `mixer.update(delta)` 먼저.  
+2. `targetYaw = userYaw + degToRad(cameraFaceYawOffsetDeg)`  
+   `turnYaw = 1 - exp(-headingYawEase * delta)`  
+   `rotation.y = lerpAngle(rotation.y, targetYaw, turnYaw)`.  
+3. `rotation.x` / `z`는 `tiltForwardDeg` 및 0으로 선형 보간(`turnTilt = min(1, 10*delta)`).
+
+**다른 팔로워와의 분리**
+
+- walk/idle 토글 루프에서 `attachMode === "headFloat"` 는 **스킵**.  
+- 지면 `_target` / `sampleGroundY` / 충돌 슬라이드 분기에서 `attachMode === "headFloat"` 이면 **위 블록만 실행 후 return**.
+
+---
+
+## 5. Stage3 연결
+
+파일: `src/stages/Stage3.js`
+
+- `window.addEventListener(GUM_CARDS_STICK_EVENT, handleGumCardsStickEvent)` — `detail.cardNum` 문자열 검증 후 `gumFollowers?.addStickFollower(cardNum)` 또는 `pendingGumStickCardNums`에 push.
+- `createGumFollowersController({ … getHeadAnchorWorld: (out) => character?.getHeadAnchorWorld?.(out) ?? false })`.
+- `gumFollowers.init()` 완료 `then`에서 `pendingGumStickCardNums` 비우며 `addStickFollower` 호출.
+- 매 프레임 `gumFollowers.update(delta)`.
+- 스테이지 `cleanup`에서 리스너 제거·`gumFollowers.cleanup()`.
+
+---
+
+## 6. 머리 앵커 (캐릭터)
+
+파일: `src/utils/stages/stage3/characterController.js`
+
+- `getHeadAnchorWorld(out)`  
+  - 보이는 루트(걷기 중이면 walk 모델, 아니면 idle)에서 Bone 이름에 `"head"` 포함 시 그 본 `getWorldPosition`.  
+  - 없으면 `Box3.setFromObject` 후 **XZ는 중심, Y는 `max.y`**.
+
+---
+
+## 7. 구현 체크리스트
+
+- [ ] `GUM_CARD_STICK_FOLLOWER_BY_NUM`에 새 `card.num` 추가 시 `idleModelPath`·`attachMode: "headFloat"`·오프셋 튜닝.
+- [ ] 붙이기 후 씬에 **`S*` 팔로워가 최대 1개**인지 (`01` 후 `02` 시 교체).
+- [ ] 빠른 연속 클릭 시 **이전 GLB가 뒤늦게 붙지 않는지** (`stickLoadToken`).
+- [ ] `/dev` Stage3, 텐트 → 카드 붙이기, 머리 위 비행·유저 yaw 동기.
+- [ ] `npm run lint`
+
+---
+
+## 8. 범위 밖 (이 문서에서 다루지 않음)
+
+- 지면 껌딱지 A/B 초기화·추종(`attachMode: "groundFollow"` + `modelPath` 등)은 동일 파일에 있으나 **타로 스틱 구현과 독립**이다.
+- 타로 카드 UI 카피·이미지는 `gumCardsConfig.js` 등 UI 설정을 따른다.
