@@ -19,7 +19,7 @@ import {
   saveVoteClientId,
   updateMyVote,
 } from "../lib/voteApi.js";
-import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
+import { playRandomNoticePaperSound } from "../utils/stages/stage3/playNoticePaperSound.js";
 
 type VoteId = 1 | 2 | 3;
 

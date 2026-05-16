@@ -1,0 +1,44 @@
+/** Stage3 INT_ 상호작용·근접 사운드·포탈 통과 상수 */
+
+export const STAGE3_INT_PREFIX = "INT_";
+
+/** @type {Record<string, string>} */
+export const STAGE3_INT_SUFFIX_TO_TARGET = {
+  notice: "notice",
+  gamemachine: "gameMachine",
+  tent: "tent",
+  icecream: "icecream",
+  portal: "portal",
+  well: "well",
+  clock: "clock",
+};
+
+/** island `INT_StreetLight*` 근접 시 사운드 재생 */
+export const STREET_LIGHT_NAME_PREFIX = "INT_StreetLight";
+export const STREET_LIGHT_TRIGGER_RADIUS = 10;
+export const STREET_LIGHT_TRIGGER_COOLDOWN_MS = 1500;
+
+export const CLOCK_TRIGGER_RADIUS = 8;
+export const CLOCK_TRIGGER_COOLDOWN_MS = 2000;
+
+export const STAGE3_INT_CLICK_HINT_RADIUS = 15;
+export const STAGE3_INT_CLICK_HINT_OFFSET_Y = 0.2;
+
+/** 포탈 통과 판정 반경 보정치(포탈 bbox 구체 반경 기반) */
+export const PORTAL_PASS_TRIGGER_RADIUS_SCALE = 0.55;
+export const PORTAL_PASS_TRIGGER_RADIUS_MIN = 1.2;
+export const PORTAL_PASS_TRIGGER_RADIUS_MAX = 3.2;
+
+/** 게임기(INT_gameMachine) 클릭 시 — 파일명에 `#` 있으면 Vite 정적 서버가 MP3로 매핑하지 못함 */
+export const GAME_MACHINE_CLICK_SOUND_PATH =
+  "/static/sounds/minigame/start_click_sfx.mp3";
+
+export const GUMTOONGJI_CLIP_NAMES = [
+  "ANIM_GumtoongjiAction",
+  "Eye_default_LAction",
+  "Eye_default_RAction",
+  "modelAction",
+  "Mouth_smileAction",
+  "Paw_LAction.001",
+  "Paw_RAction.001",
+];

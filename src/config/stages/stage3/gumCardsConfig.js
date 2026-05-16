@@ -1,0 +1,123 @@
+/**
+ * 껌딱지 카드 설정 (GumCardsModal.jsx)
+ * public/assets/tarocard 이미지 사용 (파일명 색상 기준 매핑)
+ */
+const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+
+export const CARDS = [
+  {
+    num: "01",
+    name: "껌뽀지",
+    img: `${BASE}/assets/tarocard/blue_ggum.png`,
+    keywords: ["#생각정리", "#비우기"],
+    accent: "#7B9EFF",
+    accentBg: "rgba(123,158,255,0.12)",
+    accentBorder: "rgba(123,158,255,0.25)",
+    theme: "생각 정리의 시간",
+    title: "엉킨 실타래를 대신 풀어주는 친구",
+    desc: "복잡한 머릿속을 비우고\n딱 하나에만 집중할 수 있게\n도와줄게.",
+    comfort: "머릿속이 너무 시끄러워?\n다 꺼내놔. 정리는 내가 할게.",
+  },
+  {
+    num: "02",
+    name: "껌쏙지",
+    img: `${BASE}/assets/tarocard/green_ggum.png`,
+    keywords: ["#즉흥여행", "#소확행"],
+    accent: "#86efac",
+    accentBg: "rgba(134,239,172,0.10)",
+    accentBorder: "rgba(134,239,172,0.25)",
+    theme: "즉흥적인 여행",
+    title: "지도 없이 걷는 즐거움을 아는 친구",
+    desc: "정해진 길 밖에서 만나는\n우연한 행운을\n너에게 선물할게.",
+    comfort: "틀린 길은 없어.\n네가 걷는 곳이 전부 맞는 길이야.",
+  },
+  {
+    num: "03",
+    name: "껌반지",
+    img: `${BASE}/assets/tarocard/yellow_ggum.png`,
+    keywords: ["#영감", "#새로운시선"],
+    accent: "#FDE68A",
+    accentBg: "rgba(253,230,138,0.10)",
+    accentBorder: "rgba(253,230,138,0.25)",
+    theme: "영감 주는 장소",
+    title: "평범함에서 특별함을 찾는 친구",
+    desc: "네 눈이 닿는 모든 곳이\n새로운 아이디어로\n빛나게 해줄게.",
+    comfort: "지금 네 눈에 보이는 것들,\n사실 다 힌트야. 다시 한번 봐봐.",
+  },
+  {
+    num: "04",
+    name: "껌뿌지",
+    img: `${BASE}/assets/tarocard/pink_ggum.png`,
+    keywords: ["#생산적휴식", "#낮잠허락"],
+    accent: "#F9A8D4",
+    accentBg: "rgba(249,168,212,0.12)",
+    accentBorder: "rgba(249,168,212,0.25)",
+    theme: "생산적인 휴식",
+    title: "달콤한 낮잠을 같이 자는 친구",
+    desc: "아무것도 안 하는 게 아니라\n에너지를 모으는 중!\n다음 도약을 준비하는 거야.",
+    comfort: "쉬는 것도 하는 거야.\n오늘 잘 쉬었으면 그걸로 됐어.",
+  },
+  {
+    num: "05",
+    name: "껌냥지",
+    img: `${BASE}/assets/tarocard/purple_ggum.png`,
+    keywords: ["#다정한대화", "#말안해도돼"],
+    accent: "#C084FC",
+    accentBg: "rgba(192,132,252,0.12)",
+    accentBorder: "rgba(192,132,252,0.25)",
+    theme: "다정한 대화",
+    title: "기분을 먼저 알아채는 친구",
+    desc: "네 목소리 톤만 들어도\n기분을 알아채는 친구.\n아무 말 안 해도 괜찮아.",
+    comfort: "다 설명 안 해도 돼.\n그냥 옆에 있어줄게.",
+  },
+  {
+    num: "06",
+    name: "껌별지",
+    img: `${BASE}/assets/tarocard/orange_ggum.png`,
+    keywords: ["#목표", "#페이스메이커"],
+    accent: "#FDBA74",
+    accentBg: "rgba(253,186,116,0.12)",
+    accentBorder: "rgba(253,186,116,0.25)",
+    theme: "목적 있는 여행",
+    title: "흔들리지 않는 나침반을 가진 친구",
+    desc: "네가 목표에 닿을 때까지\n가장 든든한 페이스메이커가\n되어줄게.",
+    comfort: "지금 느려도 괜찮아.\n멈추지만 않으면 결국 닿아.",
+  },
+  {
+    num: "07",
+    name: "껌몰지",
+    img: `${BASE}/assets/tarocard/gray_ggum.png`,
+    keywords: ["#깊은집중", "#고요한시간"],
+    accent: "#93C5FD",
+    accentBg: "rgba(147,197,253,0.10)",
+    accentBorder: "rgba(147,197,253,0.25)",
+    theme: "깊은 지식의 충전",
+    title: "고요한 몰입의 시간을 주는 친구",
+    desc: "세상의 소음을 차단하고\n오직 너와 책만 있는\n고요한 시간을 줄게.",
+    comfort: "지금 딱 하나만 해도 돼.\n그게 제일 빠른 길이야.",
+  },
+  {
+    num: "08",
+    name: "껌온지",
+    img: `${BASE}/assets/tarocard/brown_ggum.png`,
+    keywords: ["#함께", "#온기"],
+    accent: "#FCA5A5",
+    accentBg: "rgba(252,165,165,0.12)",
+    accentBorder: "rgba(252,165,165,0.25)",
+    theme: "함께하는 시간",
+    title: "온 세상을 다정한 온기로 채우는 친구",
+    desc: "혼자보다는 둘, 둘보다는 셋!\n네가 외롭지 않게\n온 세상을 채워줄게.",
+    comfort: "오늘 유독 외로운 것 같으면 내가 꼬옥 안아줄게.",
+  },
+];
+
+/** 카드 선택(앞면에서 뒤집을 때) 재생 — public/static/sounds/card */
+export const GUM_CARDS_PICK_SOUND_PATHS = [
+  "/static/sounds/card/Short_and_light_swis_1.mp3",
+  "/static/sounds/card/Short_and_light_swis_2.mp3",
+  "/static/sounds/card/Short_and_light_swis_3.mp3",
+  "/static/sounds/card/Short_and_light_swis_4.mp3",
+];
+
+/** 카드 선택 효과음 볼륨 (0~1) */
+export const GUM_CARDS_PICK_SOUND_VOLUME = 0.32;

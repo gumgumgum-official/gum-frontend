@@ -14,9 +14,10 @@
   width: min(520px, 100%);
   min-height: clamp(360px, 62vh, 620px);
   border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
-  padding: 20px 20px 24px;
+  /* 미니게임 등 투명 콘텐츠 — 흰 카드 배경 없이 딤 오버레이만 비치게 */
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .game-machine-modal-shell-close {
@@ -39,6 +40,7 @@
 }
 
 .game-machine-modal-shell-body {
-  margin-top: 22px;
+  margin-top: 0;
   color: #111111;
+  background: transparent;
 }

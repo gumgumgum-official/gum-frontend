@@ -28,8 +28,8 @@ export function preloadStage3IslandTemplate(modelPathFromConfig) {
 
 /**
  * 템플릿 `gltf.scene`과 독립된 인스턴스.
- * geometry/material은 공유해 clone 비용을 최소화한다.
- * (cleanup에서 공유 자원을 dispose하지 않아야 함)
+ * geometry/material은 `.clone()`으로 GPU 리소스를 분리한다.
+ * (`teardownStage3Scene`에서 인스턴스별 dispose; 템플릿 캐시는 건드리지 않음)
  * @param {import("three").Object3D} source
  */
 export function deepCloneSceneForStage3Instance(source) {
