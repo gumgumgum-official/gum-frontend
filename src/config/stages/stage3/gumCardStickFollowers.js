@@ -81,4 +81,12 @@ export const GUM_CARD_STICK_FOLLOWER_BY_NUM = {
     ...GUM_CARD_STICK_FOLLOWER_SHARED,
     idleModelPath: "/models/common/gum/taro_gum/gum_boat.glb",
   },
+  "07": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
+    idleModelPath: "/models/common/gum/taro_gum/gum_book.glb",
+  },
+  "08": {
+    ...GUM_CARD_STICK_FOLLOWER_SHARED,
+    idleModelPath: "/models/common/gum/taro_gum/gum_twin.glb",
+  },
 };
