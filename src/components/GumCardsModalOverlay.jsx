@@ -14,69 +14,22 @@ import {
 } from "../utils/stages/stage3/gumCardsModalLauncher.js";
 import { dispatchGumCardsStick } from "../events/gumCardsEvents.js";
 
-function sendTentDebugLog(
-  location,
-  message,
-  data,
-  hypothesisId,
-  runId = "pre-fix",
-) {
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    mode: "no-cors",
-    keepalive: true,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "de1c43",
-    },
-    body: JSON.stringify({
-      sessionId: "de1c43",
-      runId,
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 export function GumCardsModalOverlay() {
   // "closed" | "tent" | "cards"
   const [phase, setPhase] = useState("closed");
 
   const closeAll = useCallback(() => {
-    sendTentDebugLog(
-      "GumCardsModalOverlay.jsx:closeAll",
-      "closeAll invoked",
-      { phaseBeforeClose: phase },
-      "H4",
-    );
     playUiClickSound();
     setPhase("closed");
     dispatchGumCardsModalClose();
-  }, [phase]);
+  }, []);
 
   const openCards = useCallback(() => {
-    sendTentDebugLog(
-      "GumCardsModalOverlay.jsx:openCards",
-      "openCards invoked",
-      { phaseBeforeOpenCards: phase },
-      "H4",
-    );
     setPhase("cards");
-  }, [phase]);
+  }, []);
 
   useEffect(() => {
     const onOpen = () => {
-      sendTentDebugLog(
-        "GumCardsModalOverlay.jsx:onOpen",
-        "EVENT_OPEN received",
-        { nextPhase: "tent" },
-        "H4",
-      );
       setPhase("tent");
     };
     window.addEventListener(EVENT_OPEN, onOpen);
@@ -88,15 +41,6 @@ export function GumCardsModalOverlay() {
     window.addEventListener(EVENT_CLOSE, onClose);
     return () => window.removeEventListener(EVENT_CLOSE, onClose);
   }, []);
-
-  useEffect(() => {
-    sendTentDebugLog(
-      "GumCardsModalOverlay.jsx:phaseEffect",
-      "phase changed",
-      { phase },
-      "H4",
-    );
-  }, [phase]);
 
   const handleGumCardStick = useCallback(
     (card) => {

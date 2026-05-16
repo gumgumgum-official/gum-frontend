@@ -11,35 +11,6 @@ const BUBBLES = [
   "여기는 너에게 필요한 껌딱지 카드를 고를 수 있는 타로점이야",
 ];
 
-function sendTentDebugLog(
-  location,
-  message,
-  data,
-  hypothesisId,
-  runId = "pre-fix",
-) {
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    mode: "no-cors",
-    keepalive: true,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "de1c43",
-    },
-    body: JSON.stringify({
-      sessionId: "de1c43",
-      runId,
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 function getCamCfg() {
   return (
     STAGE3_OBJECTS_CONFIG.tent?.tentSceneCamera ?? {
@@ -79,26 +50,9 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
 
     const rootEl = rootRef.current;
     if (!rootEl) {
-      sendTentDebugLog(
-        "TentSceneViewer.jsx:bubbleEffect",
-        "root element missing, sequence starts immediately",
-        {},
-        "H3",
-      );
       const timers = runBubbleSequence();
       return () => timers.forEach(clearTimeout);
     }
-    const computed = window.getComputedStyle(rootEl);
-    sendTentDebugLog(
-      "TentSceneViewer.jsx:bubbleEffect",
-      "root element ready",
-      {
-        animationName: computed.animationName,
-        animationDuration: computed.animationDuration,
-        opacity: computed.opacity,
-      },
-      "H1",
-    );
 
     /** @type {number[]} */
     let timers = [];
@@ -113,39 +67,15 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
     const onFadeInEnd = (event) => {
       if (event.target !== rootEl) return;
       if (event.propertyName !== "opacity") return;
-      sendTentDebugLog(
-        "TentSceneViewer.jsx:onFadeInEnd",
-        "fade-in animation end",
-        { propertyName: event.propertyName, elapsedTime: event.elapsedTime },
-        "H1",
-      );
       start();
     };
-    const onFadeInStart = (event) => {
-      if (event.target !== rootEl) return;
-      if (event.propertyName !== "opacity") return;
-      sendTentDebugLog(
-        "TentSceneViewer.jsx:onFadeInStart",
-        "fade-in animation start",
-        { propertyName: event.propertyName, elapsedTime: event.elapsedTime },
-        "H1",
-      );
-    };
     rootEl.addEventListener("transitionend", onFadeInEnd);
-    rootEl.addEventListener("transitionstart", onFadeInStart);
 
     // 애니메이션 이벤트가 누락되는 환경 대비 fallback.
     const fallbackId = setTimeout(start, FADE_IN_MS + 100);
-    sendTentDebugLog(
-      "TentSceneViewer.jsx:bubbleEffect",
-      "fallback timer armed",
-      { fallbackMs: FADE_IN_MS + 100 },
-      "H2",
-    );
 
     return () => {
       rootEl.removeEventListener("transitionend", onFadeInEnd);
-      rootEl.removeEventListener("transitionstart", onFadeInStart);
       clearTimeout(fallbackId);
       timers.forEach(clearTimeout);
     };

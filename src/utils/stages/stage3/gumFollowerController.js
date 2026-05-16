@@ -84,11 +84,29 @@ export function createGumFollowersController({
   /** 스틱 껌 비동기 로드가 겹칠 때 이전 로드 결과를 버리기 위한 토큰 */
   let stickLoadToken = 0;
 
+  /** SkeletonUtils.clone() 복제본만 해제 — loadGltfTemplateCached 원본은 건드리지 않음 */
+  function disposeClonedModelTree(root) {
+    if (!root) return;
+    root.traverse((child) => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        const mats = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+        for (const mat of mats) {
+          mat?.dispose();
+        }
+      }
+    });
+  }
+
   function disposeStickFollowerEntry(f) {
     scene.remove(f.model);
     if (f.idleModel) scene.remove(f.idleModel);
     f.mixer.stopAllAction();
     if (f.idleMixer) f.idleMixer.stopAllAction();
+    disposeClonedModelTree(f.model);
+    disposeClonedModelTree(f.idleModel);
   }
 
   /** id `S` + 숫자 카드 전용 — 기존 스틱 1마리 제거(교체 붙이기) */
@@ -1109,12 +1127,7 @@ export function createGumFollowersController({
       }
     },
     cleanup() {
-      followers.forEach((f) => {
-        scene.remove(f.model);
-        if (f.idleModel) scene.remove(f.idleModel);
-        f.mixer.stopAllAction();
-        if (f.idleMixer) f.idleMixer.stopAllAction();
-      });
+      followers.forEach(disposeStickFollowerEntry);
       followers.length = 0;
       followerBubbleFallbackHeadY = 1.1;
       isReady = false;

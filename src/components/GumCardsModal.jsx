@@ -123,8 +123,17 @@ export function GumCardsModal({ open, onClose, onStick }) {
   const openRafRef = useRef(0);
   const closeTimerRef = useRef(null);
   const gridRef = useRef(null);
+  /** body에 붙은 파티클 — 모달 닫힘/언마운트 시 강제 제거 */
+  const particlesRef = useRef(/** @type {HTMLElement[]} */ ([]));
   /** setState 업데이트 안에서 효과음 호출 시 Strict Mode 이중 호출 방지용 */
   const flippedCardRef = useRef(null);
+
+  const clearTrackedParticles = useCallback(() => {
+    particlesRef.current.forEach((el) => {
+      if (el.isConnected) el.remove();
+    });
+    particlesRef.current = [];
+  }, []);
 
   const showToast = useCallback((msg) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -139,8 +148,13 @@ export function GumCardsModal({ open, onClose, onStick }) {
       if (openRafRef.current) cancelAnimationFrame(openRafRef.current);
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      clearTrackedParticles();
     };
-  }, []);
+  }, [clearTrackedParticles]);
+
+  useEffect(() => {
+    if (!shouldRender) clearTrackedParticles();
+  }, [shouldRender, clearTrackedParticles]);
 
   useEffect(() => {
     if (openRafRef.current) {
@@ -193,7 +207,7 @@ export function GumCardsModal({ open, onClose, onStick }) {
   const handleStick = () => {
     if (!flippedCard) return;
     onStick?.(flippedCard);
-    spawnParticles(flippedCard.accent);
+    particlesRef.current.push(...spawnParticles(flippedCard.accent));
     showToast(`${flippedCard.name}를 오늘 하루 붙였어요 🩹`);
   };
 
