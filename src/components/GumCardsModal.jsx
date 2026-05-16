@@ -1,5 +1,5 @@
 /**
- * 껌딱지 카드 모달 - docs/gum-cards-final.html 참고하여 React로 구현
+ * 껌딱지 카드 모달 (GumCardsModal.css / gumCardsConfig.js)
  * 성능: CSS transition-delay로 카드 등장, React.memo로 불필요한 re-render 감소
  */
 import { useState, useEffect, useRef, useCallback, memo } from "react";

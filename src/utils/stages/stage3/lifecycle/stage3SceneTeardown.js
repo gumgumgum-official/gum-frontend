@@ -52,6 +52,18 @@ export function teardownStage3Scene(scene, state) {
   if (backgroundModel) {
     scene.remove(backgroundModel);
     onPortalVortexCleared();
+    backgroundModel.traverse((child) => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      }
+    });
   }
 
   if (skyBackgroundTexture) {

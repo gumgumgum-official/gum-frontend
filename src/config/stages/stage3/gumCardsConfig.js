@@ -1,5 +1,5 @@
 /**
- * 껌딱지 카드 설정 (docs/gum-cards-final.html 참고)
+ * 껌딱지 카드 설정 (GumCardsModal.jsx)
  * public/assets/tarocard 이미지 사용 (파일명 색상 기준 매핑)
  */
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
