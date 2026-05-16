@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { CARDS } from "../config/stages/stage3/gumCardsConfig.js";
-import { playRandomGumCardPickSound } from "../utils/common/playGumCardPickSound.js";
+import { playRandomGumCardPickSound } from "../utils/stages/stage3/playGumCardPickSound.js";
 import "./GumCardsModal.css";
 
 /** @typedef {{ num: string, name: string, img: string, keywords: string[], accent: string, accentBg: string, accentBorder: string, theme: string, title: string, desc: string, comfort: string }} GumCardData */

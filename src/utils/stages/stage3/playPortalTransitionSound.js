@@ -1,6 +1,6 @@
-import { resolvePublicAssetUrl } from "./gltfTemplateCache.js";
-import { STAGE3_OBJECTS_CONFIG } from "../../config/stages/stage3/stage3ObjectsConfig.js";
-import { applyExtendedAudioVolume } from "./audioGain.js";
+import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
+import { STAGE3_OBJECTS_CONFIG } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
+import { applyExtendedAudioVolume } from "../../common/audioGain.js";
 
 /** @type {HTMLAudioElement | null} */
 let portalTransitionAudio = null;

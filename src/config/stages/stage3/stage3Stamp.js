@@ -1,0 +1,26 @@
+/** Stage3 스탬프 투어·이스터에그 상수 */
+
+export const STAMP_POSTER_IMAGE_PATH = "/assets/poster/stamp_poster.png";
+
+export const STAGE3_STAMP_INTRO_HOLD_MS = 2000;
+export const STAGE3_STAMP_INTRO_FLY_MS = 780;
+
+/** Stage6BoardingOverlay `runSubtitleSequence`와 동일: hold + fade(600) + gap(200) × 구간 */
+export const STAGE3_ENTRY_SUBTITLE_TOTAL_MS = 2500 + 600 + 200 + 2000 + 600;
+
+export const REQUIRED_EGG_COUNT = 3;
+
+export const MAIN_EASTER_EGG_CANONICAL = [
+  "INT_notice",
+  "INT_gameMachine",
+  "INT_icecream",
+  "INT_Tent",
+];
+
+/** @type {Record<string, string>} */
+export const RAY_TARGET_TO_EGG_KEY = {
+  notice: "INT_notice",
+  gameMachine: "INT_gameMachine",
+  icecream: "INT_icecream",
+  tent: "INT_Tent",
+};

@@ -5,7 +5,7 @@ import { MINIGAME_AUDIO_CONFIG } from "../config/stages/stage3/minigameAudioConf
 import { appendLeaderboardEntry } from "../utils/ggumRunnerLeaderboard.js";
 import { postScore, fetchLeaderboard } from "../lib/scoreApi.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
-import { playUiClickSound } from "../utils/common/playUiClickSound.js";
+import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 
 const W = 700;
 const H = 340;

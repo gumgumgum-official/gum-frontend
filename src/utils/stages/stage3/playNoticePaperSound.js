@@ -1,5 +1,5 @@
-import { STAGE3_OBJECTS_CONFIG } from "../../config/stages/stage3/stage3ObjectsConfig.js";
-import { applyExtendedAudioVolume } from "./audioGain.js";
+import { STAGE3_OBJECTS_CONFIG } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
+import { applyExtendedAudioVolume } from "../../common/audioGain.js";
 
 /** @type {HTMLAudioElement | null} */
 let noticePaperAudio = null;

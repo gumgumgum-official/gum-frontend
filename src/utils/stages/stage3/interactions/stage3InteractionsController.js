@@ -1,0 +1,1012 @@
+/**
+ * Stage3 INT_* 레이캐스트·클릭 상호작용·근접 사운드·포탈 통과·카메라 yaw assist
+ */
+import * as THREE from "three";
+import { resolvePublicAssetUrl } from "../../../common/gltfTemplateCache.js";
+import { STAGE3_ICECREAM_DEBUG_BOX_ONLY } from "../../../../config/stages/stage3/stage3IceCream.js";
+import {
+  STAGE3_INT_PREFIX,
+  STAGE3_INT_SUFFIX_TO_TARGET,
+  STREET_LIGHT_NAME_PREFIX,
+  STREET_LIGHT_TRIGGER_RADIUS,
+  STREET_LIGHT_TRIGGER_COOLDOWN_MS,
+  CLOCK_TRIGGER_RADIUS,
+  CLOCK_TRIGGER_COOLDOWN_MS,
+  STAGE3_INT_CLICK_HINT_RADIUS,
+  STAGE3_INT_CLICK_HINT_OFFSET_Y,
+  PORTAL_PASS_TRIGGER_RADIUS_SCALE,
+  PORTAL_PASS_TRIGGER_RADIUS_MIN,
+  PORTAL_PASS_TRIGGER_RADIUS_MAX,
+  GAME_MACHINE_CLICK_SOUND_PATH,
+  GUMTOONGJI_CLIP_NAMES,
+} from "../../../../config/stages/stage3/stage3Interactions.js";
+import { playRandomWellClickSound } from "../playWellClickSound.js";
+import { playRandomClockClickSound } from "../../../common/playClockClickSound.js";
+import { playRandomStreetLightClickSound } from "../../../common/playStreetLightSound.js";
+import { onMinigameClose, closeMinigame } from "../minigameLauncher.js";
+import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3IntroAudio.js";
+
+/**
+ * @typedef {"notice" | "gameMachine" | "tent" | "icecream" | "portal" | "well" | "clock" | "gumtoongji"} Stage3InteractionTarget
+ */
+
+/**
+ * @param {{
+ *   getCamera: () => import("three").PerspectiveCamera | null,
+ *   getCanvas: () => HTMLCanvasElement | null,
+ *   getConfig: () => import("../../../../types.js").Stage3Config,
+ *   getCharacter: () => { getPosition?: () => import("three").Vector3; getIsMoving?: () => boolean } | null,
+ *   getIceCreamController: () => ReturnType<typeof import("../iceCream/stage3IceCreamController.js").createStage3IceCreamController>,
+ *   getCameraIntroState: () => { completed: boolean; active: boolean },
+ *   isInteractionBlocked: () => boolean,
+ *   getPortalTransitionInProgress: () => boolean,
+ *   isPortalOpenForStageTransition: () => boolean,
+ *   onTryEnterPortal: () => void,
+ *   onPortalBlocked: () => void,
+ *   tryAdvanceStampSequence: (stepKey: string) => void,
+ *   tryRegisterEasterEggFromRayTarget: (target: string) => { stampSubtitle: string | null } | null,
+ *   dispatchSubtitleLine: (text: string) => void,
+ *   showNoticeModal: () => void,
+ *   showGameMachineModal: () => void,
+ *   openGumCardsModal: () => void,
+ *   hideStage3InteractionBubbles: () => void,
+ *   syncStampPanelVisibilityByOverlay: () => void,
+ *   queueStampStepOnModalClose: (stepKey: string) => void,
+ *   flushQueuedStampStepOnModalClose: (stepKey: string) => void,
+ *   flushPendingEggDiscoverySubtitle: () => void,
+ *   setPendingEggDiscoverySubtitle: (text: string) => void,
+ *   onGameMachineModalClose: () => void,
+ *   onOpenTentModal: () => void,
+ *   getDebugControls: () => { getOrbitControls?: () => unknown } | null,
+ * }} params
+ */
+export function createStage3InteractionsController({
+  getCamera,
+  getCanvas,
+  getConfig,
+  getCharacter,
+  getIceCreamController,
+  getCameraIntroState,
+  isInteractionBlocked,
+  getPortalTransitionInProgress,
+  isPortalOpenForStageTransition,
+  onTryEnterPortal,
+  onPortalBlocked,
+  tryAdvanceStampSequence,
+  tryRegisterEasterEggFromRayTarget,
+  dispatchSubtitleLine,
+  showNoticeModal,
+  showGameMachineModal,
+  openGumCardsModal,
+  hideStage3InteractionBubbles,
+  syncStampPanelVisibilityByOverlay,
+  queueStampStepOnModalClose,
+  flushQueuedStampStepOnModalClose,
+  flushPendingEggDiscoverySubtitle,
+  setPendingEggDiscoverySubtitle,
+  onGameMachineModalClose,
+  onOpenTentModal,
+  getDebugControls,
+}) {
+  /** @type {HTMLAudioElement | null} */
+  let gameMachineClickAudio = null;
+  let unlistenMinigameClose = null;
+  /** @type {THREE.Object3D | null} */
+  let gameMachineRef = null;
+
+  const _pointer = new THREE.Vector2();
+  const _raycaster = new THREE.Raycaster();
+  const intRaycastMeshes = [];
+  const gumtoongjiRaycastMeshes = [];
+  const cameraAssistTargets = [];
+  let smoothedCameraYawAssist = 0;
+  let smoothedCameraYawAssistDemand = 0;
+  const streetLightWorldPositions = [];
+  const intProximityTargets = [];
+  /** @type {Stage3InteractionTarget | null} */
+  let activeIntHintTarget = null;
+  let wasNearStreetLight = false;
+  let lastStreetLightSoundAtMs = 0;
+  const clockWorldPositions = [];
+  let wasNearClock = false;
+  let lastClockSoundAtMs = 0;
+
+  const portalPassTriggerSphere = new THREE.Sphere();
+  let hasPortalPassTriggerSphere = false;
+  let wasInsidePortalPassTrigger = false;
+
+  /** @type {import("three").AnimationMixer | null} */
+  let gumtoongjiMixer = null;
+  /** @type {import("three").AnimationAction[]} */
+  let gumtoongjiActions = [];
+
+  const _camAssistBox = new THREE.Box3();
+  const _camAssistSphere = new THREE.Sphere();
+  const _intHintWorld = new THREE.Vector3();
+  const _portalTriggerCenter = new THREE.Vector3();
+  const _camProjView = new THREE.Matrix4();
+  const _camFrustum = new THREE.Frustum();
+
+  /** @type {HTMLDivElement | null} */
+  let intClickHintBubbleEl = null;
+
+  let _pointerMoveRafId = 0;
+  /** @type {PointerEvent | null} */
+  let _lastPointerEvent = null;
+
+  function normalizeIntNameToken(value) {
+    return String(value ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  /** @param {THREE.Object3D} root */
+  function hasGgumCharacterDescendant(root) {
+    let found = false;
+    root.traverse((node) => {
+      if (found) return;
+      const token = normalizeIntNameToken(node?.name);
+      if (!token) return;
+      if (
+        token.includes("gumtoongji") ||
+        token.includes("ggumtoongji") ||
+        token.includes("ggumddi")
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  }
+
+  /** @param {THREE.Object3D} root */
+  function isBenchIntObject(root) {
+    let found = false;
+    root.traverse((node) => {
+      if (found) return;
+      const token = normalizeIntNameToken(node?.name);
+      if (!token) return;
+      if (
+        token.includes("bench") ||
+        token.includes("chair") ||
+        token.includes("seat")
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  }
+
+  /**
+   * @param {string} suffix
+   * @returns {Stage3InteractionTarget | null}
+   */
+  function intSuffixToTarget(suffix) {
+    const lower = normalizeIntNameToken(suffix);
+    if (
+      lower === "icecart" ||
+      lower === "icecreamcart" ||
+      lower === "icecream" ||
+      (lower.includes("ice") &&
+        lower.includes("cream") &&
+        lower.includes("cart"))
+    ) {
+      return "icecream";
+    }
+    const mapped = STAGE3_INT_SUFFIX_TO_TARGET[lower];
+    return /** @type {Stage3InteractionTarget | null} */ (mapped ?? null);
+  }
+
+  /** @param {THREE.Object3D} hitObject */
+  function resolveIntPointerTarget(hitObject) {
+    let p = hitObject;
+    while (p) {
+      if (typeof p.name === "string" && p.name.startsWith(STAGE3_INT_PREFIX)) {
+        const suffix = p.name.slice(STAGE3_INT_PREFIX.length);
+        return intSuffixToTarget(suffix);
+      }
+      p = p.parent;
+    }
+    p = hitObject;
+    while (p) {
+      const n = normalizeIntNameToken(p.name);
+      if (n.includes("icecart") || n.includes("icecreamcart")) {
+        return "icecream";
+      }
+      p = p.parent;
+    }
+    return null;
+  }
+
+  function playGumtoongjiAnimation() {
+    for (const action of gumtoongjiActions) action.reset().play();
+  }
+
+  function playGameMachineClickSound() {
+    const src = resolvePublicAssetUrl(GAME_MACHINE_CLICK_SOUND_PATH);
+    if (!gameMachineClickAudio) {
+      gameMachineClickAudio = new window.Audio();
+      gameMachineClickAudio.preload = "auto";
+      gameMachineClickAudio.volume = 1;
+    }
+    gameMachineClickAudio.pause();
+    gameMachineClickAudio.currentTime = 0;
+    gameMachineClickAudio.src = src;
+    try {
+      gameMachineClickAudio.load();
+    } catch {
+      // ignore
+    }
+    const p = gameMachineClickAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn("[Stage3] game machine sound play failed:", err, src);
+        }
+      });
+    }
+  }
+
+  function tryEnterPortal() {
+    if (getPortalTransitionInProgress()) return;
+    if (isPortalOpenForStageTransition()) {
+      onTryEnterPortal();
+      return;
+    }
+    onPortalBlocked();
+  }
+
+  /**
+   * @param {Stage3InteractionTarget} target
+   * @returns {boolean}
+   */
+  function runInteractionForTarget(target) {
+    if (target === "gumtoongji") {
+      if (import.meta.env.DEV) {
+        console.log(
+          "[Gumtoongji] 클릭 → 애니메이션 재생, 액션 수:",
+          gumtoongjiActions.length,
+        );
+      }
+      playGumtoongjiAnimation();
+      tryAdvanceStampSequence("gumtoongji");
+      return true;
+    }
+
+    if (target === "portal") {
+      tryEnterPortal();
+      return true;
+    }
+
+    const iceCreamController = getIceCreamController();
+
+    if (target === "icecream") {
+      const eggTap = tryRegisterEasterEggFromRayTarget("icecream");
+      if (!iceCreamController.getCartRef()) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] icecream 클릭 감지됨. 하지만 카트 ref가 없습니다(INT 네이밍/계층 확인).",
+          );
+        }
+        return false;
+      }
+      if (!iceCreamController.hasTemplates()) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] 아이스크림 템플릿이 비어 있습니다. GLB 경로·네트워크를 확인하세요.",
+          );
+        }
+        return false;
+      }
+      iceCreamController.spawnFromCart();
+      tryAdvanceStampSequence("icecream");
+      if (eggTap?.stampSubtitle) {
+        dispatchSubtitleLine(eggTap.stampSubtitle);
+      }
+      return true;
+    }
+    if (target === "notice") {
+      const eggTap = tryRegisterEasterEggFromRayTarget("notice");
+      showNoticeModal();
+      queueStampStepOnModalClose("notice");
+      if (eggTap?.stampSubtitle) {
+        setPendingEggDiscoverySubtitle(eggTap.stampSubtitle);
+      }
+      return true;
+    }
+    if (target === "gameMachine") {
+      const eggTap = tryRegisterEasterEggFromRayTarget("gameMachine");
+      playGameMachineClickSound();
+      showGameMachineModal();
+      queueStampStepOnModalClose("gameMachine");
+      if (eggTap?.stampSubtitle) {
+        setPendingEggDiscoverySubtitle(eggTap.stampSubtitle);
+      }
+      return true;
+    }
+    if (target === "tent") {
+      onOpenTentModal();
+      openGumCardsModal();
+      queueStampStepOnModalClose("tent");
+      const eggTap = tryRegisterEasterEggFromRayTarget("tent");
+      if (eggTap?.stampSubtitle) {
+        setPendingEggDiscoverySubtitle(eggTap.stampSubtitle);
+      }
+      return true;
+    }
+    if (target === "well") {
+      playRandomWellClickSound();
+      window.dispatchEvent(new CustomEvent("gum:wellClick"));
+      return true;
+    }
+    if (target === "clock") {
+      tryAdvanceStampSequence("clock");
+      return true;
+    }
+    return false;
+  }
+
+  /** @returns {Stage3InteractionTarget | null} */
+  function getPointerHitTarget(clientX, clientY) {
+    const camera = getCamera();
+    const canvas = getCanvas();
+    if (!camera || !canvas) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    _pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    _raycaster.setFromCamera(_pointer, camera);
+
+    if (gumtoongjiRaycastMeshes.length > 0) {
+      const gHits = _raycaster.intersectObjects(gumtoongjiRaycastMeshes, false);
+      if (gHits.length > 0) return "gumtoongji";
+    }
+
+    const iceCreamController = getIceCreamController();
+    if (intRaycastMeshes.length === 0) return null;
+    const hits = _raycaster.intersectObjects(intRaycastMeshes, false);
+    if (hits.length === 0) return null;
+    for (let i = 0; i < hits.length; i++) {
+      const hitObj = hits[i].object;
+      const resolved = resolveIntPointerTarget(hitObj);
+      if (resolved) return resolved;
+      if (iceCreamController.isCartHit(hitObj)) {
+        return "icecream";
+      }
+    }
+    return null;
+  }
+
+  function handlePointerMove(event) {
+    const canvas = getCanvas();
+    if (!canvas) return;
+    _lastPointerEvent = event;
+    if (_pointerMoveRafId !== 0) return;
+    _pointerMoveRafId = requestAnimationFrame(() => {
+      _pointerMoveRafId = 0;
+      const e = _lastPointerEvent;
+      if (!e || !getCanvas()) return;
+      if (isInteractionBlocked()) {
+        canvas.style.cursor = "default";
+        return;
+      }
+      const target = getPointerHitTarget(e.clientX, e.clientY);
+      canvas.style.cursor = target ? "pointer" : "default";
+    });
+  }
+
+  function handlePointerLeave() {
+    const canvas = getCanvas();
+    if (canvas) canvas.style.cursor = "default";
+  }
+
+  function handlePointerDown(event) {
+    const camera = getCamera();
+    const canvas = getCanvas();
+    if (!camera || !canvas) return;
+    if (isInteractionBlocked()) return;
+    const target = getPointerHitTarget(event.clientX, event.clientY);
+    if (!target) {
+      if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
+        getIceCreamController().spawnFromCart();
+      }
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    runInteractionForTarget(target);
+  }
+
+  function handleIntClickHintPointerDown(event) {
+    if (isInteractionBlocked()) return;
+    if (!activeIntHintTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    runInteractionForTarget(activeIntHintTarget);
+  }
+
+  /**
+   * @param {THREE.Object3D} islandModel
+   * @param {import("three").AnimationClip[]} [animations]
+   */
+  function registerIslandInteractions(islandModel, animations = []) {
+    const iceCreamController = getIceCreamController();
+    intRaycastMeshes.length = 0;
+    gumtoongjiRaycastMeshes.length = 0;
+    cameraAssistTargets.length = 0;
+    intProximityTargets.length = 0;
+    streetLightWorldPositions.length = 0;
+    clockWorldPositions.length = 0;
+    smoothedCameraYawAssist = 0;
+    smoothedCameraYawAssistDemand = 0;
+    iceCreamController.clearCartRef();
+    gameMachineRef = null;
+    hasPortalPassTriggerSphere = false;
+    wasInsidePortalPassTrigger = false;
+
+    if (gumtoongjiMixer) {
+      gumtoongjiMixer.stopAllAction();
+      gumtoongjiMixer = null;
+    }
+    gumtoongjiActions = [];
+
+    /** @type {THREE.Object3D | null} */
+    let gumtoongjiRoot = null;
+    islandModel.traverse((obj) => {
+      if (obj.name === "ANIM_Gumtoongji") gumtoongjiRoot = obj;
+    });
+
+    if (import.meta.env.DEV) {
+      console.log("[Gumtoongji] root 탐색 결과:", gumtoongjiRoot);
+      console.log(
+        "[Gumtoongji] animations 수:",
+        animations.length,
+        animations.map((a) => a.name),
+      );
+    }
+
+    if (gumtoongjiRoot && animations.length > 0) {
+      gumtoongjiRoot.traverse((obj) => {
+        const meshLike = /** @type {any} */ (obj);
+        if (meshLike.isSkinnedMesh) {
+          meshLike.frustumCulled = false;
+          meshLike.raycast = THREE.SkinnedMesh.prototype.raycast;
+        }
+        if (meshLike.isMesh && !meshLike.isSkinnedMesh) {
+          meshLike.raycast = THREE.Mesh.prototype.raycast;
+        }
+        if (meshLike.isMesh || meshLike.isSkinnedMesh) {
+          gumtoongjiRaycastMeshes.push(obj);
+        }
+      });
+      if (import.meta.env.DEV) {
+        console.log(
+          "[Gumtoongji] 레이캐스트 메시 수:",
+          gumtoongjiRaycastMeshes.length,
+        );
+      }
+      gumtoongjiMixer = new THREE.AnimationMixer(gumtoongjiRoot);
+      for (const name of GUMTOONGJI_CLIP_NAMES) {
+        const clip = THREE.AnimationClip.findByName(animations, name);
+        if (!clip) {
+          if (import.meta.env.DEV) {
+            console.warn(`[Gumtoongji] clip 없음: ${name}`);
+          }
+          continue;
+        }
+        const action = gumtoongjiMixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        gumtoongjiActions.push(action);
+      }
+    } else if (import.meta.env.DEV) {
+      console.warn(
+        "[Gumtoongji] 초기화 실패 — root:",
+        gumtoongjiRoot,
+        "/ animations:",
+        animations.length,
+      );
+    }
+
+    if (unlistenMinigameClose) {
+      unlistenMinigameClose();
+      unlistenMinigameClose = null;
+    }
+
+    const meshSet = new Set();
+    const assistRootSet = /** @type {Set<THREE.Object3D>} */ (new Set());
+    const rootNames = [];
+    const nonIntCartCandidates = [];
+
+    islandModel.traverse((obj) => {
+      if (
+        typeof obj.name !== "string" ||
+        !obj.name.startsWith(STAGE3_INT_PREFIX)
+      ) {
+        const normalized = normalizeIntNameToken(obj.name);
+        if (
+          normalized &&
+          (normalized.includes("icecart") ||
+            normalized.includes("icecreamcart"))
+        ) {
+          nonIntCartCandidates.push(obj);
+        }
+        return;
+      }
+      rootNames.push(obj.name);
+      const suffix = obj.name.slice(STAGE3_INT_PREFIX.length);
+      const intTarget = intSuffixToTarget(suffix);
+      if (intTarget != null) {
+        assistRootSet.add(obj);
+      }
+      if (intTarget === "gameMachine") gameMachineRef = obj;
+      if (intTarget === "icecream") iceCreamController.setCartRef(obj);
+      if (intTarget === "clock") {
+        obj.updateMatrixWorld(true);
+        const worldPos = new THREE.Vector3();
+        obj.getWorldPosition(worldPos);
+        clockWorldPositions.push(worldPos);
+      }
+      obj.traverse((child) => {
+        if (child.isMesh) meshSet.add(child);
+      });
+    });
+
+    if (!iceCreamController.getCartRef() && nonIntCartCandidates.length > 0) {
+      const fallbackCart = nonIntCartCandidates[0];
+      iceCreamController.setCartRef(fallbackCart);
+      fallbackCart.traverse((child) => {
+        if (child.isMesh) {
+          child.raycast = THREE.Mesh.prototype.raycast;
+          meshSet.add(child);
+        }
+      });
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[Stage3] INT_ 카트 미검출 → fallback 카트 사용: '${fallbackCart.name}'`,
+        );
+      }
+    }
+
+    const cartRef = iceCreamController.getCartRef();
+    if (cartRef) {
+      assistRootSet.add(cartRef);
+    }
+
+    /** @type {THREE.Object3D | null} */
+    let portalRef = null;
+    islandModel.traverse((obj) => {
+      if (
+        typeof obj.name !== "string" ||
+        !obj.name.startsWith(STAGE3_INT_PREFIX)
+      ) {
+        return;
+      }
+      const suffix = obj.name.slice(STAGE3_INT_PREFIX.length);
+      if (intSuffixToTarget(suffix) === "portal") portalRef = obj;
+    });
+
+    if (portalRef) {
+      portalRef.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(portalRef);
+      if (!_camAssistBox.isEmpty()) {
+        _camAssistBox.getBoundingSphere(portalPassTriggerSphere);
+        portalPassTriggerSphere.radius = THREE.MathUtils.clamp(
+          portalPassTriggerSphere.radius * PORTAL_PASS_TRIGGER_RADIUS_SCALE,
+          PORTAL_PASS_TRIGGER_RADIUS_MIN,
+          PORTAL_PASS_TRIGGER_RADIUS_MAX,
+        );
+        hasPortalPassTriggerSphere = true;
+      }
+    }
+
+    for (const root of assistRootSet) {
+      root.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(root);
+      _camAssistBox.getBoundingSphere(_camAssistSphere);
+      cameraAssistTargets.push({ sphere: _camAssistSphere.clone() });
+    }
+
+    islandModel.traverse((obj) => {
+      if (
+        typeof obj.name !== "string" ||
+        !obj.name.startsWith(STAGE3_INT_PREFIX)
+      ) {
+        return;
+      }
+      if (hasGgumCharacterDescendant(obj)) return;
+      if (isBenchIntObject(obj)) return;
+      const suffix = obj.name.slice(STAGE3_INT_PREFIX.length);
+      const intTarget = intSuffixToTarget(suffix);
+      obj.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(obj);
+      if (_camAssistBox.isEmpty()) return;
+      _camAssistBox.getBoundingSphere(_camAssistSphere);
+      const isWell = intTarget === "well";
+      const anchorWorld = new THREE.Vector3(
+        isWell
+          ? _camAssistBox.max.x + 0.5
+          : (_camAssistBox.min.x + _camAssistBox.max.x) * 0.5,
+        isWell
+          ? (_camAssistBox.min.y + _camAssistBox.max.y) * 0.5 + 0.25
+          : _camAssistBox.max.y + STAGE3_INT_CLICK_HINT_OFFSET_Y,
+        (_camAssistBox.min.z + _camAssistBox.max.z) * 0.5,
+      );
+      intProximityTargets.push({
+        sphere: _camAssistSphere.clone(),
+        anchorWorld,
+        hintText: intTarget === "portal" ? "통과!" : "Click!",
+        hintVariant: isWell ? "well-side" : "default",
+        target: intTarget,
+      });
+    });
+
+    intRaycastMeshes.push(...meshSet);
+
+    islandModel.traverse((obj) => {
+      if (typeof obj.name !== "string") return;
+      if (!obj.name.startsWith(STREET_LIGHT_NAME_PREFIX)) return;
+      obj.updateMatrixWorld(true);
+      const worldPos = new THREE.Vector3();
+      obj.getWorldPosition(worldPos);
+      streetLightWorldPositions.push(worldPos);
+    });
+
+    if (gameMachineRef) {
+      unlistenMinigameClose = onMinigameClose(() => {
+        onGameMachineModalClose();
+        hideStage3InteractionBubbles();
+        flushQueuedStampStepOnModalClose("gameMachine");
+        syncStampPanelVisibilityByOverlay();
+        resumeStage3BackgroundAmbientFromOverlay();
+        closeMinigame({
+          camera: getCamera(),
+          orbitControls: getDebugControls()?.getOrbitControls?.() ?? null,
+        });
+        flushPendingEggDiscoverySubtitle();
+      });
+    }
+
+    iceCreamController.warnCartNotFound(rootNames);
+  }
+
+  function updateStreetLightProximitySound() {
+    const userPos = getCharacter()?.getPosition?.();
+    if (!userPos || streetLightWorldPositions.length === 0) {
+      wasNearStreetLight = false;
+      return;
+    }
+    const radiusSq = STREET_LIGHT_TRIGGER_RADIUS * STREET_LIGHT_TRIGGER_RADIUS;
+    const isNear = streetLightWorldPositions.some((p) => {
+      const dx = p.x - userPos.x;
+      const dz = p.z - userPos.z;
+      return dx * dx + dz * dz <= radiusSq;
+    });
+    if (!isNear) {
+      wasNearStreetLight = false;
+      return;
+    }
+    const now = Date.now();
+    if (
+      !wasNearStreetLight &&
+      now - lastStreetLightSoundAtMs >= STREET_LIGHT_TRIGGER_COOLDOWN_MS
+    ) {
+      playRandomStreetLightClickSound();
+      lastStreetLightSoundAtMs = now;
+    }
+    wasNearStreetLight = true;
+  }
+
+  function updateClockProximitySound() {
+    const userPos = getCharacter()?.getPosition?.();
+    if (!userPos || clockWorldPositions.length === 0) {
+      wasNearClock = false;
+      return;
+    }
+    const radiusSq = CLOCK_TRIGGER_RADIUS * CLOCK_TRIGGER_RADIUS;
+    const isNear = clockWorldPositions.some((p) => {
+      const dx = p.x - userPos.x;
+      const dz = p.z - userPos.z;
+      return dx * dx + dz * dz <= radiusSq;
+    });
+    if (!isNear) {
+      wasNearClock = false;
+      return;
+    }
+    const now = Date.now();
+    if (
+      !wasNearClock &&
+      now - lastClockSoundAtMs >= CLOCK_TRIGGER_COOLDOWN_MS
+    ) {
+      playRandomClockClickSound();
+      lastClockSoundAtMs = now;
+    }
+    wasNearClock = true;
+  }
+
+  function updateIntClickHintBubble() {
+    const camera = getCamera();
+    const canvas = getCanvas();
+    if (!intClickHintBubbleEl || !camera || !canvas) return;
+    if (isInteractionBlocked()) {
+      activeIntHintTarget = null;
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
+    const charPos = getCharacter()?.getPosition?.();
+    if (!charPos || intProximityTargets.length === 0) {
+      activeIntHintTarget = null;
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
+    const radiusSq =
+      STAGE3_INT_CLICK_HINT_RADIUS * STAGE3_INT_CLICK_HINT_RADIUS;
+    let nearest = null;
+    let nearestDistSq = Infinity;
+    for (let i = 0; i < intProximityTargets.length; i++) {
+      const target = intProximityTargets[i];
+      const sphere = target.sphere;
+      const dx = sphere.center.x - charPos.x;
+      const dz = sphere.center.z - charPos.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq > radiusSq || distSq >= nearestDistSq) continue;
+      nearest = target;
+      nearestDistSq = distSq;
+    }
+    if (!nearest) {
+      activeIntHintTarget = null;
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
+    activeIntHintTarget = nearest.target ?? null;
+    _intHintWorld.copy(nearest.anchorWorld);
+    camera.updateMatrixWorld(true);
+    _intHintWorld.project(camera);
+    const rect = canvas.getBoundingClientRect();
+    const x = (_intHintWorld.x * 0.5 + 0.5) * rect.width + rect.left;
+    const y = (-_intHintWorld.y * 0.5 + 0.5) * rect.height + rect.top;
+    intClickHintBubbleEl.textContent = nearest.hintText;
+    intClickHintBubbleEl.classList.toggle(
+      "speech-bubble-stage3-int-click--well-side",
+      nearest.hintVariant === "well-side",
+    );
+    intClickHintBubbleEl.style.left = `${x}px`;
+    intClickHintBubbleEl.style.top = `${y}px`;
+    intClickHintBubbleEl.classList.add("is-visible");
+  }
+
+  function updatePortalPassTrigger() {
+    const charPos = getCharacter()?.getPosition?.();
+    if (
+      !charPos ||
+      !hasPortalPassTriggerSphere ||
+      getPortalTransitionInProgress()
+    ) {
+      wasInsidePortalPassTrigger = false;
+      return;
+    }
+    _portalTriggerCenter.copy(portalPassTriggerSphere.center);
+    const dx = charPos.x - _portalTriggerCenter.x;
+    const dz = charPos.z - _portalTriggerCenter.z;
+    const portalRadius = portalPassTriggerSphere.radius;
+    const insidePortalPassTrigger =
+      dx * dx + dz * dz <= portalRadius * portalRadius;
+    if (!wasInsidePortalPassTrigger && insidePortalPassTrigger) {
+      tryEnterPortal();
+    }
+    wasInsidePortalPassTrigger = insidePortalPassTrigger;
+  }
+
+  /**
+   * @param {number} delta
+   * @param {THREE.PerspectiveCamera} camera
+   * @param {THREE.Vector3} charPos
+   * @param {boolean} isMoving
+   */
+  function updateCameraYawAssist(delta, camera, charPos, isMoving) {
+    const config = getConfig();
+    const ch = config.character;
+    const maxRad = ch.cameraYawAssistMaxRad ?? 0.38;
+    const maxDist = ch.cameraYawAssistMaxDistance ?? 42;
+    const onlyMoving = ch.cameraYawAssistOnlyWhenMoving !== false;
+    const lk = Math.max(ch.cameraYawAssistLerp ?? 0.09, 0.02);
+    const demandTau =
+      ch.cameraYawAssistDemandEaseSec ?? Math.max(0.2, 0.11 / lk);
+    const easeTau = ch.cameraYawAssistEaseSec ?? Math.max(0.28, 0.15 / lk);
+    const introDecayTau = 0.22;
+    const cameraIntro = getCameraIntroState();
+
+    /** @param {number} cur @param {number} tgt @param {number} tauSec */
+    function dampToward(cur, tgt, tauSec) {
+      if (tauSec <= 1e-4) return tgt;
+      const alpha = 1 - Math.exp(-delta / tauSec);
+      return cur + (tgt - cur) * alpha;
+    }
+
+    if (!cameraIntro.completed || cameraIntro.active) {
+      smoothedCameraYawAssistDemand = dampToward(
+        smoothedCameraYawAssistDemand,
+        0,
+        introDecayTau,
+      );
+      smoothedCameraYawAssist = dampToward(
+        smoothedCameraYawAssist,
+        smoothedCameraYawAssistDemand,
+        introDecayTau * 0.85,
+      );
+      return smoothedCameraYawAssist;
+    }
+
+    const returnTau = Math.max(0.14, ch.cameraYawAssistReturnEaseSec ?? 0.52);
+
+    let instantTarget = 0;
+    if (cameraAssistTargets.length > 0 && !(onlyMoving && !isMoving)) {
+      camera.updateMatrixWorld(true);
+      _camProjView.multiplyMatrices(
+        camera.projectionMatrix,
+        camera.matrixWorldInverse,
+      );
+      _camFrustum.setFromProjectionMatrix(_camProjView);
+
+      const ox = ch.cameraOffset?.x ?? 0;
+      const oz = ch.cameraOffset?.z ?? 8;
+      const defaultAngle = Math.atan2(ox, oz);
+      const maxDistSq = maxDist * maxDist;
+      const steer = 0.28;
+
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < cameraAssistTargets.length; i++) {
+        const sphere = cameraAssistTargets[i].sphere;
+        if (_camFrustum.intersectsSphere(sphere)) continue;
+        const dx = sphere.center.x - charPos.x;
+        const dz = sphere.center.z - charPos.z;
+        const distSq = dx * dx + dz * dz;
+        if (distSq > maxDistSq || distSq < 1e-6) continue;
+        const angleObj = Math.atan2(dx, dz);
+        const diff = Math.atan2(
+          Math.sin(angleObj - defaultAngle),
+          Math.cos(angleObj - defaultAngle),
+        );
+        sum += THREE.MathUtils.clamp(diff * steer, -maxRad, maxRad);
+        n++;
+      }
+      instantTarget = n > 0 ? sum / n : 0;
+    }
+
+    instantTarget = THREE.MathUtils.clamp(instantTarget, -maxRad, maxRad);
+
+    if (instantTarget === 0) {
+      smoothedCameraYawAssistDemand = 0;
+      smoothedCameraYawAssist = dampToward(
+        smoothedCameraYawAssist,
+        0,
+        returnTau,
+      );
+      if (Math.abs(smoothedCameraYawAssist) < 0.0018) {
+        smoothedCameraYawAssist = 0;
+      }
+      return smoothedCameraYawAssist;
+    }
+
+    smoothedCameraYawAssistDemand = dampToward(
+      smoothedCameraYawAssistDemand,
+      instantTarget,
+      demandTau,
+    );
+    smoothedCameraYawAssistDemand = THREE.MathUtils.clamp(
+      smoothedCameraYawAssistDemand,
+      -maxRad,
+      maxRad,
+    );
+    smoothedCameraYawAssist = dampToward(
+      smoothedCameraYawAssist,
+      smoothedCameraYawAssistDemand,
+      easeTau,
+    );
+    smoothedCameraYawAssist = THREE.MathUtils.clamp(
+      smoothedCameraYawAssist,
+      -maxRad,
+      maxRad,
+    );
+    return smoothedCameraYawAssist;
+  }
+
+  function bindCanvas(canvas) {
+    canvas.addEventListener("pointerdown", handlePointerDown, {
+      capture: true,
+    });
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerleave", handlePointerLeave);
+  }
+
+  function unbindCanvas(canvas) {
+    if (_pointerMoveRafId !== 0) {
+      cancelAnimationFrame(_pointerMoveRafId);
+      _pointerMoveRafId = 0;
+    }
+    canvas.removeEventListener("pointerdown", handlePointerDown, {
+      capture: true,
+    });
+    canvas.removeEventListener("pointermove", handlePointerMove);
+    canvas.removeEventListener("pointerleave", handlePointerLeave);
+    canvas.style.cursor = "default";
+  }
+
+  function attachIntClickHintBubble(el) {
+    detachIntClickHintBubble();
+    intClickHintBubbleEl = el;
+    el.addEventListener("pointerdown", handleIntClickHintPointerDown, {
+      capture: true,
+    });
+  }
+
+  function detachIntClickHintBubble() {
+    if (!intClickHintBubbleEl) return;
+    intClickHintBubbleEl.removeEventListener(
+      "pointerdown",
+      handleIntClickHintPointerDown,
+      { capture: true },
+    );
+    intClickHintBubbleEl = null;
+    activeIntHintTarget = null;
+  }
+
+  function resetCameraAssistSmoothing() {
+    smoothedCameraYawAssist = 0;
+    smoothedCameraYawAssistDemand = 0;
+    cameraAssistTargets.length = 0;
+    intProximityTargets.length = 0;
+  }
+
+  function cleanup() {
+    detachIntClickHintBubble();
+    intRaycastMeshes.length = 0;
+    streetLightWorldPositions.length = 0;
+    wasNearStreetLight = false;
+    lastStreetLightSoundAtMs = 0;
+    clockWorldPositions.length = 0;
+    wasNearClock = false;
+    lastClockSoundAtMs = 0;
+    if (unlistenMinigameClose) {
+      unlistenMinigameClose();
+      unlistenMinigameClose = null;
+    }
+    gameMachineRef = null;
+    hasPortalPassTriggerSphere = false;
+    wasInsidePortalPassTrigger = false;
+    if (gameMachineClickAudio) {
+      gameMachineClickAudio.pause();
+      gameMachineClickAudio.src = "";
+      gameMachineClickAudio = null;
+    }
+    if (gumtoongjiMixer) {
+      gumtoongjiMixer.stopAllAction();
+      gumtoongjiMixer = null;
+    }
+    gumtoongjiActions = [];
+    gumtoongjiRaycastMeshes.length = 0;
+    resetCameraAssistSmoothing();
+  }
+
+  return {
+    registerIslandInteractions,
+    bindCanvas,
+    unbindCanvas,
+    attachIntClickHintBubble,
+    detachIntClickHintBubble,
+    update(delta) {
+      if (gumtoongjiMixer) gumtoongjiMixer.update(delta);
+      updateStreetLightProximitySound();
+      updateClockProximitySound();
+      updateIntClickHintBubble();
+      updatePortalPassTrigger();
+    },
+    updateCameraYawAssist,
+    resetCameraAssistSmoothing,
+    cleanup,
+    hideIntClickHint() {
+      activeIntHintTarget = null;
+      intClickHintBubbleEl?.classList.remove("is-visible");
+    },
+  };
+}

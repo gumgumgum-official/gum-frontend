@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { GumCardsModal } from "./GumCardsModal.jsx";
 import { TentSceneViewer } from "./TentSceneViewer.jsx";
-import { playUiClickSound } from "../utils/common/playUiClickSound.js";
+import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import {
   dispatchGumCardsModalClose,
   EVENT_OPEN,

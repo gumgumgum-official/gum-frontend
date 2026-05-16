@@ -1,6 +1,6 @@
-import { resolvePublicAssetUrl } from "./gltfTemplateCache.js";
-import { STAGE3_OBJECTS_CONFIG } from "../../config/stages/stage3/stage3ObjectsConfig.js";
-import { applyExtendedAudioVolume } from "./audioGain.js";
+import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
+import { STAGE3_OBJECTS_CONFIG } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
+import { applyExtendedAudioVolume } from "../../common/audioGain.js";
 
 /** `INT_Well` 클릭 시 `well.wellSoundPaths` 중 랜덤 1종 재생 */
 export function playRandomWellClickSound() {

@@ -15,6 +15,10 @@
  * @property {-1|0|1} [side] - (groundFollow) 후방 슬롯: -1 좌, 1 우, 0 정중앙 뒤
  * @property {number} [angleDeg] - (groundFollow) side가 ±1일 때만 유저 후방 기준 좌우 벌림(도)
  * @property {number} [animationSpeed] - walk/idle timeScale; headFloat는 idle 클립에만 적용
+ * @property {number} [introSpawnExtraM] - (groundFollow) walk-in: 슬롯 거리에 더해 먼 곳에서 스폰(m)
+ * @property {number} [introApproachLerpFactor] - (groundFollow) walk-in: 슬롯으로 접근 보간 강도
+ * @property {number} [introApproachMaxSpeedMps] - (groundFollow) walk-in: 접근 최대 속도(m/s)
+ * @property {number} [introArriveRadiusM] - (groundFollow) walk-in: 슬롯 도착 판정 반경(m)
  * @property {GumCardStickFollowerAttachMode} [attachMode] - 기본 `groundFollow`
  * --- headFloat 전용 ---
  * @property {'capsuleTop'|string} [headAnchor] - `capsuleTop`(바운딩 상단) 또는 본 이름 부분 문자열

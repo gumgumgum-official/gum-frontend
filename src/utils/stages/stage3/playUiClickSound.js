@@ -1,5 +1,5 @@
-import { resolvePublicAssetUrl } from "./gltfTemplateCache.js";
-import { applyExtendedAudioVolume } from "./audioGain.js";
+import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
+import { applyExtendedAudioVolume } from "../../common/audioGain.js";
 
 const UI_CLICK_PATH = "/static/sounds/click.mp3";
 /** @type {HTMLAudioElement | null} */
