@@ -102,7 +102,12 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/tent/Quick_fabric_rustlin_4-1775835465322.mp3",
     ],
     /** 텐트 클릭 시 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
-    tentSoundVolume: 1.6,
+    tentSoundVolume: 1.1,
+    /** 껌 카드 모달이 열려 있는 동안 루프 재생 */
+    tentModalBgmPath: "/static/sounds/card/The_Waking_Meridian.mp3",
+    tentModalBgmVolume: 0.27,
+    /** 모달 BGM 0 → 목표 볼륨까지 올리는 시간(초) */
+    tentModalBgmFadeInSec: 3.7,
     /**
      * 텐트 씬 뷰어 초기 카메라. OrbitControls로 원하는 각도를 찾은 뒤
      * 콘솔 로그에 출력된 값을 여기에 붙여넣어 고정한다.
