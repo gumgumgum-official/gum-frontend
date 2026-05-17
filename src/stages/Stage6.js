@@ -77,10 +77,8 @@ const PHONE_RING_SOUND_PATH = "/static/sounds/airport/phone_ring.mp3";
 const PHONE_RING_SOUND_VOLUME = 0.42;
 const PHONE_HANGUP_SOUND_PATH = "/static/sounds/airport/phone_hangup.mp3";
 const PHONE_HANGUP_SOUND_VOLUME = 0.49;
-const PHONE_CALL_SOUNDS = ["/static/sounds/airport/phone_love.mp3"];
-const PHONE_CALL_RING_SUBTITLES = [
-  "당신을 사랑하는 익명의 껌딱지에게 전화가 왔네요!",
-];
+const PHONE_CALL_SOUNDS = ["/static/sounds/airport/payphone_voice.mp3"];
+const PHONE_CALL_RING_SUBTITLES = ["어? 전화가 온 것 같아요! 한번 받아볼까요?"];
 const PHONE_CALL_SOUND_VOLUME = 0.49;
 const TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS = 60000;
 const TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS = 5000;
