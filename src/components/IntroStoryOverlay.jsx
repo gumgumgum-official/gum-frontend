@@ -86,7 +86,7 @@ const INTRO_SCENES = [
     background:
       "radial-gradient(ellipse at 48% 42%, #17182b 0%, #0e1020 68%, #090b16 100%)",
     imageSrc: "/assets/intro_story/1.svg",
-    lines: ["껌딱지들이 오늘도 기다리고 있어.", "잘 왔어."],
+    lines: ["껌딱지들이 오늘도 기다리고 있어.", "잘 왔어!"],
     dark: true,
   },
 ];

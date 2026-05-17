@@ -23,7 +23,7 @@ import {
  *   getDebugControls: () => { getOrbitControls?: () => { enabled: boolean } | null } | null,
  *   getIsStageActive: () => boolean,
  *   onIntroTopViewCommitted: () => void,
- *   onIntroComplete: () => void,
+ *   onIntroComplete?: () => void,
  * }} params
  */
 export function createStage3CameraIntroController({
@@ -33,7 +33,7 @@ export function createStage3CameraIntroController({
   getDebugControls,
   getIsStageActive,
   onIntroTopViewCommitted,
-  onIntroComplete,
+  onIntroComplete = () => {},
 }) {
   const state = {
     active: false,

@@ -88,13 +88,16 @@ export function createStage3IslandController({
 
     setFountainState(setupFountainFromModel(model, animations));
     setBackgroundModel(model);
-    onUiMounted();
-    if (getIsStageActive()) {
-      onIntroAudio();
-    }
-    onDebugOrbitTarget(center);
     setCameraRef(stageCamera);
     setGroundY(backgroundMaxY);
+    onDebugOrbitTarget(center);
+
+    // 콜라이더·walkable 수집 전에 카메라 인트로를 먼저 시작(진입 자막만 Stage3에서 지연)
+    if (getIsStageActive()) {
+      onCameraIntroStart(center, backgroundBounds);
+    }
+
+    onUiMounted();
     onMonitorBackgroundReady();
 
     const useStatic = config.model.useStaticObstacleColliders !== false;
@@ -117,10 +120,6 @@ export function createStage3IslandController({
       walkableMeshes,
       allowedBoundsXZ: buildStage3AllowedBoundsXZ(walkableBounds, hasBounds),
     });
-
-    if (getIsStageActive()) {
-      onCameraIntroStart(center, backgroundBounds);
-    }
 
     scheduleDeferredSetup(() => {
       if (!getIsStageActive()) return;
