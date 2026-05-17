@@ -21,7 +21,7 @@ import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
 import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
-import { playUiClickSound } from "./utils/common/playUiClickSound.js";
+import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,

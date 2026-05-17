@@ -1,7 +1,7 @@
 /**
  * Stage3에 쓰이는 GLB URL을 앱 기동 직후 백그라운드에서 파싱까지 시작한다.
  */
-import { STAGE3_CONFIG } from "../../../config/stages/stage3.js";
+import { STAGE3_CONFIG } from "../../../config/stages/stage3/stage3.js";
 import { STAGE3_STANDALONE_FLOWER_GLB_PATHS } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
 import {
   loadGltfTemplateCached,
@@ -30,11 +30,11 @@ function getStage3PrewarmAbsoluteUrls(options = {}) {
   }
   const gumPath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.modelPath ??
-    "/models/common/gum_walk_final.glb";
+    "/models/common/gum/gum_walk_final.glb";
   urls.push(resolvePublicAssetUrl(gumPath));
   const gumIdlePath =
     STAGE3_CONFIG.character?.gumFollowers?.models?.idleModelPath ??
-    "/models/common/gum_idle.glb";
+    "/models/common/gum/gum_idle.glb";
   urls.push(resolvePublicAssetUrl(gumIdlePath));
   if (includeIcecreamSpawnPaths) {
     for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {

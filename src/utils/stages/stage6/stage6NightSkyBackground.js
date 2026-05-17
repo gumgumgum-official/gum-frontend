@@ -1,7 +1,7 @@
 /**
- * Stage6 배경: docs/loading-transition-prototype.html 의 START/로딩 화면과 동일한 밤하늘
+ * Stage6 배경: App 로딩 화면(#loading-bg, src/style.css)과 동일한 밤하늘 톤
  * — 별: createStars + @keyframes twinkle
- * — 세로 streak: .streak + @keyframes streakMove (로딩 화면 5개와 동일한 위치·딜레이·주기)
+ * — 세로 streak: LOADING_STREAKS (로딩 UI 5개와 동일한 위치·딜레이·주기)
  */
 
 import * as THREE from "three";

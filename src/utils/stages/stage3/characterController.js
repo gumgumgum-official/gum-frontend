@@ -51,6 +51,7 @@ function findClip(clips, regex) {
  *   getPosition: () => import("three").Vector3 | null,
  *   getYaw: () => number | null,
  *   getIsMoving: () => boolean,
+ *   getHeadAnchorWorld: (out: import("three").Vector3) => boolean,
  *   playHammerCue: (
  *     onImpact?: () => void,
  *     options?: { reverse?: boolean },
@@ -114,6 +115,7 @@ export function createCharacterController({
   const _groundRayOrigin = new THREE.Vector3();
   const _groundDown = new THREE.Vector3(0, -1, 0);
   const _groundHits = [];
+  const _headAnchorBox = new THREE.Box3();
   const GROUND_MISS_TOLERANCE_FRAMES = 5;
   const GROUND_HEIGHT_EASE_SPEED = 16;
   const MAX_SAFE_STEP_DOWN = 0.22;
@@ -583,6 +585,42 @@ export function createCharacterController({
     getPosition: () => characterModel?.position ?? null,
     getYaw: () => characterModel?.rotation.y ?? null,
     getIsMoving: () => isMoving,
+
+    /**
+     * 머리 근처 월드 좌표 — Bone 이름에 "head" 포함 우선, 없으면 가시 메시 AABB 상단 중심.
+     * @param {THREE.Vector3} out
+     */
+    getHeadAnchorWorld(out) {
+      const src = isWalking
+        ? characterModel
+        : (idleCharacterModel ?? characterModel);
+      if (!src) return false;
+      src.updateMatrixWorld(true);
+      /** @type {THREE.Bone | null} */
+      let headBone = null;
+      src.traverse((o) => {
+        if (headBone || !(/** @type {any} */ (o).isBone)) return;
+        const n = String(o.name || "").toLowerCase();
+        if (n.includes("head")) headBone = /** @type {THREE.Bone} */ (o);
+      });
+      if (headBone) {
+        headBone.getWorldPosition(out);
+        return (
+          Number.isFinite(out.x) &&
+          Number.isFinite(out.y) &&
+          Number.isFinite(out.z)
+        );
+      }
+      _headAnchorBox.setFromObject(src);
+      if (_headAnchorBox.isEmpty()) return false;
+      _headAnchorBox.getCenter(out);
+      out.y = _headAnchorBox.max.y;
+      return (
+        Number.isFinite(out.x) &&
+        Number.isFinite(out.y) &&
+        Number.isFinite(out.z)
+      );
+    },
 
     playHammerCue(onImpact, options = {}) {
       if (!punchCharacterModel || !punchAction || isPunchPlaying) return;

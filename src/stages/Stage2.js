@@ -21,7 +21,7 @@ import {
 import { createStage2GumSpeechBubbles } from "../utils/stages/stage2/stage2GumSpeechBubbles.js";
 import { STAGE2_GUM_SPEECH_LINES } from "../config/stages/stage2/gumSpeechLines.js";
 import { createStageDebugControls } from "../utils/common/stageDebugControls.js";
-import { STAGE2_CONFIG } from "../config/stages/stage2.js";
+import { STAGE2_CONFIG } from "../config/stages/stage2/stage2.js";
 import { subscribeHandwritingRealtime } from "../utils/handwriting/handwritingRealtime.js";
 import {
   createHandwritingSvgPlaneGroup,
@@ -412,18 +412,11 @@ export function Stage2() {
         }
         processedHandwritingKeys.add(key);
         if (!isStage2Active) return;
-        await createFallingText(
-          metadata,
-          scene,
-          this.camera,
-          fallingTexts,
-          {
-            initial: false,
-            groundY: characterWalkGroundY,
-            validSpawnGrid,
-          },
-          () => characterMoveBounds,
-        );
+        await createFallingText(metadata, scene, this.camera, fallingTexts, {
+          initial: false,
+          groundY: characterWalkGroundY,
+          validSpawnGrid,
+        });
       };
 
       scene.fog = new THREE.Fog(
@@ -540,7 +533,6 @@ export function Stage2() {
           scene,
           this.camera,
           fallingTexts,
-          () => characterMoveBounds,
           (metadata) => ingestHandwriting(metadata, "initial"),
           characterWalkGroundY,
         );
@@ -752,15 +744,16 @@ export function Stage2() {
 
             // 흔들그네 어셈블리 전체(캐릭터 포함) 70% 축소
             // SwingPivot의 부모를 루트로 삼아 통째로 스케일 — 이름과 무관한 자식(캐릭터 등)까지 포함
+            /** @type {import("three").Object3D | null} */
             let swingAssemblyRoot = null;
             model.traverse((obj) => {
-              if (swingAssemblyRoot) return;
+              if (swingAssemblyRoot !== null) return;
               if (obj.name === "SwingPivot") {
                 swingAssemblyRoot =
                   obj.parent && obj.parent !== model ? obj.parent : obj;
               }
             });
-            if (swingAssemblyRoot) {
+            if (swingAssemblyRoot !== null) {
               swingAssemblyRoot.scale.multiplyScalar(0.7);
               console.log("[Stage2] swing 70% 축소:", swingAssemblyRoot.name);
             } else {
@@ -1012,9 +1005,9 @@ function loadCharacters(
   obstacleBoxes = [],
 ) {
   const characterPath =
-    config.characterModelPath ?? "/models/common/gum_walk_final.glb";
+    config.characterModelPath ?? "/models/common/gum/gum_walk_final.glb";
   const characterIdlePath =
-    config.characterIdleModelPath ?? "/models/common/gum_idle.glb";
+    config.characterIdleModelPath ?? "/models/common/gum/gum_idle.glb";
   const characterPositions = config.characters ?? [
     { position: {} },
     { position: {} },
@@ -1411,7 +1404,7 @@ function loadPropsFromConfig(
         propConfig.scale?.z ?? 1,
       );
       root.traverse((child) => {
-        if (child.isMesh) {
+        if (child instanceof THREE.Mesh) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
@@ -1449,7 +1442,6 @@ async function loadInitialHandwritings(
   scene,
   camera,
   fallingTextsArr,
-  getIslandBounds,
   onMetadata,
   groundY = GROUND_Y,
 ) {
@@ -1527,14 +1519,10 @@ async function loadInitialHandwritings(
       if (typeof onMetadata === "function") {
         await onMetadata(metadata);
       } else {
-        await createFallingText(
-          metadata,
-          scene,
-          camera,
-          fallingTextsArr,
-          { initial: false, groundY },
-          getIslandBounds,
-        );
+        await createFallingText(metadata, scene, camera, fallingTextsArr, {
+          initial: false,
+          groundY,
+        });
       }
     }
   } catch (err) {
@@ -1635,7 +1623,6 @@ async function createFallingText(
   camera,
   fallingTextsArr,
   options = {},
-  getIslandBounds,
 ) {
   const {
     initial = false,

@@ -2,7 +2,7 @@
  * Stage2에 쓰이는 GLB URL을 앱 기동 직후 백그라운드에서 파싱까지 시작한다.
  */
 
-import { STAGE2_CONFIG } from "../../../config/stages/stage2.js";
+import { STAGE2_CONFIG } from "../../../config/stages/stage2/stage2.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
@@ -27,10 +27,10 @@ function getStage2PrewarmAbsoluteUrls() {
   }
 
   const charPath =
-    STAGE2_CONFIG.characterModelPath ?? "/models/common/gum_walk_final.glb";
+    STAGE2_CONFIG.characterModelPath ?? "/models/common/gum/gum_walk_final.glb";
   urls.push(resolvePublicAssetUrl(charPath));
   const charIdlePath =
-    STAGE2_CONFIG.characterIdleModelPath ?? "/models/common/gum_idle.glb";
+    STAGE2_CONFIG.characterIdleModelPath ?? "/models/common/gum/gum_idle.glb";
   urls.push(resolvePublicAssetUrl(charIdlePath));
 
   return [...new Set(urls)];

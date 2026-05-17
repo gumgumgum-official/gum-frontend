@@ -115,6 +115,7 @@
  * Stage3 껌딱지 GLB 경로·스케일
  * @typedef {Object} Stage3GumFollowerModelsConfig
  * @property {string} [modelPath]
+ * @property {string} [idleModelPath] - 정지 시 전용 idle GLB (생략 시 컨트롤러 기본 gum_idle 경로)
  * @property {number} [scale] - 모델 전체 스케일
  */
 
@@ -128,8 +129,10 @@
  * @property {number} [facingLerpFactor] - 바라보기 yaw lerp
  * @property {number} [lookAtHeightOffset] - 유저 바라볼 때 y 오프셋
  * @property {number} [bubbleOffsetY] - 말풍선 세로 앵커 (AABB 높이 배율, Stage2 기본 0.85)
+ * @property {number} [animationBaseBoost] - animationSpeed 미지정 시 스케일 기반 자동 속도에 곱하는 기본 계수
  * @property {number} [animationSpeed] - 애니메이션 속도(미지정 시 스케일로 보정)
  * @property {number|null} [groundOffset] - 발 높이 보정(null이면 캐릭터 groundOffset)
+ * @property {number} [collisionRadius] - XZ 원형 충돌 반경(m); 생략 시 컨트롤러 기본값
  * @property {Stage3GumFollowerBreakOffConfig} [breakOff]
  */
 

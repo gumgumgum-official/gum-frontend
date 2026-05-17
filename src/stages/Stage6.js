@@ -11,11 +11,11 @@ import {
   resolvePublicAssetUrl,
 } from "../utils/common/gltfTemplateCache.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
-import { STAGE6_CONFIG } from "../config/stages/stage6.js";
+import { STAGE6_CONFIG } from "../config/stages/stage6/stage6.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC,
-} from "../config/stages/stage6AirportAnnouncement.js";
+} from "../config/stages/stage6/stage6AirportAnnouncement.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,

@@ -6,12 +6,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { GumCardsModal } from "./GumCardsModal.jsx";
 import { TentSceneViewer } from "./TentSceneViewer.jsx";
-import { playUiClickSound } from "../utils/common/playUiClickSound.js";
+import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import {
   dispatchGumCardsModalClose,
   EVENT_OPEN,
   EVENT_CLOSE,
 } from "../utils/stages/stage3/gumCardsModalLauncher.js";
+import { dispatchGumCardsStick } from "../events/gumCardsEvents.js";
 
 export function GumCardsModalOverlay() {
   // "closed" | "tent" | "cards"
@@ -28,7 +29,9 @@ export function GumCardsModalOverlay() {
   }, []);
 
   useEffect(() => {
-    const onOpen = () => setPhase("tent");
+    const onOpen = () => {
+      setPhase("tent");
+    };
     window.addEventListener(EVENT_OPEN, onOpen);
     return () => window.removeEventListener(EVENT_OPEN, onOpen);
   }, []);
@@ -39,12 +42,24 @@ export function GumCardsModalOverlay() {
     return () => window.removeEventListener(EVENT_CLOSE, onClose);
   }, []);
 
+  const handleGumCardStick = useCallback(
+    (card) => {
+      dispatchGumCardsStick(card.num);
+      closeAll();
+    },
+    [closeAll],
+  );
+
   return (
     <>
       {(phase === "tent" || phase === "cards") && (
         <TentSceneViewer onClose={closeAll} onCardOpen={openCards} />
       )}
-      <GumCardsModal open={phase === "cards"} onClose={closeAll} />
+      <GumCardsModal
+        open={phase === "cards"}
+        onClose={closeAll}
+        onStick={handleGumCardStick}
+      />
     </>
   );
 }

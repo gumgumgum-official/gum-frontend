@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
-import { playRandomNoticePaperSound } from "../utils/common/playNoticePaperSound.js";
-import { playUiClickSound } from "../utils/common/playUiClickSound.js";
+import { playRandomNoticePaperSound } from "../utils/stages/stage3/playNoticePaperSound.js";
+import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
 import { GuestbookEmbed } from "./GuestbookEmbed";
 

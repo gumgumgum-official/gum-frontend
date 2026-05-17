@@ -3,7 +3,7 @@
  */
 
 import * as THREE from "three";
-import { STAGE6_CONFIG } from "../../../config/stages/stage6.js";
+import { STAGE6_CONFIG } from "../../../config/stages/stage6/stage6.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,

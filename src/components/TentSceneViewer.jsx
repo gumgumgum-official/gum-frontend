@@ -21,24 +21,65 @@ function getCamCfg() {
 }
 
 export function TentSceneViewer({ onClose, onCardOpen }) {
+  const FADE_IN_MS = 600;
   const canvasRef = useRef(null);
+  const rootRef = useRef(null);
   const onCardOpenRef = useRef(onCardOpen);
   useEffect(() => {
     onCardOpenRef.current = onCardOpen;
   }, [onCardOpen]);
 
   const [bubble, setBubble] = useState({ msg: "", visible: false });
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const T = [
+    const rafId = requestAnimationFrame(() => {
+      setIsVisible(true);
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  useEffect(() => {
+    const runBubbleSequence = () => [
       setTimeout(() => setBubble({ msg: BUBBLES[0], visible: true }), 600),
       setTimeout(() => setBubble((b) => ({ ...b, visible: false })), 3100),
       setTimeout(() => setBubble({ msg: BUBBLES[1], visible: true }), 3600),
       setTimeout(() => setBubble((b) => ({ ...b, visible: false })), 7100),
       setTimeout(() => onCardOpenRef.current?.(), 7600),
     ];
-    return () => T.forEach(clearTimeout);
-  }, []);
+
+    const rootEl = rootRef.current;
+    if (!rootEl) {
+      const timers = runBubbleSequence();
+      return () => timers.forEach(clearTimeout);
+    }
+
+    /** @type {number[]} */
+    let timers = [];
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      timers = runBubbleSequence();
+    };
+
+    // 페이드 인 트랜지션이 끝난 뒤 자막 시퀀스를 시작한다.
+    const onFadeInEnd = (event) => {
+      if (event.target !== rootEl) return;
+      if (event.propertyName !== "opacity") return;
+      start();
+    };
+    rootEl.addEventListener("transitionend", onFadeInEnd);
+
+    // 애니메이션 이벤트가 누락되는 환경 대비 fallback.
+    const fallbackId = setTimeout(start, FADE_IN_MS + 100);
+
+    return () => {
+      rootEl.removeEventListener("transitionend", onFadeInEnd);
+      clearTimeout(fallbackId);
+      timers.forEach(clearTimeout);
+    };
+  }, [FADE_IN_MS]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -126,7 +167,10 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
   }, []);
 
   return (
-    <div className="tent-scene-viewer">
+    <div
+      ref={rootRef}
+      className={`tent-scene-viewer${isVisible ? " is-visible" : ""}`}
+    >
       <canvas ref={canvasRef} className="tent-scene-canvas" />
       <div
         className={`speech-bubble-stage6 tent-bubble${bubble.visible ? " is-visible" : ""}`}
