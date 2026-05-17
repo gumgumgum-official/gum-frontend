@@ -35,6 +35,20 @@ const POSTER_BASE = {
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
   const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "guestbook" | null
+  const [gbScale, setGbScale] = useState(1);
+
+  useEffect(() => {
+    if (zoomedPoster !== "guestbook") return;
+    const compute = () => {
+      const s =
+        Math.min(window.innerWidth / 960, window.innerHeight / 800) * 0.93;
+      setGbScale(Math.max(s, 0.4));
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [zoomedPoster]);
+
   const closeWithSound = useCallback(() => {
     playUiClickSound();
     onClose();
@@ -78,6 +92,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
             alignItems: "center",
             justifyContent: "center",
             padding: "clamp(10px, 1.5vw, 20px)",
+            pointerEvents: isOpen ? "auto" : "none",
           }}
         >
           <motion.div
@@ -384,10 +399,8 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  paddingTop: 16,
-                  paddingBottom: "12vh",
-                  paddingLeft: 24,
-                  paddingRight: 24,
+                  padding: zoomedPoster === "guestbook" ? 0 : "16px 24px 12vh",
+                  pointerEvents: zoomedPoster ? "auto" : "none",
                 }}
               >
                 <motion.div
@@ -402,8 +415,10 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   onClick={(e) => e.stopPropagation()}
                   style={{
                     position: "relative",
-                    maxWidth: "90vw",
-                    maxHeight: "85vh",
+                    ...(zoomedPoster !== "guestbook" && {
+                      maxWidth: "90vw",
+                      maxHeight: "85vh",
+                    }),
                   }}
                 >
                   {zoomedPoster === "feast" && (
@@ -431,7 +446,13 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   {zoomedPoster === "vote" && <GgumddiVoteSection />}
 
                   {zoomedPoster === "guestbook" && (
-                    <div style={{ width: "min(960px, 88vw)" }}>
+                    <div
+                      style={{
+                        width: 960,
+                        transform: `scale(${gbScale})`,
+                        transformOrigin: "center center",
+                      }}
+                    >
                       <GuestbookEmbed onClose={() => setZoomedPoster(null)} />
                     </div>
                   )}

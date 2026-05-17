@@ -77,17 +77,12 @@ const PHONE_RING_SOUND_PATH = "/static/sounds/airport/phone_ring.mp3";
 const PHONE_RING_SOUND_VOLUME = 0.42;
 const PHONE_HANGUP_SOUND_PATH = "/static/sounds/airport/phone_hangup.mp3";
 const PHONE_HANGUP_SOUND_VOLUME = 0.49;
-const PHONE_CALL_SOUNDS = [
-  "/static/sounds/airport/phone_love.mp3",
-  "/static/sounds/airport/phone_prank.mp3",
-];
+const PHONE_CALL_SOUNDS = ["/static/sounds/airport/phone_love.mp3"];
 const PHONE_CALL_RING_SUBTITLES = [
   "당신을 사랑하는 익명의 껌딱지에게 전화가 왔네요!",
-  "어! 또 다시 전화가 온 것 같아요! 한번 받아볼까요?",
 ];
 const PHONE_CALL_SOUND_VOLUME = 0.49;
-const TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS = 5000;
-const TEL_RING_AGAIN_DELAY_MS = 10000;
+const TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS = 60000;
 const TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS = 5000;
 const ATM_INTERACTION_REQUIRED_COUNT = 3;
 const ATM_EMISSIVE_DARK_STRENGTH = 0.06;
@@ -942,33 +937,13 @@ export function Stage6() {
     phoneCallAudio.src = callSrc;
     phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
     phoneCallAudio.onended = () => {
-      if (telCallIndex < PHONE_CALL_SOUNDS.length && isStage6Active) {
-        telEmissiveTarget = 0;
-        isTelActivated = false;
-        telRingAgainTimeoutId = window.setTimeout(() => {
-          telRingAgainTimeoutId = 0;
-          if (isStage6Active) {
-            isTelActivated = true;
-            telEmissiveTarget = 1;
-            playPhoneRing();
-            showTelBubble("click!");
-            const ringSubtitle =
-              PHONE_CALL_RING_SUBTITLES[telCallIndex] ??
-              PHONE_CALL_RING_SUBTITLES[PHONE_CALL_RING_SUBTITLES.length - 1];
-            dispatchStage6SubtitleSequence([
-              { text: ringSubtitle, holdMs: 3000 },
-            ]);
-          }
-        }, TEL_RING_AGAIN_DELAY_MS);
-      } else {
-        telEmissiveTarget = 0;
-        telRingAgainTimeoutId = window.setTimeout(() => {
-          telRingAgainTimeoutId = 0;
-          if (isStage6Active && !isAtmActivated) {
-            activateAtmKiosk();
-          }
-        }, TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS);
-      }
+      telEmissiveTarget = 0;
+      telRingAgainTimeoutId = window.setTimeout(() => {
+        telRingAgainTimeoutId = 0;
+        if (isStage6Active && !isAtmActivated) {
+          activateAtmKiosk();
+        }
+      }, TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS);
     };
     try {
       phoneCallAudio.load();
