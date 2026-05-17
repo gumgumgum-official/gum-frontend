@@ -4,6 +4,7 @@
  * (서버 상태는 `postMonitorComplete`로 이미 idle 처리)
  */
 
+import { invalidateVoteBundleCache } from "../../lib/voteBundleCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../../lib/voteApi.js";
 
 /**
@@ -16,6 +17,7 @@ import { clearGgumddiMyVotesFromLocalStorage } from "../../lib/voteApi.js";
  */
 export async function resetClientForNextKioskVisitor() {
   try {
+    invalidateVoteBundleCache();
     clearGgumddiMyVotesFromLocalStorage();
   } catch (err) {
     console.warn("[resetClientForNextKioskVisitor] ggumddi vote keys:", err);
