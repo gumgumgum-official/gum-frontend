@@ -24,5 +24,7 @@ export const FRAGMENT_FADE_START = 0.8;
 export const FRAGMENT_FADE_END = 2.0;
 export const FLOWER_BLOOM_DURATION = 3;
 export const FLOWER_SCALE = 2;
+/** 꽃 스케일 하한 = FLOWER_SCALE × 이 비율 (최대는 FLOWER_SCALE) */
+export const FLOWER_SCALE_MIN_RATIO = 0.5;
 export const FLOWER_Y_OFFSET = 0.15;
 export const FRAGMENT_POOL_MAX = 32;
