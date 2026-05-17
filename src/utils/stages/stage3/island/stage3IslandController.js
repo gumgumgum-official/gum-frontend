@@ -7,6 +7,7 @@ import {
 } from "../islandStaticColliders.js";
 import { setupFountainFromModel } from "../fountainEffect.js";
 import { createGumFollowersController } from "../gumFollowerController.js";
+import { applyStage3BackgroundMeshFlags } from "../backgroundLoader.js";
 import {
   collectStage3WalkableFromModel,
   buildStage3AllowedBoundsXZ,
@@ -57,7 +58,7 @@ export function createStage3IslandController({
   setGumFollowers,
   drainPendingGumStickCardNums,
   onUiMounted,
-  onIntroAudio,
+  onIntroAudio: _onIntroAudio,
   onDebugOrbitTarget,
   onMonitorBackgroundReady,
   onCameraIntroStart,
@@ -66,6 +67,8 @@ export function createStage3IslandController({
   applyPortalVortex,
   preloadIceCream,
 }) {
+  void _onIntroAudio;
+
   /**
    * @param {{
    *   model: import("three").Object3D,
@@ -86,13 +89,17 @@ export function createStage3IslandController({
     const character = getCharacter();
     if (!scene || !character) return;
 
-    setFountainState(setupFountainFromModel(model, animations));
     setBackgroundModel(model);
     setCameraRef(stageCamera);
     setGroundY(backgroundMaxY);
     onDebugOrbitTarget(center);
 
-    // 콜라이더·walkable 수집 전에 카메라 인트로를 먼저 시작(진입 자막만 Stage3에서 지연)
+    /** @type {import("../islandStaticColliders.js").IslandColliderAabb[]} */
+    const islandStaticColliders = [];
+    /** @type {import("three").Mesh[]} */
+    const walkableMeshList = [];
+    setCollidersRef(islandStaticColliders);
+
     if (getIsStageActive()) {
       onCameraIntroStart(center, backgroundBounds);
     }
@@ -100,72 +107,81 @@ export function createStage3IslandController({
     onUiMounted();
     onMonitorBackgroundReady();
 
-    const useStatic = config.model.useStaticObstacleColliders !== false;
-    const rawColliders = useStatic
-      ? collectIslandStaticColliderBoxes(model)
-      : [];
-    const islandStaticColliders = useStatic
-      ? filterCollidersExcludingDominantTerrain(rawColliders, backgroundBounds)
-      : [];
-
-    const {
-      meshes: walkableMeshes,
-      bounds: walkableBounds,
-      hasBounds,
-    } = collectStage3WalkableFromModel(model);
-
-    setCollidersRef(islandStaticColliders);
-
     character.setup(backgroundMaxY, backgroundBounds, islandStaticColliders, {
-      walkableMeshes,
-      allowedBoundsXZ: buildStage3AllowedBoundsXZ(walkableBounds, hasBounds),
+      walkableMeshes: walkableMeshList,
+      allowedBoundsXZ: null,
     });
 
     scheduleDeferredSetup(() => {
       if (!getIsStageActive()) return;
+
+      applyStage3BackgroundMeshFlags(model, config);
+      setFountainState(setupFountainFromModel(model, animations));
+
+      const useStatic = config.model.useStaticObstacleColliders !== false;
+      if (useStatic) {
+        const rawColliders = collectIslandStaticColliderBoxes(model);
+        const filtered = filterCollidersExcludingDominantTerrain(
+          rawColliders,
+          backgroundBounds,
+        );
+        islandStaticColliders.push(...filtered);
+      }
+
+      const {
+        meshes: walkableMeshes,
+        bounds: walkableBounds,
+        hasBounds,
+      } = collectStage3WalkableFromModel(model);
+      walkableMeshList.push(...walkableMeshes);
+      character.applyIslandWalkableBounds(
+        buildStage3AllowedBoundsXZ(walkableBounds, hasBounds),
+      );
+
       registerIslandInteractions(model, animations);
       setPortalVortexMaterial(applyPortalVortex(model));
-    });
 
-    const gumFollowers = createGumFollowersController({
-      scene,
-      glbLoader: getGlbLoader(),
-      config,
-      getUserState: () => ({
-        position: character.getPosition?.() ?? null,
-        yaw: character.getYaw?.() ?? null,
-        moving: character.getIsMoving?.() ?? false,
-      }),
-      getHeadAnchorWorld: (out) => character.getHeadAnchorWorld?.(out) ?? false,
-      renderer: getRenderer(),
-      getCamera: () => stageCamera,
-    });
-    setGumFollowers(gumFollowers);
-
-    void gumFollowers
-      .init({
-        backgroundMaxY,
-        isCancelled: () => !getIsStageActive() || isGumCancelled(),
-        staticColliderBoxes: islandStaticColliders,
-        walkableMeshes,
-      })
-      .then(() => {
-        if (!getIsStageActive()) return;
-        const pending = drainPendingGumStickCardNums();
-        for (const cardNum of pending) {
-          if (typeof cardNum === "string")
-            gumFollowers.addStickFollower(cardNum);
-        }
-      })
-      .catch((e) => {
-        if (import.meta.env.DEV) {
-          console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
-        }
-        gumFollowers.cleanup?.();
-        setGumFollowers(null);
+      const gumFollowers = createGumFollowersController({
+        scene,
+        glbLoader: getGlbLoader(),
+        config,
+        getUserState: () => ({
+          position: character.getPosition?.() ?? null,
+          yaw: character.getYaw?.() ?? null,
+          moving: character.getIsMoving?.() ?? false,
+        }),
+        getHeadAnchorWorld: (out) =>
+          character.getHeadAnchorWorld?.(out) ?? false,
+        renderer: getRenderer(),
+        getCamera: () => stageCamera,
       });
+      setGumFollowers(gumFollowers);
 
-    void preloadIceCream();
+      void gumFollowers
+        .init({
+          backgroundMaxY,
+          isCancelled: () => !getIsStageActive() || isGumCancelled(),
+          staticColliderBoxes: islandStaticColliders,
+          walkableMeshes: walkableMeshList,
+        })
+        .then(() => {
+          if (!getIsStageActive()) return;
+          const pending = drainPendingGumStickCardNums();
+          for (const cardNum of pending) {
+            if (typeof cardNum === "string")
+              gumFollowers.addStickFollower(cardNum);
+          }
+        })
+        .catch((e) => {
+          if (import.meta.env.DEV) {
+            console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
+          }
+          gumFollowers.cleanup?.();
+          setGumFollowers(null);
+        });
+
+      void preloadIceCream();
+    });
   }
 
   return { onBackgroundReady };

@@ -172,6 +172,17 @@ export function createCharacterController({
   }
 
   return {
+    /**
+     * walkable 수집이 끝난 뒤 이동 허용 XZ만 갱신한다(콜라이더 배열은 동일 참조로 push).
+     * @param {THREE.Box3 | null} allowedBounds
+     */
+    applyIslandWalkableBounds(allowedBounds) {
+      allowedBoundsXZ =
+        allowedBounds instanceof THREE.Box3 && !allowedBounds.isEmpty()
+          ? allowedBounds.clone()
+          : null;
+    },
+
     setup(backgroundMaxY, bounds, colliderBoxes = [], setupOptions = {}) {
       const {
         worldSpawnXZ,
