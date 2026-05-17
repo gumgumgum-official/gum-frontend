@@ -20,7 +20,11 @@ function getCamCfg() {
   );
 }
 
-export function TentSceneViewer({ onClose, onCardOpen }) {
+export function TentSceneViewer({
+  onClose,
+  onCardOpen,
+  skipBubbleSequence = false,
+}) {
   const FADE_IN_MS = 600;
   const canvasRef = useRef(null);
   const rootRef = useRef(null);
@@ -40,6 +44,8 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
   }, []);
 
   useEffect(() => {
+    if (skipBubbleSequence) return;
+
     const runBubbleSequence = () => [
       setTimeout(() => setBubble({ msg: BUBBLES[0], visible: true }), 600),
       setTimeout(() => setBubble((b) => ({ ...b, visible: false })), 3100),
@@ -79,7 +85,7 @@ export function TentSceneViewer({ onClose, onCardOpen }) {
       clearTimeout(fallbackId);
       timers.forEach(clearTimeout);
     };
-  }, [FADE_IN_MS]);
+  }, [FADE_IN_MS, skipBubbleSequence]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

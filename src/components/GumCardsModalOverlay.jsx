@@ -1,9 +1,9 @@
 /**
  * 껌 카드 모달 오버레이: gum-cards-modal:open 수신 시
- * 1) TentSceneViewer 를 먼저 표시
- * 2) TentSceneViewer 에서 클릭하면 GumCardsModal 표시
+ * 1) 최초: TentSceneViewer(자막) → GumCardsModal
+ * 2) 재오픈: TentSceneViewer(자막 없음) + GumCardsModal 바로 표시
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { GumCardsModal } from "./GumCardsModal.jsx";
 import { TentSceneViewer } from "./TentSceneViewer.jsx";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
@@ -17,6 +17,9 @@ import { dispatchGumCardsStick } from "../events/gumCardsEvents.js";
 export function GumCardsModalOverlay() {
   // "closed" | "tent" | "cards"
   const [phase, setPhase] = useState("closed");
+  /** 세션 내 텐트 자막 시퀀스를 이미 본 뒤 재오픈 시 자막만 생략 */
+  const hasSeenTentIntroRef = useRef(false);
+  const [skipTentBubbleSequence, setSkipTentBubbleSequence] = useState(false);
 
   const closeAll = useCallback(() => {
     playUiClickSound();
@@ -30,6 +33,13 @@ export function GumCardsModalOverlay() {
 
   useEffect(() => {
     const onOpen = () => {
+      if (hasSeenTentIntroRef.current) {
+        setSkipTentBubbleSequence(true);
+        setPhase("cards");
+        return;
+      }
+      hasSeenTentIntroRef.current = true;
+      setSkipTentBubbleSequence(false);
       setPhase("tent");
     };
     window.addEventListener(EVENT_OPEN, onOpen);
@@ -53,7 +63,11 @@ export function GumCardsModalOverlay() {
   return (
     <>
       {(phase === "tent" || phase === "cards") && (
-        <TentSceneViewer onClose={closeAll} onCardOpen={openCards} />
+        <TentSceneViewer
+          onClose={closeAll}
+          onCardOpen={openCards}
+          skipBubbleSequence={skipTentBubbleSequence}
+        />
       )}
       <GumCardsModal
         open={phase === "cards"}
