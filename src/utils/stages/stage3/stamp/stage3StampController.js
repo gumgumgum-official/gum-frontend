@@ -451,6 +451,9 @@ export function createStage3StampController({
     handlePortalBlockedFeedback,
     handleStampKeyToggle,
     isStampIntroAnimating: () => stage3StampIntroAnimating,
+    /** 진입 자막 후 미니맵이 좌상단에 안착한 뒤 */
+    isStampPanelSettledInCorner: () =>
+      stampPanelRevealReady && !stage3StampIntroAnimating,
     isInteractionLocked: () => stage3InteractionLocked,
     isPosterZoomOpen: () => isStampPosterZoomOpen,
     isPortalOpenReady: () =>

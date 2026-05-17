@@ -741,10 +741,10 @@ export function createStage3LetterController({
   }
 
   function addCrackCluster(state, anchor) {
-    const branchCount = 2 + Math.floor(Math.random() * 3);
+    const branchCount = 1 + Math.floor(Math.random() * 2);
     for (let b = 0; b < branchCount; b++) {
       const angle = Math.random() * Math.PI * 2;
-      const len = 0.22 + Math.random() * 0.5;
+      const len = (0.22 + Math.random() * 0.5) * 0.7;
       const end = new THREE.Vector3(
         anchor.x + Math.cos(angle) * len,
         anchor.y + Math.sin(angle) * len,
@@ -758,9 +758,30 @@ export function createStage3LetterController({
     if (!state?.group) return;
     const verts = getLetterFrontCapVertices(state);
     if (verts.length === 0) return;
-    const clusterCount = Math.min(10, 3 + Math.floor(state.hitCount / 2));
-    for (let i = 0; i < clusterCount; i++) {
-      const anchor = verts[Math.floor(Math.random() * verts.length)];
+    const clusterCount = Math.min(20, 6 + Math.floor(state.hitCount / 2));
+
+    // bbox를 격자로 나눠 각 셀에서 앵커 선택 → 글자 전체에 골고루 퍼짐
+    const box = new THREE.Box3();
+    for (const v of verts) box.expandByPoint(v);
+    const sx = box.max.x - box.min.x || 1;
+    const sy = box.max.y - box.min.y || 1;
+    const cols = Math.ceil(Math.sqrt(clusterCount));
+    const rows = Math.ceil(clusterCount / cols);
+
+    for (let ci = 0; ci < clusterCount; ci++) {
+      const col = ci % cols;
+      const row = Math.floor(ci / cols);
+      const xMin = box.min.x + (col / cols) * sx;
+      const xMax = box.min.x + ((col + 1) / cols) * sx;
+      const yMin = box.min.y + (row / rows) * sy;
+      const yMax = box.min.y + ((row + 1) / rows) * sy;
+      const cellVerts = verts.filter(
+        (v) => v.x >= xMin && v.x < xMax && v.y >= yMin && v.y < yMax,
+      );
+      const anchor =
+        cellVerts.length > 0
+          ? cellVerts[Math.floor(Math.random() * cellVerts.length)]
+          : verts[Math.floor(Math.random() * verts.length)];
       addCrackCluster(state, anchor);
     }
   }

@@ -295,6 +295,8 @@ export function Stage3() {
     getTextDestroyed: () => textDestroyed,
     getGumFollowers: () => gumFollowers,
     hasBlockingOverlayOpen: () => overlayController.hasBlockingOverlayOpen(),
+    isStampPanelSettledInCorner: () =>
+      stampController.isStampPanelSettledInCorner(),
     attachIntClickHintBubble: (el) =>
       interactionsController.attachIntClickHintBubble(el),
     detachIntClickHintBubble: () =>
@@ -315,6 +317,7 @@ export function Stage3() {
 
   function onEnterHit() {
     if (!sceneRef) return;
+    if (textDestroyed) return;
     const target = letterController.getHitTarget();
     character?.playHammerCue?.(() => {
       if (target) letterController.applyHitEffect(target);
