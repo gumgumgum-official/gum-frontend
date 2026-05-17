@@ -11,7 +11,7 @@ export const STAGE3_INITIAL_VY = -12;
 export const LETTER_BOUNCE_RESTITUTION = 0.4;
 export const HITS_TO_DESTROY = 20;
 /** 본격 shatter 이전 표면 금 타격 횟수 */
-export const CRACK_HITS_BEFORE_SHATTER = 19;
+export const CRACK_HITS_BEFORE_SHATTER = 12;
 export const FINAL_SHATTER_PIECE_COUNT = 8;
 /** fragment 재타격 시 잘려 나가는 로컬 x 구간 비율 */
 export const FRACTION_PER_HIT = 0.45;
