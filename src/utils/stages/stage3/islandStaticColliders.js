@@ -171,6 +171,34 @@ export function collectIslandStaticColliderBoxes(islandRoot) {
  * @param {number} [maxSlabThicknessY=3.5] - 이 높이 이하이면서 넓은 판이면 지형으로 보고 제외
  * @returns {IslandColliderAabb[]}
  */
+/**
+ * 스폰 원이 XZ에서 박스와 겹치면 slide가 전 방향 막힘 — 해당 박스만 제외(나머지 오브젝트 충돌 유지).
+ * @param {IslandColliderAabb[]} boxes
+ * @param {number} spawnX
+ * @param {number} spawnZ
+ * @param {number} spawnRadius - 캐릭터 collisionRadius + 여유
+ * @returns {IslandColliderAabb[]}
+ */
+export function filterCollidersExcludingSpawnOverlap(
+  boxes,
+  spawnX,
+  spawnZ,
+  spawnRadius,
+) {
+  if (
+    !boxes.length ||
+    !Number.isFinite(spawnX) ||
+    !Number.isFinite(spawnZ) ||
+    !Number.isFinite(spawnRadius) ||
+    spawnRadius <= 0
+  ) {
+    return boxes;
+  }
+  return boxes.filter(
+    (b) => !circleOverlapsAabbXZ(spawnX, spawnZ, spawnRadius, b),
+  );
+}
+
 export function filterCollidersExcludingDominantTerrain(
   boxes,
   backgroundBounds,

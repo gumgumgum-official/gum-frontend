@@ -528,7 +528,8 @@ export function Stage3() {
       if (character) {
         if (
           overlayController.hasBlockingOverlayOpen() ||
-          stampController.isStampIntroAnimating()
+          stampController.isStampIntroAnimating() ||
+          stampController.isInteractionLocked()
         ) {
           overlayController.clearMovementInputs();
         }

@@ -5,6 +5,7 @@ import * as THREE from "three";
 import {
   collectIslandStaticColliderBoxes,
   filterCollidersExcludingDominantTerrain,
+  filterCollidersExcludingSpawnOverlap,
 } from "../islandStaticColliders.js";
 import { setupFountainFromModel } from "../fountainEffect.js";
 import { createGumFollowersController } from "../gumFollowerController.js";
@@ -102,11 +103,28 @@ export function createStage3IslandController({
     onMonitorBackgroundReady();
 
     const useStatic = config.model.useStaticObstacleColliders !== false;
+    const initialSpawnXZ = resolveStage3SpawnXZ(
+      backgroundBounds,
+      config.character?.spawnOffset,
+    );
+    const spawnCollisionRadius =
+      (typeof config.character?.collisionRadius === "number"
+        ? config.character.collisionRadius
+        : 0.55) + 0.35;
+
     const rawColliders = useStatic
       ? collectIslandStaticColliderBoxes(model)
       : [];
     const islandStaticColliders = useStatic
-      ? filterCollidersExcludingDominantTerrain(rawColliders, backgroundBounds)
+      ? filterCollidersExcludingSpawnOverlap(
+          filterCollidersExcludingDominantTerrain(
+            rawColliders,
+            backgroundBounds,
+          ),
+          initialSpawnXZ.x,
+          initialSpawnXZ.z,
+          spawnCollisionRadius,
+        )
       : [];
 
     const {
@@ -146,11 +164,6 @@ export function createStage3IslandController({
       });
       setFlowerExclusionBoxes(exclusionBoxes);
     }
-
-    const initialSpawnXZ = resolveStage3SpawnXZ(
-      backgroundBounds,
-      config.character?.spawnOffset,
-    );
 
     const characterGroundY = resolveStage3CharacterGroundY({
       backgroundMaxY,

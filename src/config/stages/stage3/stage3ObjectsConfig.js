@@ -16,8 +16,8 @@ export const STAGE3_STANDALONE_FLOWER_GLB_PATHS = [
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
     path: "/models/stage3/island_final_v4_draco.glb",
-    /** v4 GLB: OBJ_/INT_ AABB가 스폰 지점을 덮어 slide 이동이 전부 막힘 — 바운딩 클램프만 사용 */
-    useStaticObstacleColliders: false,
+    /** v4 GLB: 지형급 AABB·스폰 겹침은 islandStaticColliders 필터로 제외 */
+    useStaticObstacleColliders: true,
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
