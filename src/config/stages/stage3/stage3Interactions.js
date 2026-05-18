@@ -42,3 +42,21 @@ export const GUMTOONGJI_CLIP_NAMES = [
   "Paw_LAction.001",
   "Paw_RAction.001",
 ];
+
+/**
+ * 클릭 시 1회 재생할 오브젝트별 애니메이션 설정.
+ * GLB 변경으로 애니메이션이 추가될 경우 이 배열에만 항목을 추가하면 된다.
+ *
+ * trigger   — runInteractionForTarget의 target 값
+ * objectName — GLB 내 AnimationMixer 루트 오브젝트 이름
+ * clipNames  — 재생할 AnimationClip 이름 목록 (없으면 DEV 경고)
+ *
+ * @type {{ trigger: string; objectName: string; clipNames: string[] }[]}
+ */
+export const STAGE3_CLICK_ONCE_ANIM_SETS = [
+  {
+    trigger: "well",
+    objectName: "INT_Well",
+    clipNames: ["INT_WellAction"],
+  },
+];

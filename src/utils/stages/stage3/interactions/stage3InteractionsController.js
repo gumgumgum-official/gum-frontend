@@ -19,6 +19,7 @@ import {
   PORTAL_PASS_TRIGGER_RADIUS_MAX,
   GAME_MACHINE_CLICK_SOUND_PATH,
   GUMTOONGJI_CLIP_NAMES,
+  STAGE3_CLICK_ONCE_ANIM_SETS,
 } from "../../../../config/stages/stage3/stage3Interactions.js";
 import { playRandomWellClickSound } from "../playWellClickSound.js";
 import { playRandomClockClickSound } from "../../../common/playClockClickSound.js";
@@ -119,6 +120,9 @@ export function createStage3InteractionsController({
   let gumtoongjiMixer = null;
   /** @type {import("three").AnimationAction[]} */
   let gumtoongjiActions = [];
+
+  /** @type {Map<string, { mixer: import("three").AnimationMixer, actions: import("three").AnimationAction[] }>} */
+  const clickOnceSets = new Map();
 
   const _camAssistBox = new THREE.Box3();
   const _camAssistSphere = new THREE.Sphere();
@@ -221,6 +225,13 @@ export function createStage3InteractionsController({
     for (const action of gumtoongjiActions) action.reset().play();
   }
 
+  /** @param {string} trigger */
+  function playClickOnceSet(trigger) {
+    const set = clickOnceSets.get(trigger);
+    if (!set) return;
+    for (const a of set.actions) a.reset().play();
+  }
+
   function playGameMachineClickSound() {
     const src = resolvePublicAssetUrl(GAME_MACHINE_CLICK_SOUND_PATH);
     if (!gameMachineClickAudio) {
@@ -260,6 +271,8 @@ export function createStage3InteractionsController({
    * @returns {boolean}
    */
   function runInteractionForTarget(target) {
+    playClickOnceSet(target);
+
     if (target === "gumtoongji") {
       if (import.meta.env.DEV) {
         console.log(
@@ -448,6 +461,9 @@ export function createStage3InteractionsController({
       gumtoongjiMixer = null;
     }
     gumtoongjiActions = [];
+
+    for (const set of clickOnceSets.values()) set.mixer.stopAllAction();
+    clickOnceSets.clear();
 
     /** @type {THREE.Object3D | null} */
     let gumtoongjiRoot = null;
@@ -642,6 +658,38 @@ export function createStage3InteractionsController({
 
     intRaycastMeshes.push(...meshSet);
 
+    if (animations.length > 0) {
+      for (const def of STAGE3_CLICK_ONCE_ANIM_SETS) {
+        const root = islandModel.getObjectByName(def.objectName);
+        if (!root) {
+          if (import.meta.env.DEV) {
+            console.warn(`[Stage3 ClickOnce] 오브젝트 없음: ${def.objectName}`);
+          }
+          continue;
+        }
+        const mixer = new THREE.AnimationMixer(root);
+        const actions = [];
+        for (const clipName of def.clipNames) {
+          const clip = THREE.AnimationClip.findByName(animations, clipName);
+          if (!clip) {
+            if (import.meta.env.DEV) {
+              console.warn(
+                `[Stage3 ClickOnce] clip 없음: ${clipName} (${def.objectName})`,
+              );
+            }
+            continue;
+          }
+          const action = mixer.clipAction(clip);
+          action.setLoop(THREE.LoopOnce, 1);
+          action.clampWhenFinished = true;
+          actions.push(action);
+        }
+        if (actions.length > 0) {
+          clickOnceSets.set(def.trigger, { mixer, actions });
+        }
+      }
+    }
+
     islandModel.traverse((obj) => {
       if (typeof obj.name !== "string") return;
       if (!obj.name.startsWith(STREET_LIGHT_NAME_PREFIX)) return;
@@ -753,6 +801,11 @@ export function createStage3InteractionsController({
       nearestDistSq = distSq;
     }
     if (!nearest) {
+      activeIntHintTarget = null;
+      intClickHintBubbleEl.classList.remove("is-visible");
+      return;
+    }
+    if (nearest.target === "portal" && !isPortalOpenForStageTransition()) {
       activeIntHintTarget = null;
       intClickHintBubbleEl.classList.remove("is-visible");
       return;
@@ -985,6 +1038,8 @@ export function createStage3InteractionsController({
     }
     gumtoongjiActions = [];
     gumtoongjiRaycastMeshes.length = 0;
+    for (const set of clickOnceSets.values()) set.mixer.stopAllAction();
+    clickOnceSets.clear();
     resetCameraAssistSmoothing();
   }
 
@@ -996,6 +1051,7 @@ export function createStage3InteractionsController({
     detachIntClickHintBubble,
     update(delta) {
       if (gumtoongjiMixer) gumtoongjiMixer.update(delta);
+      for (const set of clickOnceSets.values()) set.mixer.update(delta);
       updateStreetLightProximitySound();
       updateClockProximitySound();
       updateIntClickHintBubble();
