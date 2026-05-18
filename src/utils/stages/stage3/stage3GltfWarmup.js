@@ -9,11 +9,14 @@ import {
 } from "../../common/gltfTemplateCache.js";
 
 /**
- * @param {{ includeIcecreamSpawnPaths?: boolean }} [options]
+ * @param {{ includeIcecreamSpawnPaths?: boolean, includeVendingMachineSpawnPaths?: boolean }} [options]
  * @returns {string[]}
  */
 function getStage3PrewarmAbsoluteUrls(options = {}) {
-  const { includeIcecreamSpawnPaths = true } = options;
+  const {
+    includeIcecreamSpawnPaths = true,
+    includeVendingMachineSpawnPaths = true,
+  } = options;
   /** @type {string[]} */
   const urls = [];
   urls.push(resolvePublicAssetUrl(STAGE3_CONFIG.model.path));
@@ -41,6 +44,11 @@ function getStage3PrewarmAbsoluteUrls(options = {}) {
       urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
     }
   }
+  if (includeVendingMachineSpawnPaths) {
+    for (const rel of STAGE3_CONFIG.vendingMachine?.spawnPaths ?? []) {
+      urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
+    }
+  }
   for (const rel of STAGE3_STANDALONE_FLOWER_GLB_PATHS) {
     urls.push(resolvePublicAssetUrl(rel));
   }
@@ -61,6 +69,7 @@ export function warmStage3GltfTemplateUrls() {
 export async function waitForStage3GltfTemplatesReady() {
   const urls = getStage3PrewarmAbsoluteUrls({
     includeIcecreamSpawnPaths: false,
+    includeVendingMachineSpawnPaths: false,
   });
   await Promise.all(
     urls.map(async (u) => {

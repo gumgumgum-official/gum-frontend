@@ -28,7 +28,7 @@ import { onMinigameClose, closeMinigame } from "../minigameLauncher.js";
 import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3IntroAudio.js";
 
 /**
- * @typedef {"notice" | "gameMachine" | "tent" | "icecream" | "portal" | "well" | "clock" | "gumtoongji"} Stage3InteractionTarget
+ * @typedef {"notice" | "gameMachine" | "tent" | "icecream" | "vendingMachine" | "portal" | "well" | "clock" | "gumtoongji"} Stage3InteractionTarget
  */
 
 /**
@@ -38,6 +38,7 @@ import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3
  *   getConfig: () => import("../../../../types.js").Stage3Config,
  *   getCharacter: () => { getPosition?: () => import("three").Vector3; getIsMoving?: () => boolean } | null,
  *   getIceCreamController: () => ReturnType<typeof import("../iceCream/stage3IceCreamController.js").createStage3IceCreamController>,
+ *   getVendingMachineController: () => ReturnType<typeof import("../vendingMachine/stage3VendingMachineController.js").createStage3VendingMachineController>,
  *   getCameraIntroState: () => { completed: boolean; active: boolean },
  *   isInteractionBlocked: () => boolean,
  *   getPortalTransitionInProgress: () => boolean,
@@ -67,6 +68,7 @@ export function createStage3InteractionsController({
   getConfig,
   getCharacter,
   getIceCreamController,
+  getVendingMachineController,
   getCameraIntroState,
   isInteractionBlocked,
   getPortalTransitionInProgress,
@@ -317,6 +319,30 @@ export function createStage3InteractionsController({
       }
       return true;
     }
+
+    const vendingMachineController = getVendingMachineController();
+
+    if (target === "vendingMachine") {
+      if (!vendingMachineController.getMachineRef()) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] vendingMachine 클릭 감지됨. 하지만 머신 ref가 없습니다(INT 네이밍/계층 확인).",
+          );
+        }
+        return false;
+      }
+      if (!vendingMachineController.hasTemplates()) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] 벤딩머신 템플릿이 비어 있습니다. GLB 경로·네트워크를 확인하세요.",
+          );
+        }
+        return false;
+      }
+      vendingMachineController.spawnFromMachine();
+      return true;
+    }
+
     if (target === "notice") {
       const eggTap = tryRegisterEasterEggFromRayTarget("notice");
       showNoticeModal();
@@ -375,6 +401,7 @@ export function createStage3InteractionsController({
     }
 
     const iceCreamController = getIceCreamController();
+    const vendingMachineController = getVendingMachineController();
     if (intRaycastMeshes.length === 0) return null;
     const hits = _raycaster.intersectObjects(intRaycastMeshes, false);
     if (hits.length === 0) return null;
@@ -384,6 +411,9 @@ export function createStage3InteractionsController({
       if (resolved) return resolved;
       if (iceCreamController.isCartHit(hitObj)) {
         return "icecream";
+      }
+      if (vendingMachineController.isMachineHit(hitObj)) {
+        return "vendingMachine";
       }
     }
     return null;
@@ -443,6 +473,7 @@ export function createStage3InteractionsController({
    */
   function registerIslandInteractions(islandModel, animations = []) {
     const iceCreamController = getIceCreamController();
+    const vendingMachineController = getVendingMachineController();
     intRaycastMeshes.length = 0;
     gumtoongjiRaycastMeshes.length = 0;
     cameraAssistTargets.length = 0;
@@ -452,6 +483,7 @@ export function createStage3InteractionsController({
     smoothedCameraYawAssist = 0;
     smoothedCameraYawAssistDemand = 0;
     iceCreamController.clearCartRef();
+    vendingMachineController.clearMachineRef();
     gameMachineRef = null;
     hasPortalPassTriggerSphere = false;
     wasInsidePortalPassTrigger = false;
@@ -556,6 +588,8 @@ export function createStage3InteractionsController({
       }
       if (intTarget === "gameMachine") gameMachineRef = obj;
       if (intTarget === "icecream") iceCreamController.setCartRef(obj);
+      if (intTarget === "vendingMachine")
+        vendingMachineController.setMachineRef(obj);
       if (intTarget === "clock") {
         obj.updateMatrixWorld(true);
         const worldPos = new THREE.Vector3();
@@ -586,6 +620,11 @@ export function createStage3InteractionsController({
     const cartRef = iceCreamController.getCartRef();
     if (cartRef) {
       assistRootSet.add(cartRef);
+    }
+
+    const machineRef = vendingMachineController.getMachineRef();
+    if (machineRef) {
+      assistRootSet.add(machineRef);
     }
 
     /** @type {THREE.Object3D | null} */
@@ -715,6 +754,7 @@ export function createStage3InteractionsController({
     }
 
     iceCreamController.warnCartNotFound(rootNames);
+    vendingMachineController.warnMachineNotFound(rootNames);
   }
 
   function updateStreetLightProximitySound() {
