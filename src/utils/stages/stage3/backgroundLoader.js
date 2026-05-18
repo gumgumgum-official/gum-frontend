@@ -127,6 +127,21 @@ export function loadStage3Background({
         }
       });
 
+      for (const name of config.model.frontRenderObjectNames ?? []) {
+        const obj = model.getObjectByName(name);
+        if (!obj) {
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[Stage3] frontRenderObjectNames: 노드 없음 — '${name}'`,
+            );
+          }
+          continue;
+        }
+        obj.traverse((child) => {
+          if (child instanceof THREE.Mesh) child.renderOrder = 1;
+        });
+      }
+
       if (getIsActive && !getIsActive()) {
         return;
       }
