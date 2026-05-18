@@ -182,28 +182,6 @@ function getCollidableSourceName(mesh) {
 function applyPropColliderTuning(candidate, sourceName) {
   if (!sourceName) return candidate;
   if (OBJ_SKIP_COLLISION_RE.test(sourceName)) {
-    // #region agent log
-    if (/^OBJ_Sunbed/i.test(sourceName)) {
-      fetch(
-        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "672540",
-          },
-          body: JSON.stringify({
-            sessionId: "672540",
-            hypothesisId: "H1",
-            location: "islandStaticColliders.js:applyPropColliderTuning",
-            message: "sunbed collider skipped",
-            data: { sourceName },
-            timestamp: Date.now(),
-          }),
-        },
-      ).catch(() => {});
-    }
-    // #endregion
     return null;
   }
   for (let i = 0; i < PROP_TIGHT_XZ_RULES.length; i++) {
@@ -506,72 +484,6 @@ export function collectIslandStaticColliderBoxes(
     tmp,
   );
 
-  // #region agent log
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "672540",
-    },
-    body: JSON.stringify({
-      sessionId: "672540",
-      runId: "island12-bounds",
-      hypothesisId: "H-portal-bounds",
-      location: "islandStaticColliders.js:collectIslandStaticColliderBoxes",
-      message: "portal pass zones",
-      data: {
-        portalZones: portalPassZones,
-        colliderCount: out.length,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
-  // #region agent log
-  const sunbed = islandRoot.getObjectByName("OBJ_Sunbed");
-  const sunbedUnder = islandRoot.getObjectByName("OBJ_Sunbed_under");
-  const probe = new THREE.Vector3();
-  const picnicProbe = new THREE.Vector3();
-  if (sunbed) {
-    sunbed.getWorldPosition(probe);
-  }
-  if (islandRoot.getObjectByName("Picnic_Zone")) {
-    islandRoot.getObjectByName("Picnic_Zone").getWorldPosition(picnicProbe);
-  }
-  const sunbedHits = debugOverlappingCollidersAt(probe.x, probe.z, 0.65, out);
-  const picnicHits = debugOverlappingCollidersAt(
-    picnicProbe.x,
-    picnicProbe.z,
-    0.65,
-    out,
-  );
-  const sunbedInList = out.filter((b) => /sunbed/i.test(b.src ?? ""));
-  fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "672540",
-    },
-    body: JSON.stringify({
-      sessionId: "672540",
-      hypothesisId: "H1-H2",
-      location: "islandStaticColliders.js:collectIslandStaticColliderBoxes",
-      message: "collider collect summary",
-      data: {
-        total: out.length,
-        sunbedInList: sunbedInList.map((b) => b.src),
-        sunbedProbe: { x: probe.x, z: probe.z },
-        sunbedHits: sunbedHits.slice(0, 8),
-        picnicHits: picnicHits.slice(0, 8),
-        hasSunbedNode: !!sunbed,
-        hasSunbedUnderNode: !!sunbedUnder,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   return out;
 }
 
@@ -675,31 +587,6 @@ export function filterCollidersExcludingInflatedMeshBounds(
       t.src = src;
       return t;
     });
-  // #region agent log
-  if (removed.length) {
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "672540",
-      },
-      body: JSON.stringify({
-        sessionId: "672540",
-        runId: "post-fix",
-        hypothesisId: "H2-fix",
-        location:
-          "islandStaticColliders.js:filterCollidersExcludingInflatedMeshBounds",
-        message: "removed inflated OBJ colliders",
-        data: {
-          removed: removed.slice(0, 20),
-          tightened: tightened.slice(0, 12),
-          kept: filtered.length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
   return filtered;
 }
 

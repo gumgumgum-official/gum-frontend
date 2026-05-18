@@ -5,10 +5,7 @@ import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
-import {
-  debugOverlappingCollidersAt,
-  slideMoveXZAgainstAABBs,
-} from "./islandStaticColliders.js";
+import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 import { sampleStage3WalkableGroundY } from "./island/stage3IslandWalkable.js";
 
 const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
@@ -114,7 +111,6 @@ export function createCharacterController({
   let groundRayOriginY = 30;
   /** @type {import("three").Object3D | null} */
   let islandModelForRaycast = null;
-  let _dbgMoveBlockLogAt = 0;
 
   const _moveVector = new THREE.Vector3();
   const _direction = new THREE.Vector3();
@@ -246,39 +242,6 @@ export function createCharacterController({
         clampBox.max.z - boundsPadding,
       );
 
-      // #region agent log
-      fetch(
-        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "672540",
-          },
-          body: JSON.stringify({
-            sessionId: "672540",
-            runId: "bounds-fix",
-            hypothesisId: "H-bounds",
-            location: "characterController.js:setup",
-            message: "movement clamp bounds",
-            data: {
-              useIslandBbox:
-                movementBoundsXZ instanceof THREE.Box3 &&
-                Math.abs(_minCz - (bounds.min.z + boundsPadding)) < 0.05,
-              spawnXZ: worldSpawnXZ ?? null,
-              clampMinZ: _minCz,
-              clampMaxZ: _maxCz,
-              bgMinZ: bounds.min.z,
-              bgMaxZ: bounds.max.z,
-              walkableMinZ: walkableBounds?.min?.z,
-              walkableMaxZ: walkableBounds?.max?.z,
-            },
-            timestamp: Date.now(),
-          }),
-        },
-      ).catch(() => {});
-      // #endregion
-
       const characterUrl = resolvePublicAssetUrl(
         config.characterModelPath ?? "/models/common/user_walk_v2.glb",
       );
@@ -406,32 +369,6 @@ export function createCharacterController({
           scene.add(characterModel);
           if (idleCharacterModel) scene.add(idleCharacterModel);
 
-          // #region agent log
-          fetch(
-            "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Session-Id": "672540",
-              },
-              body: JSON.stringify({
-                sessionId: "672540",
-                runId: "post-fix",
-                hypothesisId: "H-char",
-                location: "characterController.js:setup",
-                message: "character model loaded",
-                data: {
-                  spawnX,
-                  spawnZ,
-                  y: characterYPosition,
-                },
-                timestamp: Date.now(),
-              }),
-            },
-          ).catch(() => {});
-          // #endregion
-
           if (punchGltf) {
             punchCharacterModel = SkeletonUtils.clone(punchGltf.scene);
             punchCharacterModel.scale.setScalar(scale);
@@ -529,6 +466,20 @@ export function createCharacterController({
       const movingInput = _moveVector.length() > 0;
       let moved = false;
 
+      if (import.meta.env.DEV) {
+        const _el = document.getElementById("__stage3_dbg_overlay__");
+        if (_el && !movingInput) {
+          _el.textContent = [
+            `[Stage3 DEV — 이동 진단]`,
+            `pos  (${characterModel.position.x.toFixed(3)}, ${characterModel.position.y.toFixed(3)}, ${characterModel.position.z.toFixed(3)})`,
+            `clampX [${_minCx.toFixed(2)} ~ ${_maxCx.toFixed(2)}]`,
+            `clampZ [${_minCz.toFixed(2)} ~ ${_maxCz.toFixed(2)}]`,
+            `colliders: ${staticColliderBoxes.length}개`,
+            `⬆️⬇️⬅️➡️ 키를 눌러주세요`,
+          ].join("\n");
+        }
+      }
+
       if (movingInput) {
         _direction.copy(_moveVector).normalize();
         _moveVector
@@ -563,63 +514,27 @@ export function createCharacterController({
           Math.abs(candidateX - oldX) > 1e-6 ||
           Math.abs(candidateZ - oldZ) > 1e-6;
 
+        if (import.meta.env.DEV) {
+          const _el = document.getElementById("__stage3_dbg_overlay__");
+          if (_el) {
+            _el.textContent = [
+              `[Stage3 DEV — 이동 진단]`,
+              `pos     (${oldX.toFixed(3)}, ${characterModel.position.y.toFixed(3)}, ${oldZ.toFixed(3)})`,
+              `clamped (${clampedX.toFixed(3)}, ${clampedZ.toFixed(3)})`,
+              `slide   (${candidateX.toFixed(3)}, ${candidateZ.toFixed(3)})`,
+              `movedXZ: ${movedXZ}`,
+              `clampX  [${_minCx.toFixed(2)} ~ ${_maxCx.toFixed(2)}]`,
+              `clampZ  [${_minCz.toFixed(2)} ~ ${_maxCz.toFixed(2)}]`,
+              `feetY: ${feetY.toFixed(3)}`,
+              `colliders: ${staticColliderBoxes.length}개`,
+            ].join("\n");
+          }
+        }
+
         // XZ 이동은 바운딩·정적 충돌만 적용. Y(지면)는 아래 resolveGroundY에서 처리.
         // (walkable 레이 실패·Island bbox Y 오차로 XZ가 막히던 문제 방지)
         const targetX = movedXZ ? candidateX : oldX;
         const targetZ = movedXZ ? candidateZ : oldZ;
-
-        // #region agent log
-        if (movingInput && !movedXZ && Date.now() - _dbgMoveBlockLogAt > 800) {
-          _dbgMoveBlockLogAt = Date.now();
-          const blockers = debugOverlappingCollidersAt(
-            clampedX,
-            clampedZ,
-            collisionRadius,
-            staticColliderBoxes,
-            feetY,
-          );
-          const atPos = debugOverlappingCollidersAt(
-            oldX,
-            oldZ,
-            collisionRadius,
-            staticColliderBoxes,
-            feetY,
-          );
-          fetch(
-            "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Session-Id": "672540",
-              },
-              body: JSON.stringify({
-                sessionId: "672540",
-                hypothesisId: "H2-H5",
-                location: "characterController.js:update",
-                message: "movement blocked",
-                data: {
-                  pos: { x: oldX, z: oldZ },
-                  wanted: { x: clampedX, z: clampedZ },
-                  bounds: {
-                    minCx: _minCx,
-                    maxCx: _maxCx,
-                    minCz: _minCz,
-                    maxCz: _maxCz,
-                  },
-                  clampedByBounds:
-                    clampedX !== oldX + _moveVector.x ||
-                    clampedZ !== oldZ + _moveVector.z,
-                  blockersAtTarget: blockers.slice(0, 8),
-                  blockersAtPos: atPos.slice(0, 8),
-                  colliderCount: staticColliderBoxes.length,
-                },
-                timestamp: Date.now(),
-              }),
-            },
-          ).catch(() => {});
-        }
-        // #endregion
 
         if (movedXZ) {
           groundMissFrames = 0;

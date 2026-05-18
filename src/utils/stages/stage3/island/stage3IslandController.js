@@ -4,7 +4,6 @@
 import * as THREE from "three";
 import {
   collectIslandStaticColliderBoxes,
-  debugOverlappingCollidersAt,
   filterCollidersExcludingDominantTerrain,
   filterCollidersExcludingInflatedMeshBounds,
   filterCollidersExcludingSpawnOverlap,
@@ -131,45 +130,6 @@ export function createStage3IslandController({
         )
       : [];
 
-    // #region agent log
-    const _dbgPicnicPos = new THREE.Vector3();
-    const picnicZone = model.getObjectByName("Picnic_Zone");
-    if (picnicZone) picnicZone.getWorldPosition(_dbgPicnicPos);
-    const picnicFinalHits = debugOverlappingCollidersAt(
-      _dbgPicnicPos.x,
-      _dbgPicnicPos.z,
-      spawnCollisionRadius,
-      islandStaticColliders,
-    );
-    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "672540",
-      },
-      body: JSON.stringify({
-        sessionId: "672540",
-        hypothesisId: "H2-H4",
-        location: "stage3IslandController.js:onBackgroundReady",
-        message: "final colliders at picnic zone",
-        data: {
-          rawCount: rawColliders.length,
-          finalCount: islandStaticColliders.length,
-          picnicPos: { x: _dbgPicnicPos.x, z: _dbgPicnicPos.z },
-          picnicFinalHits: picnicFinalHits.slice(0, 10),
-          pathProbeHits: debugOverlappingCollidersAt(
-            -5,
-            -25.9,
-            spawnCollisionRadius,
-            islandStaticColliders,
-          ).slice(0, 8),
-          spawnXZ: initialSpawnXZ,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     const {
       meshes: walkableMeshes,
       bounds: walkableBounds,
@@ -233,6 +193,65 @@ export function createStage3IslandController({
       worldSpawnXZ: initialSpawnXZ,
       islandModel: model,
     });
+
+    if (import.meta.env.DEV) {
+      // 이동범위·콜라이더 시각화 — 브라우저에서 직접 확인용
+      const _dbgGroup = new THREE.Group();
+      _dbgGroup.name = "__stage3_debug__";
+
+      // 초록: Island backgroundBounds (움직임 기준 원본 영역)
+      const _bgHelper = new THREE.Box3Helper(backgroundBounds, 0x00ff00);
+      _dbgGroup.add(_bgHelper);
+
+      // 노란: movementBoundsXZ (실제 이동 제한 영역)
+      if (movementBoundsXZ) {
+        const _mvHelper = new THREE.Box3Helper(movementBoundsXZ, 0xffff00);
+        _dbgGroup.add(_mvHelper);
+      }
+
+      // 빨강: 각 islandStaticColliders AABB
+      for (const b of islandStaticColliders) {
+        const _box = new THREE.Box3(
+          new THREE.Vector3(b.minX, b.minY, b.minZ),
+          new THREE.Vector3(b.maxX, b.maxY, b.maxZ),
+        );
+        _dbgGroup.add(new THREE.Box3Helper(_box, 0xff2222));
+      }
+
+      // 파랑: 스폰 위치 마커 (땅에서 2m 위, 반경 1.0m 구체)
+      const _spawnGeo = new THREE.SphereGeometry(1.0, 12, 12);
+      const _spawnMat = new THREE.MeshBasicMaterial({
+        color: 0x0088ff,
+        wireframe: true,
+      });
+      const _spawnMarker = new THREE.Mesh(_spawnGeo, _spawnMat);
+      _spawnMarker.position.set(
+        initialSpawnXZ.x,
+        characterGroundY + 2,
+        initialSpawnXZ.z,
+      );
+      _dbgGroup.add(_spawnMarker);
+
+      scene.add(_dbgGroup);
+
+      // 실시간 진단 오버레이 (characterController update()가 내용을 채움)
+      const _overlay = document.createElement("div");
+      _overlay.id = "__stage3_dbg_overlay__";
+      Object.assign(_overlay.style, {
+        position: "fixed",
+        top: "8px",
+        right: "8px",
+        background: "rgba(0,0,0,0.75)",
+        color: "#fff",
+        font: "12px/1.5 monospace",
+        padding: "8px 12px",
+        borderRadius: "6px",
+        zIndex: "9999",
+        pointerEvents: "none",
+        whiteSpace: "pre",
+      });
+      document.body.appendChild(_overlay);
+    }
 
     if (getIsStageActive()) {
       onCameraIntroStart(center, backgroundBounds);
