@@ -35,6 +35,8 @@ export function createStage3VendingMachineController({
   /** @type {import("three").Object3D | null} */
   let machineRef = null;
   const vendingMachineTemplates = [];
+  /** 셔플 덱: 전체를 한 번씩 소진 후 다시 섞어 색상 편중 방지 */
+  let shuffleDeck = [];
   const spawnedDrinks = [];
   let physicsWorld = null;
   let groundBody = null;
@@ -201,10 +203,14 @@ export function createStage3VendingMachineController({
       return false;
     }
 
-    const template =
-      vendingMachineTemplates[
-        Math.floor(Math.random() * vendingMachineTemplates.length)
-      ];
+    if (shuffleDeck.length === 0) {
+      shuffleDeck = [...vendingMachineTemplates];
+      for (let i = shuffleDeck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffleDeck[i], shuffleDeck[j]] = [shuffleDeck[j], shuffleDeck[i]];
+      }
+    }
+    const template = shuffleDeck.pop();
     clone = template.scene.clone(true);
     clone.frustumCulled = false;
     const spawnScale = config.vendingMachine?.spawnScale ?? 0.5;
@@ -456,6 +462,7 @@ export function createStage3VendingMachineController({
       vendingMachineMat = null;
       machineRef = null;
       vendingMachineTemplates.length = 0;
+      shuffleDeck.length = 0;
     },
   };
 }

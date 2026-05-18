@@ -86,7 +86,17 @@ export const STAGE3_OBJECTS_CONFIG = {
    * GLB 내 `INT_vending_machine`을 클릭하면 `spawnPaths` GLB를 복제해 튀어나옴.
    */
   vendingMachine: {
-    spawnPaths: ["/models/stage3/soft_drink_red.glb"],
+    spawnPaths: [
+      "/models/stage3/can/can_red.glb",
+      "/models/stage3/can/can_blue.glb",
+      "/models/stage3/can/can_green.glb",
+      "/models/stage3/can/can_yellow.glb",
+      "/models/stage3/can/can_orange.glb",
+      "/models/stage3/can/can_pink.glb",
+      "/models/stage3/can/can_purple.glb",
+      "/models/stage3/can/can_navy.glb",
+      "/models/stage3/can/can_black.glb",
+    ],
     spawnScale: 0.32,
     maxVisualSize: 0.88,
     minVisualSize: 0.3,
