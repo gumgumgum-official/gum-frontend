@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
-import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import {
+  STAGE6_SUBTITLE_HIDE_EVENT,
+  STAGE6_SUBTITLE_SEQUENCE_EVENT,
+} from "../events/stage6Events.js";
+import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import "./TentSceneViewer.css";
-
-const BUBBLES = [
-  "안녕! 만나서 반가워! ",
-  "여기는 너에게 필요한 껌딱지 카드를 고를 수 있는 타로점이야",
-];
 
 function getCamCfg() {
   return (
@@ -18,6 +17,18 @@ function getCamCfg() {
       target: [0, 0, 0],
     }
   );
+}
+
+function getTentSubtitleCfg() {
+  const tent = STAGE3_OBJECTS_CONFIG.tent;
+  return {
+    messages: tent?.tentSceneSubtitles ?? [],
+    totalMs: tent?.tentSceneSubtitleTotalMs ?? 7400,
+  };
+}
+
+function dispatchTentSubtitleHide() {
+  window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
 }
 
 export function TentSceneViewer({
@@ -33,8 +44,12 @@ export function TentSceneViewer({
     onCardOpenRef.current = onCardOpen;
   }, [onCardOpen]);
 
-  const [bubble, setBubble] = useState({ msg: "", visible: false });
   const [isVisible, setIsVisible] = useState(false);
+
+  const handleClose = useCallback(() => {
+    dispatchTentSubtitleHide();
+    onClose?.();
+  }, [onClose]);
 
   useEffect(() => {
     const rafId = requestAnimationFrame(() => {
@@ -44,20 +59,33 @@ export function TentSceneViewer({
   }, []);
 
   useEffect(() => {
+    return () => {
+      dispatchTentSubtitleHide();
+    };
+  }, []);
+
+  useEffect(() => {
     if (skipBubbleSequence) return;
 
-    const runBubbleSequence = () => [
-      setTimeout(() => setBubble({ msg: BUBBLES[0], visible: true }), 600),
-      setTimeout(() => setBubble((b) => ({ ...b, visible: false })), 3100),
-      setTimeout(() => setBubble({ msg: BUBBLES[1], visible: true }), 3600),
-      setTimeout(() => setBubble((b) => ({ ...b, visible: false })), 7100),
-      setTimeout(() => onCardOpenRef.current?.(), 7600),
-    ];
+    const { messages, totalMs } = getTentSubtitleCfg();
+    if (messages.length === 0) return;
+
+    const runSubtitleSequence = () => {
+      window.dispatchEvent(
+        new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
+          detail: { messages, hideLabel: true },
+        }),
+      );
+      return [setTimeout(() => onCardOpenRef.current?.(), totalMs)];
+    };
 
     const rootEl = rootRef.current;
     if (!rootEl) {
-      const timers = runBubbleSequence();
-      return () => timers.forEach(clearTimeout);
+      const timers = runSubtitleSequence();
+      return () => {
+        dispatchTentSubtitleHide();
+        timers.forEach(clearTimeout);
+      };
     }
 
     /** @type {number[]} */
@@ -66,10 +94,9 @@ export function TentSceneViewer({
     const start = () => {
       if (started) return;
       started = true;
-      timers = runBubbleSequence();
+      timers = runSubtitleSequence();
     };
 
-    // 페이드 인 트랜지션이 끝난 뒤 자막 시퀀스를 시작한다.
     const onFadeInEnd = (event) => {
       if (event.target !== rootEl) return;
       if (event.propertyName !== "opacity") return;
@@ -77,12 +104,12 @@ export function TentSceneViewer({
     };
     rootEl.addEventListener("transitionend", onFadeInEnd);
 
-    // 애니메이션 이벤트가 누락되는 환경 대비 fallback.
     const fallbackId = setTimeout(start, FADE_IN_MS + 100);
 
     return () => {
       rootEl.removeEventListener("transitionend", onFadeInEnd);
       clearTimeout(fallbackId);
+      dispatchTentSubtitleHide();
       timers.forEach(clearTimeout);
     };
   }, [FADE_IN_MS, skipBubbleSequence]);
@@ -178,13 +205,7 @@ export function TentSceneViewer({
       className={`tent-scene-viewer${isVisible ? " is-visible" : ""}`}
     >
       <canvas ref={canvasRef} className="tent-scene-canvas" />
-      <div
-        className={`speech-bubble-stage6 tent-bubble${bubble.visible ? " is-visible" : ""}`}
-        style={{ left: "53%", top: "22%" }}
-      >
-        {bubble.msg}
-      </div>
-      <button className="tent-btn tent-btn--close" onClick={onClose}>
+      <button className="tent-btn tent-btn--close" onClick={handleClose}>
         ✕
       </button>
     </div>
