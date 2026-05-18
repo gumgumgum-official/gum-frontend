@@ -120,26 +120,6 @@ function ProfileCard() {
           픽셀 세상의 작은 기록장이에요.
         </p>
       </div>
-      <div
-        style={{
-          marginTop: "0.75rem",
-          display: "flex",
-          justifyContent: "space-between",
-          borderRadius: "0.375rem",
-          border: `2px solid ${PINK}`,
-          background: "#fff",
-          padding: "0.375rem 0.75rem",
-          fontSize: "0.6875rem",
-          color: PINK,
-        }}
-      >
-        <span>
-          TODAY <b>23</b>
-        </span>
-        <span>
-          TOTAL <b>1,287</b>
-        </span>
-      </div>
     </div>
   );
 }
@@ -165,72 +145,7 @@ function TodayCard() {
   );
 }
 
-// ── MusicPlayer ───────────────────────────────────────────────────────────────
-function MusicPlayer() {
-  return (
-    <div style={{ ...S.pixelCardSm, padding: "0.75rem" }}>
-      <div
-        style={{
-          marginBottom: "0.25rem",
-          fontSize: "0.6875rem",
-          fontWeight: 700,
-          color: PINK,
-        }}
-      >
-        ♪ MUSIC
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <button
-          style={{
-            display: "grid",
-            placeItems: "center",
-            width: "1.75rem",
-            height: "1.75rem",
-            borderRadius: "50%",
-            border: `2px solid ${PINK}`,
-            background: PINK_MID,
-            color: "#fff",
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
-        >
-          ▶
-        </button>
-        <div
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            fontSize: "0.75rem",
-          }}
-        >
-          Pixel Dreams — 8bit Café
-        </div>
-      </div>
-      <div
-        style={{
-          marginTop: "0.5rem",
-          height: "0.375rem",
-          width: "100%",
-          borderRadius: "999px",
-          border: `1px solid ${PINK}`,
-          background: "#fff",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: "33%",
-            borderRadius: "999px",
-            background: PINK,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
+const GUESTBOOK_MSG_MAX_LEN = 200;
 
 // ── GuestbookForm ─────────────────────────────────────────────────────────────
 function GuestbookForm({ onSuccess }) {
@@ -293,6 +208,7 @@ function GuestbookForm({ onSuccess }) {
         rows={3}
         placeholder="삐삐에게 한마디~ ♥"
         value={msg}
+        maxLength={GUESTBOOK_MSG_MAX_LEN}
         onChange={(e) => setMsg(e.target.value)}
       />
       <div
@@ -303,7 +219,7 @@ function GuestbookForm({ onSuccess }) {
         }}
       >
         <span style={{ fontSize: "0.6875rem", color: MUTED }}>
-          {msg.length}/200
+          {msg.length}/{GUESTBOOK_MSG_MAX_LEN}
         </span>
         <button
           type="submit"
@@ -370,7 +286,7 @@ export function GuestbookEmbed({ onClose }) {
   }, []);
 
   function handlePostAdded(post) {
-    setPosts((prev) => [...prev, post]);
+    setPosts((prev) => [post, ...prev]);
   }
 
   return (
@@ -525,7 +441,7 @@ export function GuestbookEmbed({ onClose }) {
                 gap: "1rem",
               }}
             >
-              {/* 좌: 프로필 + 오늘 + 뮤직 */}
+              {/* 좌: 프로필 + 오늘 */}
               <div
                 style={{
                   display: "flex",
@@ -535,7 +451,6 @@ export function GuestbookEmbed({ onClose }) {
               >
                 <ProfileCard />
                 <TodayCard />
-                <MusicPlayer />
               </div>
 
               {/* 우: 방명록 */}

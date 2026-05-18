@@ -15,7 +15,7 @@ export const STAGE3_STANDALONE_FLOWER_GLB_PATHS = [
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
-    path: "/models/stage3/island12.glb",
+    path: "/models/stage3/island_final_v4_draco.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -81,6 +81,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       party: "/assets/poster/festival_poster.png",
       bestGum: "/assets/poster/vote_poster.png",
       icecream: "/assets/poster/icecream_poster.png",
+      guestbook: "/assets/poster/guestbook_poster.svg",
     },
     /** `GgumddiVoteSection` 후보 카드 이미지 (순서 = 1·2·3번) */
     voteCandidateImages: [

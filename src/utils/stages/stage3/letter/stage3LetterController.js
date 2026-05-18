@@ -41,6 +41,7 @@ import {
   playRandomCrackSound,
   playCrackFinalSound,
   playFlowerMagicSound,
+  playDropSound,
 } from "../playCrackSound.js";
 import { supabase } from "../../../../lib/supabase/client.js";
 import { getSessionId } from "../../../../lib/session.js";
@@ -409,6 +410,7 @@ export function createStage3LetterController({
       s.velocity.rotationZ = 0;
       setReadableRotationTowardCamera(s.group, camera);
       s.landed = true;
+      playDropSound();
       addLetterColliderIfNeeded();
       return;
     }

@@ -115,16 +115,15 @@ export function loadStage3Background({
       };
 
       model.traverse((child) => {
-        if (child.isMesh) {
-          if (config.model.castShadow !== undefined) {
-            child.castShadow = config.model.castShadow;
-          }
-          if (config.model.receiveShadow !== undefined) {
-            child.receiveShadow = config.model.receiveShadow;
-          }
-          if (!isUnderIntInteractive(child)) {
-            child.raycast = () => {};
-          }
+        if (!(child instanceof THREE.Mesh)) return;
+        if (config.model.castShadow !== undefined) {
+          child.castShadow = config.model.castShadow;
+        }
+        if (config.model.receiveShadow !== undefined) {
+          child.receiveShadow = config.model.receiveShadow;
+        }
+        if (!isUnderIntInteractive(child)) {
+          child.raycast = () => {};
         }
       });
 

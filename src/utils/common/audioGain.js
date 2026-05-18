@@ -36,12 +36,16 @@ export function applyExtendedAudioVolume(audio, requestedVolume) {
 
   let entry = mediaGainMap.get(audio);
   if (!entry || entry.context !== context) {
-    const source = context.createMediaElementSource(audio);
-    const gainNode = context.createGain();
-    source.connect(gainNode);
-    gainNode.connect(context.destination);
-    entry = { context, gainNode };
-    mediaGainMap.set(audio, entry);
+    try {
+      const source = context.createMediaElementSource(audio);
+      const gainNode = context.createGain();
+      source.connect(gainNode);
+      gainNode.connect(context.destination);
+      entry = { context, gainNode };
+      mediaGainMap.set(audio, entry);
+    } catch {
+      return;
+    }
   }
 
   entry.gainNode.gain.value = normalized;

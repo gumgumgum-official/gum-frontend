@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="700" viewBox="0 0 500 700">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff5fa"/>
+      <stop offset="55%" stop-color="#ffd9e8"/>
+      <stop offset="100%" stop-color="#ffb3d1"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff7eb6"/>
+      <stop offset="100%" stop-color="#ff5fa2"/>
+    </linearGradient>
+  </defs>
+  <rect width="500" height="700" fill="url(#bg)"/>
+  <rect x="18" y="18" width="464" height="664" rx="18" fill="#fff" stroke="#ff5fa2" stroke-width="6"/>
+  <rect x="34" y="34" width="432" height="632" rx="12" fill="#fff0f6" stroke="#ffb3d1" stroke-width="3"/>
+
+  <text x="250" y="78" text-anchor="middle" font-family="monospace" font-size="34" font-weight="700" fill="url(#title)">e )Ö] e</text>
+  <text x="250" y="112" text-anchor="middle" font-family="monospace" font-size="16" fill="#c2185b">ppippi&apos;s mini home</text>
+
+  <rect x="72" y="132" width="356" height="356" rx="14" fill="#ffd9e8" stroke="#ff5fa2" stroke-width="4"/>
+  <image href="/assets/pixel-character.png" x="98" y="148" width="304" height="304" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated"/>
+
+  <rect x="72" y="512" width="356" height="120" rx="12" fill="#fff" stroke="#ff5fa2" stroke-width="3"/>
+  <text x="250" y="552" text-anchor="middle" font-family="monospace" font-size="20" font-weight="700" fill="#ff5fa2"> T‹¿ ®00</text>
+  <text x="250" y="586" text-anchor="middle" font-family="monospace" font-size="15" fill="#ad1457">êê–å \»~ e</text>
+  <text x="250" y="614" text-anchor="middle" font-family="monospace" font-size="13" fill="#c2185b">CLICK TO OPEN</text>
+
+  <circle cx="58" cy="58" r="10" fill="#ff5fa2"/>
+  <circle cx="442" cy="58" r="10" fill="#ff5fa2"/>
+  <circle cx="58" cy="642" r="10" fill="#ff5fa2"/>
+  <circle cx="442" cy="642" r="10" fill="#ff5fa2"/>
+</svg>

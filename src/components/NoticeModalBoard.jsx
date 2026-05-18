@@ -8,8 +8,6 @@ import { GuestbookEmbed } from "./GuestbookEmbed";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const NOTICE_POSTER = NOTICE.posterImages;
-const THIRD_POSTER_SRC =
-  NOTICE_POSTER.icecream ?? "/assets/poster/icecream_poster.png";
 
 const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
@@ -367,8 +365,8 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src={THIRD_POSTER_SRC}
-                    alt="아이스크림 포스터"
+                    src={NOTICE_POSTER.guestbook}
+                    alt="방명록 포스터"
                     draggable={false}
                     style={{
                       width: "100%",
