@@ -712,7 +712,7 @@ export function createStage3LetterController({
       if (i !== 0 && i !== segs) {
         base.add(perp.clone().multiplyScalar((Math.random() - 0.5) * 2));
       }
-      positions.push(base.x, base.y, base.z);
+      positions.push(base.x, base.y, base.z + 0.03);
     }
     const geom = new THREE.BufferGeometry();
     geom.setAttribute(
@@ -723,7 +723,7 @@ export function createStage3LetterController({
       color: 0xffffff,
       transparent: true,
       opacity: 0,
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
     });
     const line = new THREE.Line(geom, mat);
