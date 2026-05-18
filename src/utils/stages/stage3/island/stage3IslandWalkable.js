@@ -142,10 +142,25 @@ export function collectStage3WalkableFromModel(
 }
 
 /**
+ * @param {number} x
+ * @param {number} z
+ * @param {THREE.Box3} box
+ * @returns {{ x: number, z: number }}
+ */
+export function clampPointXZToBox(x, z, box) {
+  return {
+    x: THREE.MathUtils.clamp(x, box.min.x, box.max.x),
+    z: THREE.MathUtils.clamp(z, box.min.z, box.max.z),
+  };
+}
+
+/**
  * @param {THREE.Box3} walkableBounds
  * @param {boolean} hasWalkableBounds
  * @param {number} [edgeSafetyInset]
- * @param {{ x: number, z: number }} [spawnXZ] - 스폰 지점이 inset 밖이면 bounds에 포함
+ * @param {{ x: number, z: number }} [spawnXZ] - walkable 위·inset 밖일 때만 bounds 확장
+ * @param {import("three").Mesh[]} [walkableMeshes] - 스폰 walkable 검증용
+ * @param {number} [groundRayOriginY] - `sampleStage3WalkableGroundY` 레이 시작 높이
  * @returns {THREE.Box3 | null}
  */
 export function buildStage3AllowedBoundsXZ(
@@ -153,6 +168,8 @@ export function buildStage3AllowedBoundsXZ(
   hasWalkableBounds,
   edgeSafetyInset = STAGE3_EDGE_SAFETY_INSET,
   spawnXZ = null,
+  walkableMeshes = null,
+  groundRayOriginY = null,
 ) {
   if (!hasWalkableBounds) return null;
   const safeBounds = walkableBounds.clone();
@@ -167,9 +184,82 @@ export function buildStage3AllowedBoundsXZ(
     safeBounds.copy(walkableBounds);
   }
   if (spawnXZ && Number.isFinite(spawnXZ.x) && Number.isFinite(spawnXZ.z)) {
-    safeBounds.expandByPoint(
-      new THREE.Vector3(spawnXZ.x, safeBounds.min.y, spawnXZ.z),
-    );
+    const spawnInsideSafe =
+      spawnXZ.x >= safeBounds.min.x &&
+      spawnXZ.x <= safeBounds.max.x &&
+      spawnXZ.z >= safeBounds.min.z &&
+      spawnXZ.z <= safeBounds.max.z;
+    const spawnOnWalkable =
+      !spawnInsideSafe &&
+      walkableMeshes?.length &&
+      Number.isFinite(groundRayOriginY) &&
+      sampleStage3WalkableGroundY(
+        spawnXZ.x,
+        spawnXZ.z,
+        walkableMeshes,
+        groundRayOriginY,
+      ) != null;
+    if (spawnOnWalkable) {
+      safeBounds.expandByPoint(
+        new THREE.Vector3(spawnXZ.x, safeBounds.min.y, spawnXZ.z),
+      );
+    } else if (
+      import.meta.env.DEV &&
+      !spawnInsideSafe &&
+      walkableMeshes?.length &&
+      Number.isFinite(groundRayOriginY) &&
+      sampleStage3WalkableGroundY(
+        spawnXZ.x,
+        spawnXZ.z,
+        walkableMeshes,
+        groundRayOriginY,
+      ) == null
+    ) {
+      console.warn(
+        "[Stage3] spawnOffset이 walkable 밖입니다 — allowed bounds를 확장하지 않습니다.",
+        spawnXZ,
+      );
+    }
   }
   return safeBounds;
+}
+
+/**
+ * 캐릭터 XZ 이동 clamp — GLB `Island` 노드 bbox + boundsPadding (island12 동작).
+ * walkable(DECO_Grass 등) bbox는 물·뒤쪽 지형까지 넓어 섬 밖 이동이 생길 수 있음.
+ * @param {THREE.Box3} walkableBounds
+ * @param {boolean} hasWalkableBounds
+ * @param {THREE.Box3} backgroundBounds
+ * @param {{ x: number, z: number }} [spawnXZ]
+ * @param {number} [boundsPadding]
+ * @returns {THREE.Box3 | null}
+ */
+export function buildStage3MovementBoundsXZ(
+  walkableBounds,
+  hasWalkableBounds,
+  backgroundBounds,
+  spawnXZ = null,
+  boundsPadding = 0.5,
+) {
+  void spawnXZ;
+  if (!backgroundBounds?.isEmpty()) {
+    const box = backgroundBounds.clone();
+    const pad = Math.max(0, boundsPadding);
+    box.min.x += pad;
+    box.max.x -= pad;
+    box.min.z += pad;
+    box.max.z -= pad;
+    if (box.max.x > box.min.x && box.max.z > box.min.z) {
+      return box;
+    }
+  }
+  if (hasWalkableBounds && !walkableBounds.isEmpty()) {
+    return buildStage3AllowedBoundsXZ(
+      walkableBounds,
+      true,
+      STAGE3_EDGE_SAFETY_INSET,
+      spawnXZ,
+    );
+  }
+  return null;
 }

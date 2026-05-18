@@ -995,6 +995,7 @@ export function createGumFollowersController({
             Math.abs(f.model.position.x - prevIX) > 1e-6 ||
             Math.abs(f.model.position.z - prevIZ) > 1e-6;
           if (movedIntro && staticColliderBoxes.length > 0) {
+            const feetY = f.model.position.y - groundOffset;
             const slid = slideMoveXZAgainstAABBs(
               prevIX,
               prevIZ,
@@ -1002,6 +1003,7 @@ export function createGumFollowersController({
               f.model.position.z,
               collisionRadius,
               staticColliderBoxes,
+              feetY,
             );
             f.model.position.x = slid.x;
             f.model.position.z = slid.z;
@@ -1092,6 +1094,7 @@ export function createGumFollowersController({
           Math.abs(f.model.position.x - prevX) > 1e-6 ||
           Math.abs(f.model.position.z - prevZ) > 1e-6;
         if (movedXZ && staticColliderBoxes.length > 0) {
+          const feetY = f.model.position.y - groundOffset;
           const slid = slideMoveXZAgainstAABBs(
             prevX,
             prevZ,
@@ -1099,6 +1102,7 @@ export function createGumFollowersController({
             f.model.position.z,
             collisionRadius,
             staticColliderBoxes,
+            feetY,
           );
           f.model.position.x = slid.x;
           f.model.position.z = slid.z;

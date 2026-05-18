@@ -464,7 +464,7 @@ export function Stage3() {
         options: {
           stageName: "stage3",
           getInitialCameraConfig: () => config.camera,
-          forceOrbit: true, // OrbitControls 활성화 (마우스 드래그로 회전/줌)
+          forceOrbit: false,
           manageCursor: false, // 아이스크림 카트 호버 시 pointer 커서 직접 처리
         },
       });

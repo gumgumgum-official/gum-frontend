@@ -5,7 +5,10 @@ import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
-import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
+import {
+  debugOverlappingCollidersAt,
+  slideMoveXZAgainstAABBs,
+} from "./islandStaticColliders.js";
 import { sampleStage3WalkableGroundY } from "./island/stage3IslandWalkable.js";
 
 const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
@@ -41,7 +44,7 @@ function findClip(clips, regex) {
  *       worldSpawnXZ?: { x: number, z: number },
  *       walkableMeshes?: import("three").Mesh[],
  *       walkableBounds?: import("three").Box3 | null,
- *       allowedBoundsXZ?: import("three").Box3 | null,
+ *       movementBoundsXZ?: import("three").Box3 | null,
  *       islandModel?: import("three").Object3D | null,
  *     },
  *   ) => void,
@@ -105,14 +108,13 @@ export function createCharacterController({
     _maxCx = 0,
     _minCz = 0,
     _maxCz = 0;
-  /** @type {import("three").Box3 | null} */
-  let allowedBoundsXZ = null;
   /** walkable bbox 기준 최저 안전 지면 Y (물·절벽 레이 히트 거부용) */
   let minSafeGroundY = null;
   /** walkable 레이캐스트 시작 높이 */
   let groundRayOriginY = 30;
   /** @type {import("three").Object3D | null} */
   let islandModelForRaycast = null;
+  let _dbgMoveBlockLogAt = 0;
 
   const _moveVector = new THREE.Vector3();
   const _direction = new THREE.Vector3();
@@ -123,7 +125,6 @@ export function createCharacterController({
   const _headAnchorBox = new THREE.Box3();
   const GROUND_MISS_TOLERANCE_FRAMES = 5;
   const GROUND_HEIGHT_EASE_SPEED = 16;
-  const MAX_SAFE_STEP_DOWN = 0.22;
   const MIN_SAFE_GROUND_OFFSET = 0.12;
 
   function getWalkSoundVolume() {
@@ -184,7 +185,7 @@ export function createCharacterController({
         worldSpawnXZ,
         walkableMeshes,
         walkableBounds,
-        allowedBoundsXZ: allowedBounds,
+        movementBoundsXZ,
         islandModel,
       } = setupOptions;
       backgroundBounds = bounds;
@@ -193,10 +194,6 @@ export function createCharacterController({
       walkableGroundMeshes = Array.isArray(walkableMeshes)
         ? walkableMeshes
         : [];
-      allowedBoundsXZ =
-        allowedBounds instanceof THREE.Box3 && !allowedBounds.isEmpty()
-          ? allowedBounds.clone()
-          : null;
       baseGroundY = backgroundMaxY;
       resolvedGroundY = backgroundMaxY;
       groundMissFrames = 0;
@@ -228,22 +225,59 @@ export function createCharacterController({
       };
 
       const { boundsPadding } = config.character;
+      const clampBox =
+        movementBoundsXZ instanceof THREE.Box3 && !movementBoundsXZ.isEmpty()
+          ? movementBoundsXZ
+          : bounds;
       _minCx = Math.min(
-        bounds.min.x + boundsPadding,
-        bounds.max.x - boundsPadding,
+        clampBox.min.x + boundsPadding,
+        clampBox.max.x - boundsPadding,
       );
       _maxCx = Math.max(
-        bounds.min.x + boundsPadding,
-        bounds.max.x - boundsPadding,
+        clampBox.min.x + boundsPadding,
+        clampBox.max.x - boundsPadding,
       );
       _minCz = Math.min(
-        bounds.min.z + boundsPadding,
-        bounds.max.z - boundsPadding,
+        clampBox.min.z + boundsPadding,
+        clampBox.max.z - boundsPadding,
       );
       _maxCz = Math.max(
-        bounds.min.z + boundsPadding,
-        bounds.max.z - boundsPadding,
+        clampBox.min.z + boundsPadding,
+        clampBox.max.z - boundsPadding,
       );
+
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "672540",
+          },
+          body: JSON.stringify({
+            sessionId: "672540",
+            runId: "bounds-fix",
+            hypothesisId: "H-bounds",
+            location: "characterController.js:setup",
+            message: "movement clamp bounds",
+            data: {
+              useIslandBbox:
+                movementBoundsXZ instanceof THREE.Box3 &&
+                Math.abs(_minCz - (bounds.min.z + boundsPadding)) < 0.05,
+              spawnXZ: worldSpawnXZ ?? null,
+              clampMinZ: _minCz,
+              clampMaxZ: _maxCz,
+              bgMinZ: bounds.min.z,
+              bgMaxZ: bounds.max.z,
+              walkableMinZ: walkableBounds?.min?.z,
+              walkableMaxZ: walkableBounds?.max?.z,
+            },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
 
       const characterUrl = resolvePublicAssetUrl(
         config.characterModelPath ?? "/models/common/user_walk_v2.glb",
@@ -288,15 +322,15 @@ export function createCharacterController({
             spawnZ = 0;
           if (worldSpawnXZ && Number.isFinite(worldSpawnXZ.x)) {
             spawnX = worldSpawnXZ.x;
-            spawnZ = worldSpawnXZ.z;
+            spawnZ = worldSpawnXZ.z ?? 0;
           } else if (!bounds.isEmpty()) {
             spawnX = (bounds.min.x + bounds.max.x) * 0.5;
             spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
-          }
-          const off = config.character?.spawnOffset;
-          if (off) {
-            spawnX += off.x ?? 0;
-            spawnZ += off.z ?? 0;
+            const off = config.character?.spawnOffset;
+            if (off) {
+              spawnX += off.x ?? 0;
+              spawnZ += off.z ?? 0;
+            }
           }
           const charCfg = /** @type {any} */ (config.character);
           const spawnRotationRadRaw = Number(charCfg?.spawnRotationRad);
@@ -371,6 +405,32 @@ export function createCharacterController({
 
           scene.add(characterModel);
           if (idleCharacterModel) scene.add(idleCharacterModel);
+
+          // #region agent log
+          fetch(
+            "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Debug-Session-Id": "672540",
+              },
+              body: JSON.stringify({
+                sessionId: "672540",
+                runId: "post-fix",
+                hypothesisId: "H-char",
+                location: "characterController.js:setup",
+                message: "character model loaded",
+                data: {
+                  spawnX,
+                  spawnZ,
+                  y: characterYPosition,
+                },
+                timestamp: Date.now(),
+              }),
+            },
+          ).catch(() => {});
+          // #endregion
 
           if (punchGltf) {
             punchCharacterModel = SkeletonUtils.clone(punchGltf.scene);
@@ -487,6 +547,7 @@ export function createCharacterController({
           _minCz,
           _maxCz,
         );
+        const feetY = characterModel.position.y - characterGroundLift;
         const slid = slideMoveXZAgainstAABBs(
           oldX,
           oldZ,
@@ -494,6 +555,7 @@ export function createCharacterController({
           clampedZ,
           collisionRadius,
           staticColliderBoxes,
+          feetY,
         );
         const candidateX = slid.x;
         const candidateZ = slid.z;
@@ -503,20 +565,63 @@ export function createCharacterController({
 
         // XZ 이동은 바운딩·정적 충돌만 적용. Y(지면)는 아래 resolveGroundY에서 처리.
         // (walkable 레이 실패·Island bbox Y 오차로 XZ가 막히던 문제 방지)
-        let canMoveToCandidate = movedXZ;
-        if (canMoveToCandidate && walkableGroundMeshes.length > 0) {
-          const sampledCandidateGroundY = sampleGroundY(candidateX, candidateZ);
-          if (
-            sampledCandidateGroundY != null &&
-            sampledCandidateGroundY < getMinSafeGroundY() - MAX_SAFE_STEP_DOWN
-          ) {
-            canMoveToCandidate = false;
-          }
-        }
+        const targetX = movedXZ ? candidateX : oldX;
+        const targetZ = movedXZ ? candidateZ : oldZ;
 
-        const targetX = canMoveToCandidate ? candidateX : oldX;
-        const targetZ = canMoveToCandidate ? candidateZ : oldZ;
-        if (canMoveToCandidate) {
+        // #region agent log
+        if (movingInput && !movedXZ && Date.now() - _dbgMoveBlockLogAt > 800) {
+          _dbgMoveBlockLogAt = Date.now();
+          const blockers = debugOverlappingCollidersAt(
+            clampedX,
+            clampedZ,
+            collisionRadius,
+            staticColliderBoxes,
+            feetY,
+          );
+          const atPos = debugOverlappingCollidersAt(
+            oldX,
+            oldZ,
+            collisionRadius,
+            staticColliderBoxes,
+            feetY,
+          );
+          fetch(
+            "http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Debug-Session-Id": "672540",
+              },
+              body: JSON.stringify({
+                sessionId: "672540",
+                hypothesisId: "H2-H5",
+                location: "characterController.js:update",
+                message: "movement blocked",
+                data: {
+                  pos: { x: oldX, z: oldZ },
+                  wanted: { x: clampedX, z: clampedZ },
+                  bounds: {
+                    minCx: _minCx,
+                    maxCx: _maxCx,
+                    minCz: _minCz,
+                    maxCz: _maxCz,
+                  },
+                  clampedByBounds:
+                    clampedX !== oldX + _moveVector.x ||
+                    clampedZ !== oldZ + _moveVector.z,
+                  blockersAtTarget: blockers.slice(0, 8),
+                  blockersAtPos: atPos.slice(0, 8),
+                  colliderCount: staticColliderBoxes.length,
+                },
+                timestamp: Date.now(),
+              }),
+            },
+          ).catch(() => {});
+        }
+        // #endregion
+
+        if (movedXZ) {
           groundMissFrames = 0;
           const sampledAtTarget = sampleGroundY(targetX, targetZ);
           if (sampledAtTarget != null) {
@@ -532,8 +637,7 @@ export function createCharacterController({
           easeAlpha,
         );
         characterModel.position.set(targetX, characterYPosition, targetZ);
-        moved =
-          Math.abs(targetX - oldX) > 1e-6 || Math.abs(targetZ - oldZ) > 1e-6;
+        moved = movedXZ;
         characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
       } else {
         const p = characterModel.position;
@@ -613,7 +717,6 @@ export function createCharacterController({
       isWalking = false;
       backgroundBounds = null;
       walkableGroundMeshes = [];
-      allowedBoundsXZ = null;
       minSafeGroundY = null;
       groundRayOriginY = 30;
       islandModelForRaycast = null;

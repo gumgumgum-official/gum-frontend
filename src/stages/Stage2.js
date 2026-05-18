@@ -940,7 +940,7 @@ function buildStage2CharacterObstacleBoxes(roots, backgroundBounds) {
   if (!Array.isArray(roots) || roots.length === 0) return [];
   const preferred = [];
   roots.forEach((root) => {
-    preferred.push(...collectIslandStaticColliderBoxes(root));
+    preferred.push(...collectIslandStaticColliderBoxes(root, backgroundBounds));
   });
   const filteredPreferred = filterCollidersExcludingDominantTerrain(
     preferred,

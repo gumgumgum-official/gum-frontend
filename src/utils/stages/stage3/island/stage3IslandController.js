@@ -4,14 +4,16 @@
 import * as THREE from "three";
 import {
   collectIslandStaticColliderBoxes,
+  debugOverlappingCollidersAt,
   filterCollidersExcludingDominantTerrain,
+  filterCollidersExcludingInflatedMeshBounds,
   filterCollidersExcludingSpawnOverlap,
 } from "../islandStaticColliders.js";
 import { setupFountainFromModel } from "../fountainEffect.js";
 import { createGumFollowersController } from "../gumFollowerController.js";
 import {
   collectStage3WalkableFromModel,
-  buildStage3AllowedBoundsXZ,
+  buildStage3MovementBoundsXZ,
   resolveStage3CharacterGroundY,
   resolveStage3SpawnXZ,
 } from "./stage3IslandWalkable.js";
@@ -113,19 +115,60 @@ export function createStage3IslandController({
         : 0.55) + 0.35;
 
     const rawColliders = useStatic
-      ? collectIslandStaticColliderBoxes(model)
+      ? collectIslandStaticColliderBoxes(model, backgroundBounds)
       : [];
     const islandStaticColliders = useStatic
       ? filterCollidersExcludingSpawnOverlap(
-          filterCollidersExcludingDominantTerrain(
-            rawColliders,
-            backgroundBounds,
+          filterCollidersExcludingInflatedMeshBounds(
+            filterCollidersExcludingDominantTerrain(
+              rawColliders,
+              backgroundBounds,
+            ),
           ),
           initialSpawnXZ.x,
           initialSpawnXZ.z,
           spawnCollisionRadius,
         )
       : [];
+
+    // #region agent log
+    const _dbgPicnicPos = new THREE.Vector3();
+    const picnicZone = model.getObjectByName("Picnic_Zone");
+    if (picnicZone) picnicZone.getWorldPosition(_dbgPicnicPos);
+    const picnicFinalHits = debugOverlappingCollidersAt(
+      _dbgPicnicPos.x,
+      _dbgPicnicPos.z,
+      spawnCollisionRadius,
+      islandStaticColliders,
+    );
+    fetch("http://127.0.0.1:7759/ingest/35888210-4385-4e6e-bf1e-df1b53425c05", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "672540",
+      },
+      body: JSON.stringify({
+        sessionId: "672540",
+        hypothesisId: "H2-H4",
+        location: "stage3IslandController.js:onBackgroundReady",
+        message: "final colliders at picnic zone",
+        data: {
+          rawCount: rawColliders.length,
+          finalCount: islandStaticColliders.length,
+          picnicPos: { x: _dbgPicnicPos.x, z: _dbgPicnicPos.z },
+          picnicFinalHits: picnicFinalHits.slice(0, 10),
+          pathProbeHits: debugOverlappingCollidersAt(
+            -5,
+            -25.9,
+            spawnCollisionRadius,
+            islandStaticColliders,
+          ).slice(0, 8),
+          spawnXZ: initialSpawnXZ,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     const {
       meshes: walkableMeshes,
@@ -175,15 +218,19 @@ export function createStage3IslandController({
     });
     setGroundY(characterGroundY);
 
+    const movementBoundsXZ = buildStage3MovementBoundsXZ(
+      walkableBounds,
+      hasBounds,
+      backgroundBounds,
+      initialSpawnXZ,
+      config.character?.boundsPadding ?? 0.5,
+    );
+
     character.setup(characterGroundY, backgroundBounds, islandStaticColliders, {
       walkableMeshes,
       walkableBounds: hasBounds ? walkableBounds : null,
-      allowedBoundsXZ: buildStage3AllowedBoundsXZ(
-        walkableBounds,
-        hasBounds,
-        undefined,
-        initialSpawnXZ,
-      ),
+      movementBoundsXZ,
+      worldSpawnXZ: initialSpawnXZ,
       islandModel: model,
     });
 
