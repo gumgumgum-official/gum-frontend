@@ -13,8 +13,8 @@ const WELL_NODE_RE = /^INT_Well$/i;
 /** 거대 OBJ_ 루트·지형 메시 이름 — prop 충돌은 유지 */
 const OBJ_TERRAIN_NAME_RE =
   /^OBJ_(Island|Terrain|Ground|Floor|Walk|Path|Grass|Brick|Sea|Water|Land|Base|Mesh)/i;
-/** Sunbed·매트·껌 리그 — 통로 막힘 방지 */
-const OBJ_SKIP_COLLISION_RE = /^OBJ_Sunbed/i;
+/** 껌 리그 — 통로 막힘 방지 (island15: OBJ_Sunbed1/2는 개별 메시라 콜라이더 유지) */
+const OBJ_SKIP_COLLISION_RE = /^$/; // 현재 스킵 대상 없음
 /** GLB 메시 AABB가 비정상적으로 큰 피크닉 소품만 제거 (등대·울타리·구조물은 유지) */
 const INFLATED_MESH_SRC_RE =
   /Apple|PicnicBasket|Bush|Sandwhich|Sandwich|Strawberry|Fork|Plate|Cake|PicnicTable|Parasol/i;

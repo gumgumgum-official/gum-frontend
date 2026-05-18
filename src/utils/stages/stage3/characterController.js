@@ -466,20 +466,6 @@ export function createCharacterController({
       const movingInput = _moveVector.length() > 0;
       let moved = false;
 
-      if (import.meta.env.DEV) {
-        const _el = document.getElementById("__stage3_dbg_overlay__");
-        if (_el && !movingInput) {
-          _el.textContent = [
-            `[Stage3 DEV — 이동 진단]`,
-            `pos  (${characterModel.position.x.toFixed(3)}, ${characterModel.position.y.toFixed(3)}, ${characterModel.position.z.toFixed(3)})`,
-            `clampX [${_minCx.toFixed(2)} ~ ${_maxCx.toFixed(2)}]`,
-            `clampZ [${_minCz.toFixed(2)} ~ ${_maxCz.toFixed(2)}]`,
-            `colliders: ${staticColliderBoxes.length}개`,
-            `⬆️⬇️⬅️➡️ 키를 눌러주세요`,
-          ].join("\n");
-        }
-      }
-
       if (movingInput) {
         _direction.copy(_moveVector).normalize();
         _moveVector
@@ -513,23 +499,6 @@ export function createCharacterController({
         const movedXZ =
           Math.abs(candidateX - oldX) > 1e-6 ||
           Math.abs(candidateZ - oldZ) > 1e-6;
-
-        if (import.meta.env.DEV) {
-          const _el = document.getElementById("__stage3_dbg_overlay__");
-          if (_el) {
-            _el.textContent = [
-              `[Stage3 DEV — 이동 진단]`,
-              `pos     (${oldX.toFixed(3)}, ${characterModel.position.y.toFixed(3)}, ${oldZ.toFixed(3)})`,
-              `clamped (${clampedX.toFixed(3)}, ${clampedZ.toFixed(3)})`,
-              `slide   (${candidateX.toFixed(3)}, ${candidateZ.toFixed(3)})`,
-              `movedXZ: ${movedXZ}`,
-              `clampX  [${_minCx.toFixed(2)} ~ ${_maxCx.toFixed(2)}]`,
-              `clampZ  [${_minCz.toFixed(2)} ~ ${_maxCz.toFixed(2)}]`,
-              `feetY: ${feetY.toFixed(3)}`,
-              `colliders: ${staticColliderBoxes.length}개`,
-            ].join("\n");
-          }
-        }
 
         // XZ 이동은 바운딩·정적 충돌만 적용. Y(지면)는 아래 resolveGroundY에서 처리.
         // (walkable 레이 실패·Island bbox Y 오차로 XZ가 막히던 문제 방지)
