@@ -232,6 +232,28 @@
  */
 
 /**
+ * @typedef {Object} Stage3VendingMachineConfig
+ * @property {string[]} [spawnPaths] - 벤딩머신 클릭 시 복제해 스폰할 GLB 경로(public 기준)
+ * @property {number} [spawnScale]
+ * @property {number} [maxVisualSize]
+ * @property {number} [minVisualSize]
+ * @property {number} [spawnRadiusMin]
+ * @property {number} [spawnRadiusMax]
+ * @property {number} [spawnLateralOffset]
+ * @property {number} [spawnHeightAboveMachine]
+ * @property {number} [spawnHeightJitter]
+ * @property {number} [launchHorizontalMin]
+ * @property {number} [launchHorizontalSpread]
+ * @property {number} [launchUpMin]
+ * @property {number} [launchUpSpread]
+ * @property {number} [launchTowardPlayerSpread]
+ * @property {number} [physicsGroundYOffset]
+ * @property {number} [maxSpawns]
+ * @property {number} [physicsSubsteps]
+ * @property {number} [landSoundVolume]
+ */
+
+/**
  * Stage3 인트로·배경 루프 볼륨
  * @typedef {Object} Stage3AudioConfig
  * @property {number} [introVolume] - 인트로(새소리) 0~1
@@ -259,6 +281,7 @@
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
  * @property {Stage3IcecreamCartConfig} [icecreamCart]
+ * @property {Stage3VendingMachineConfig} [vendingMachine]
  * @property {Stage3PropConfig} [tree1]
  * @property {Stage3PropConfig} [notice]
  * @property {Stage3PortalConfig} [portal_bright]

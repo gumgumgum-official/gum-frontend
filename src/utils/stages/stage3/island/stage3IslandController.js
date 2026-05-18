@@ -9,6 +9,7 @@ import {
   filterCollidersExcludingSpawnOverlap,
 } from "../islandStaticColliders.js";
 import { setupFountainFromModel } from "../fountainEffect.js";
+import { STAGE3_CLICK_ONCE_CLIP_NAMES } from "../../../../config/stages/stage3/stage3Interactions.js";
 import { createGumFollowersController } from "../gumFollowerController.js";
 import {
   collectStage3WalkableFromModel,
@@ -44,6 +45,7 @@ import {
  *   registerIslandInteractions: (model: import("three").Object3D, animations: import("three").AnimationClip[]) => void,
  *   applyPortalVortex: (model: import("three").Object3D) => import("three").ShaderMaterial | null,
  *   preloadIceCream: () => void,
+ *   preloadVendingMachine: () => void,
  * }} params
  */
 export function createStage3IslandController({
@@ -72,6 +74,7 @@ export function createStage3IslandController({
   registerIslandInteractions,
   applyPortalVortex,
   preloadIceCream,
+  preloadVendingMachine,
 }) {
   /**
    * @param {{
@@ -93,7 +96,10 @@ export function createStage3IslandController({
     const character = getCharacter();
     if (!scene || !character) return;
 
-    setFountainState(setupFountainFromModel(model, animations));
+    const ambientAnimations = animations.filter(
+      (clip) => !STAGE3_CLICK_ONCE_CLIP_NAMES.has(clip.name),
+    );
+    setFountainState(setupFountainFromModel(model, ambientAnimations));
     setBackgroundModel(model);
     onUiMounted();
     if (getIsStageActive()) {
@@ -241,6 +247,7 @@ export function createStage3IslandController({
       });
 
     void preloadIceCream();
+    void preloadVendingMachine();
   }
 
   return { onBackgroundReady };

@@ -81,6 +81,33 @@ export const STAGE3_OBJECTS_CONFIG = {
     landSoundVolume: 2.8,
   },
 
+  /**
+   * 벤딩머신 클릭 스폰(캐논) 설정.
+   * GLB 내 `INT_vending_machine`을 클릭하면 `spawnPaths` GLB를 복제해 튀어나옴.
+   */
+  vendingMachine: {
+    spawnPaths: ["/models/stage3/soft_drink_red.glb"],
+    spawnScale: 0.32,
+    maxVisualSize: 0.88,
+    minVisualSize: 0.3,
+    /** 머신 앞면 표면까지 거리(m) */
+    spawnRadiusMin: 0.45,
+    spawnRadiusMax: 0.45,
+    /** 앞면 방향 기준 오른쪽 오프셋(m). 양수=오른쪽, 음수=왼쪽 */
+    spawnLateralOffset: 0.18,
+    /** 머신 bbox 중심 Y에서 아래로 내려 하단 슬롯 위치를 맞춤 */
+    spawnHeightAboveMachine: -0.45,
+    launchHorizontalMin: 3.7,
+    launchHorizontalSpread: 2,
+    launchUpMin: 4.2,
+    launchUpSpread: 2.4,
+    launchTowardPlayerSpread: 0.15,
+    physicsGroundYOffset: 0.48,
+    maxSpawns: 20,
+    physicsSubsteps: 2,
+    landSoundVolume: 2.8,
+  },
+
   /** 게시판 모달: 사운드 + `NoticeModalBoard` 포스터 이미지(public 기준 경로) */
   notice: {
     paperSoundPaths: [

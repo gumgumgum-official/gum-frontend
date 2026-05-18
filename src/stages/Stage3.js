@@ -18,6 +18,7 @@ import { createStage3IslandController } from "../utils/stages/stage3/island/stag
 import { createDeferredStage3SetupScheduler } from "../utils/stages/stage3/scheduleDeferredStage3Setup.js";
 import { createStage3LetterController } from "../utils/stages/stage3/letter/stage3LetterController.js";
 import { createStage3IceCreamController } from "../utils/stages/stage3/iceCream/stage3IceCreamController.js";
+import { createStage3VendingMachineController } from "../utils/stages/stage3/vendingMachine/stage3VendingMachineController.js";
 import { createStage3InteractionsController } from "../utils/stages/stage3/interactions/stage3InteractionsController.js";
 import { createStage3StampController } from "../utils/stages/stage3/stamp/stage3StampController.js";
 import { createStage3MonitorController } from "../utils/stages/stage3/monitor/stage3MonitorController.js";
@@ -211,6 +212,15 @@ export function Stage3() {
     getCamera: () => cameraRef,
   });
 
+  const vendingMachineController = createStage3VendingMachineController({
+    getScene: () => sceneRef,
+    getGroundY: () => stage3GroundY,
+    getConfig: () => config,
+    getIsStageActive: () => isStage3Active,
+    getCharacterPosition: () => character?.getPosition?.() ?? null,
+    getCamera: () => cameraRef,
+  });
+
   overlayController = createStage3OverlayController({
     getConfig: () => config,
     getKeyboardKeys: () => keyboard.keys,
@@ -241,6 +251,7 @@ export function Stage3() {
     getConfig: () => config,
     getCharacter: () => character,
     getIceCreamController: () => iceCreamController,
+    getVendingMachineController: () => vendingMachineController,
     getCameraIntroState: () => cameraIntroController.getState(),
     isInteractionBlocked: () =>
       stampController.isStampIntroAnimating() ||
@@ -393,6 +404,13 @@ export function Stage3() {
         }
       });
     },
+    preloadVendingMachine: () => {
+      void vendingMachineController.preloadTemplates().catch((e) => {
+        if (import.meta.env.DEV) {
+          console.warn("[Stage3] 벤딩머신 preload 오류:", e ?? "");
+        }
+      });
+    },
   });
 
   return {
@@ -509,6 +527,7 @@ export function Stage3() {
       cameraIntroController.update(delta);
       letterController.update(delta, this.camera);
       iceCreamController.update(delta);
+      vendingMachineController.update(delta);
       let cameraYawAssistRad = 0;
       if (
         cameraRef &&
@@ -597,6 +616,7 @@ export function Stage3() {
       disposeStage3CrackSound();
 
       iceCreamController.cleanup(scene);
+      vendingMachineController.cleanup(scene);
 
       monitorController.cleanup();
       deferredSetup.cancel();
