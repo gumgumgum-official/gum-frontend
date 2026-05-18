@@ -14,6 +14,7 @@ import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
 import { warmStage2GltfTemplateUrls } from "../utils/stages/stage2/stage2GltfWarmup.js";
+import { preloadStage6AirportGlb } from "../utils/stages/stage6/stage6AirportPreload.js";
 import {
   disposeStage6LoadingTransition,
   preloadStage6AirplaneModel,
@@ -195,6 +196,7 @@ export function initThreeApp(canvasElement, options = {}) {
 
   if (safeAllowedStages.includes(6)) {
     preloadStage6AirplaneModel();
+    preloadStage6AirportGlb();
   }
 
   if (safeAllowedStages.includes(2)) {
@@ -203,6 +205,7 @@ export function initThreeApp(canvasElement, options = {}) {
 
   if (safeAllowedStages.includes(3)) {
     warmStage3GltfTemplateUrls();
+    preloadStage6AirportGlb();
     void fetch(
       base + "/static/sounds/20711 finch bird isolated tweet-full.mp3",
       {

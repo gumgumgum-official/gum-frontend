@@ -8,6 +8,8 @@ import {
   PORTAL_WHITEOUT_HOLD_MS,
   PORTAL_WHITEOUT_FADE_OUT_SEC,
 } from "../../../../config/stages/stage3/stage3Portal.js";
+import { preloadStage6AirportGlb } from "../../stage6/stage6AirportPreload.js";
+import { retainStage3WhiteoutForStage6 } from "../stage3ToStage6Whiteout.js";
 
 /**
  * @param {{ getIsStageActive: () => boolean }} params
@@ -20,6 +22,7 @@ export function createStage3PortalController({ getIsStageActive }) {
   /** @type {number | null} */
   let portalTransitionHoldTimeoutId = null;
   let portalTransitionInProgress = false;
+  let retainWhiteoutForStage6 = false;
 
   function ensureWhiteoutOverlay() {
     if (whiteoutOverlayEl) return;
@@ -39,6 +42,10 @@ export function createStage3PortalController({ getIsStageActive }) {
     ensureWhiteoutOverlay();
     if (!whiteoutOverlayEl) return;
     playRandomPortalTransitionSound();
+    retainWhiteoutForStage6 = targetStage === 6;
+    if (retainWhiteoutForStage6) {
+      preloadStage6AirportGlb();
+    }
     portalTransitionInProgress = true;
     portalTransitionTween?.kill();
     if (portalTransitionHoldTimeoutId != null) {
@@ -73,6 +80,13 @@ export function createStage3PortalController({ getIsStageActive }) {
       window.clearTimeout(portalTransitionHoldTimeoutId);
       portalTransitionHoldTimeoutId = null;
     }
+    if (retainWhiteoutForStage6 && whiteoutOverlayEl) {
+      retainStage3WhiteoutForStage6(whiteoutOverlayEl);
+      whiteoutOverlayEl = null;
+      retainWhiteoutForStage6 = false;
+      portalTransitionInProgress = false;
+      return;
+    }
     if (whiteoutOverlayEl) {
       const el = whiteoutOverlayEl;
       gsap.killTweensOf(el);
@@ -91,6 +105,7 @@ export function createStage3PortalController({ getIsStageActive }) {
       });
     }
     portalTransitionInProgress = false;
+    retainWhiteoutForStage6 = false;
   }
 
   return {
