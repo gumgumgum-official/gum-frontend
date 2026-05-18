@@ -11,6 +11,8 @@ import { createGumFollowersController } from "../gumFollowerController.js";
 import {
   collectStage3WalkableFromModel,
   buildStage3AllowedBoundsXZ,
+  resolveStage3CharacterGroundY,
+  resolveStage3SpawnXZ,
 } from "./stage3IslandWalkable.js";
 
 /**
@@ -97,7 +99,6 @@ export function createStage3IslandController({
     }
     onDebugOrbitTarget(center);
     setCameraRef(stageCamera);
-    setGroundY(backgroundMaxY);
     onMonitorBackgroundReady();
 
     const useStatic = config.model.useStaticObstacleColliders !== false;
@@ -146,9 +147,31 @@ export function createStage3IslandController({
       setFlowerExclusionBoxes(exclusionBoxes);
     }
 
-    character.setup(backgroundMaxY, backgroundBounds, islandStaticColliders, {
+    const initialSpawnXZ = resolveStage3SpawnXZ(
+      backgroundBounds,
+      config.character?.spawnOffset,
+    );
+
+    const characterGroundY = resolveStage3CharacterGroundY({
+      backgroundMaxY,
+      backgroundBounds,
       walkableMeshes,
-      allowedBoundsXZ: buildStage3AllowedBoundsXZ(walkableBounds, hasBounds),
+      walkableBounds,
+      hasWalkableBounds: hasBounds,
+      spawnOffset: config.character?.spawnOffset,
+    });
+    setGroundY(characterGroundY);
+
+    character.setup(characterGroundY, backgroundBounds, islandStaticColliders, {
+      walkableMeshes,
+      walkableBounds: hasBounds ? walkableBounds : null,
+      allowedBoundsXZ: buildStage3AllowedBoundsXZ(
+        walkableBounds,
+        hasBounds,
+        undefined,
+        initialSpawnXZ,
+      ),
+      islandModel: model,
     });
 
     if (getIsStageActive()) {
@@ -178,10 +201,12 @@ export function createStage3IslandController({
 
     void gumFollowers
       .init({
-        backgroundMaxY,
+        backgroundMaxY: characterGroundY,
         isCancelled: () => !getIsStageActive() || isGumCancelled(),
         staticColliderBoxes: islandStaticColliders,
         walkableMeshes,
+        walkableBounds: hasBounds ? walkableBounds : null,
+        initialSpawnXZ,
       })
       .then(() => {
         if (!getIsStageActive()) return;

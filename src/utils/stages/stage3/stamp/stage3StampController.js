@@ -37,6 +37,8 @@ export function createStage3StampController({
   const stampCompletedSteps = new Set();
   const pendingStampStepsOnModalClose = new Set();
   let stampPanelRevealReady = false;
+  /** 진입 자막 타이머는 끝났으나 오버레이 때문에 reveal을 미룬 상태 */
+  let stampPanelRevealPending = false;
   let stage3IntroFlowStarted = false;
   let worryCompletionCelebrationDone = false;
   let pendingEggDiscoverySubtitle = null;
@@ -133,6 +135,9 @@ export function createStage3StampController({
   }
 
   function syncStampPanelVisibilityByOverlay() {
+    if (stampPanelRevealPending && !hasExternalOverlayOpen()) {
+      revealStampPanelAfterEntrySubtitles();
+    }
     if (!stampPanelRevealReady) {
       setStampPanelHidden(true);
       return;
@@ -191,10 +196,17 @@ export function createStage3StampController({
     panel.classList.add("stage3-stamp-panel--intro-center");
     stage3StampIntroHoldTimerId = window.setTimeout(() => {
       stage3StampIntroHoldTimerId = null;
-      if (!getIsStageActive() || !stampUiRoot) return;
+      if (!getIsStageActive() || !stampUiRoot) {
+        stage3StampIntroAnimating = false;
+        return;
+      }
       panel.classList.add("stage3-stamp-panel--intro-fly");
       stage3StampIntroFlyTimerId = window.setTimeout(() => {
         stage3StampIntroFlyTimerId = null;
+        if (!getIsStageActive() || !stampUiRoot) {
+          stage3StampIntroAnimating = false;
+          return;
+        }
         panel.classList.add("stage3-stamp-panel--settling");
         panel.classList.remove("stage3-stamp-panel--intro-center");
         panel.classList.remove("stage3-stamp-panel--intro-fly");
@@ -209,7 +221,11 @@ export function createStage3StampController({
 
   function revealStampPanelAfterEntrySubtitles() {
     if (!stampUiRoot || !getIsStageActive()) return;
-    if (hasExternalOverlayOpen()) return;
+    if (hasExternalOverlayOpen()) {
+      stampPanelRevealPending = true;
+      return;
+    }
+    stampPanelRevealPending = false;
     stampPanelRevealReady = true;
     playStampPanelEntryAnimation();
   }
@@ -413,6 +429,7 @@ export function createStage3StampController({
     stampCompletedSteps.clear();
     pendingStampStepsOnModalClose.clear();
     stampPanelRevealReady = false;
+    stampPanelRevealPending = false;
     stage3StampIntroAnimating = false;
     stage3InteractionLocked = true;
     isStampPosterZoomOpen = false;

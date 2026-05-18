@@ -12,6 +12,7 @@ import {
 } from "../../common/gltfTemplateCache.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 import { GUM_CARD_STICK_FOLLOWER_BY_NUM } from "../../../config/stages/stage3/gumCardStickFollowers.js";
+import { sampleStage3WalkableGroundY } from "./island/stage3IslandWalkable.js";
 
 /**
  * @param {{
@@ -158,6 +159,7 @@ export function createGumFollowersController({
   /** true면 다음 update에서 유저 기준 목표 위치/각도로 한 번에 맞춤(월드 0,0에서 lerp로 끌려 오는 현상 방지) */
   let pendingInitialWorldAlign = true;
   let baseGroundY = 0;
+  let groundRayOriginY = 30;
   /** @type {import("three").Mesh[]} */
   let walkableGroundMeshes = [];
   /** @type {import("./islandStaticColliders.js").IslandColliderAabb[]} */
@@ -211,7 +213,19 @@ export function createGumFollowersController({
     const liftBox = new THREE.Box3().setFromObject(model);
     const minY = liftBox.min.y;
     const modelGroundLift = -minY + groundOffset;
-    const spawnY = p.spawnBackgroundY - minY + groundOffset;
+    let spawnGroundY = p.spawnBackgroundY;
+    const spawnX = p.initialXZ?.x ?? 0;
+    const spawnZ = p.initialXZ?.z ?? 0;
+    if (walkableGroundMeshes.length) {
+      const sampled = sampleStage3WalkableGroundY(
+        spawnX,
+        spawnZ,
+        walkableGroundMeshes,
+        groundRayOriginY,
+      );
+      if (sampled != null) spawnGroundY = sampled;
+    }
+    const spawnY = spawnGroundY - minY + groundOffset;
 
     const mixer = new THREE.AnimationMixer(model);
     const walkAction = p.walkClip ? mixer.clipAction(p.walkClip) : null;
@@ -247,7 +261,7 @@ export function createGumFollowersController({
       idleAction,
       offsetYaw: null,
       breakDriftScalar: p.breakDriftScalar,
-      resolvedGroundY: p.spawnBackgroundY,
+      resolvedGroundY: spawnGroundY,
       groundMissFrames: 0,
       modelGroundLift,
       pendingInitialAlign: Boolean(p.pendingInitialAlign),
@@ -611,6 +625,8 @@ export function createGumFollowersController({
    *   isCancelled?: () => boolean,
    *   staticColliderBoxes?: import("./islandStaticColliders.js").IslandColliderAabb[],
    *   walkableMeshes?: import("three").Mesh[],
+   *   walkableBounds?: import("three").Box3 | null,
+   *   initialSpawnXZ?: { x: number, z: number },
    * }} [opts]
    */
   async function init({
@@ -618,6 +634,8 @@ export function createGumFollowersController({
     isCancelled,
     staticColliderBoxes: colliderBoxes = [],
     walkableMeshes = [],
+    walkableBounds = null,
+    initialSpawnXZ = null,
   } = {}) {
     if (isReady) return;
     if (backgroundMaxY == null) {
@@ -626,6 +644,11 @@ export function createGumFollowersController({
     staticColliderBoxes = Array.isArray(colliderBoxes) ? colliderBoxes : [];
     walkableGroundMeshes = Array.isArray(walkableMeshes) ? walkableMeshes : [];
     baseGroundY = backgroundMaxY;
+    if (walkableBounds instanceof THREE.Box3 && !walkableBounds.isEmpty()) {
+      groundRayOriginY = walkableBounds.max.y + 30;
+    } else {
+      groundRayOriginY = backgroundMaxY + 30;
+    }
 
     const fullPath = resolvePublicAssetUrl(modelPath);
     const idleFullPath = resolvePublicAssetUrl(idleModelPath);
@@ -669,7 +692,23 @@ export function createGumFollowersController({
     const idleClipFromWalkModel =
       findClipByName(/idle|stand|wait|pose/i) ?? null;
 
+    const userState = getUserState();
+    const anchorXZ =
+      userState.position != null
+        ? { x: userState.position.x, z: userState.position.z }
+        : initialSpawnXZ;
+    const anchorYaw = userState.yaw ?? 0;
+
     clones.forEach(({ id, side }) => {
+      /** @type {{ x: number, z: number } | null} */
+      let slotXZ = null;
+      if (anchorXZ) {
+        const offsetYaw = computeOffsetYaw(anchorYaw, side, angleDeg);
+        slotXZ = {
+          x: anchorXZ.x + Math.sin(offsetYaw) * distance,
+          z: anchorXZ.z + Math.cos(offsetYaw) * distance,
+        };
+      }
       appendOneFollower({
         id,
         side,
@@ -682,6 +721,7 @@ export function createGumFollowersController({
         breakDriftScalar: side * breakOffDriftAmplitude,
         spawnBackgroundY: backgroundMaxY,
         pendingInitialAlign: false,
+        initialXZ: slotXZ,
       });
     });
     const prewarmCamera = getCamera?.();
@@ -809,7 +849,7 @@ export function createGumFollowersController({
 
       const sampleGroundY = (x, z) => {
         if (!walkableGroundMeshes.length) return null;
-        _groundRayOrigin.set(x, baseGroundY + 30, z);
+        _groundRayOrigin.set(x, groundRayOriginY, z);
         _groundRaycaster.set(_groundRayOrigin, _groundDown);
         _groundHits.length = 0;
         _groundRaycaster.intersectObjects(
@@ -1137,6 +1177,7 @@ export function createGumFollowersController({
       breakOffUntil = 0;
       prevUserYaw = null;
       baseGroundY = 0;
+      groundRayOriginY = 30;
       walkableGroundMeshes = [];
       staticColliderBoxes = [];
       stickQueue.length = 0;
