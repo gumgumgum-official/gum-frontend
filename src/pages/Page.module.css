@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700&display=swap");
+/* Nanum Myeongjo는 index.html <link>에서 로드 */
 
 .page {
   position: relative;
@@ -7,6 +7,9 @@
 }
 
 .startBackground {
+  position: fixed;
+  inset: 0;
+  z-index: 2300;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

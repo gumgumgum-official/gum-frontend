@@ -6,13 +6,6 @@ import {
   STAGE3_CAMERA_INTRO_DURATION_SEC,
   STAGE3_CAMERA_INTRO_TRANSITION_SEC,
   STAGE3_CAMERA_INTRO_SWEEP_ANGLE_RAD,
-  STAGE3_CAMERA_INTRO_MIN_RADIUS,
-  STAGE3_CAMERA_INTRO_RADIUS_FACTOR,
-  STAGE3_CAMERA_INTRO_MIN_HEIGHT_OFFSET,
-  STAGE3_CAMERA_INTRO_HEIGHT_Y_FACTOR,
-  STAGE3_CAMERA_INTRO_HEIGHT_Y_EXTRA,
-  STAGE3_CAMERA_INTRO_LOOK_AT_BELOW_CENTER_FACTOR,
-  STAGE3_CAMERA_INTRO_LOOK_AT_BELOW_CENTER_MAX,
 } from "../../../../config/stages/stage3/stage3CameraIntro.js";
 
 /**
@@ -82,7 +75,7 @@ export function createStage3CameraIntroController({
    * @param {import("three").Vector3} center
    * @param {import("three").Box3} bounds
    */
-  function start(center, bounds) {
+  function start(center, _bounds) {
     const camera = getCamera();
     if (!camera) return;
     state.active = true;
@@ -91,39 +84,20 @@ export function createStage3CameraIntroController({
     state.introTopViewCommitted = false;
     state.elapsed = 0;
     state.transitionElapsed = 0;
-    state.center.copy(center);
-    const size = new THREE.Vector3();
-    bounds.getSize(size);
-    const horizontalSize = Math.max(size.x, size.z);
-    state.radius = Math.max(
-      STAGE3_CAMERA_INTRO_MIN_RADIUS,
-      horizontalSize * STAGE3_CAMERA_INTRO_RADIUS_FACTOR,
-    );
-    state.height =
-      center.y +
-      Math.max(
-        STAGE3_CAMERA_INTRO_MIN_HEIGHT_OFFSET,
-        size.y * STAGE3_CAMERA_INTRO_HEIGHT_Y_FACTOR +
-          STAGE3_CAMERA_INTRO_HEIGHT_Y_EXTRA,
-      );
-    const minY = bounds.min.y;
-    const maxY = bounds.max.y;
-    const targetLookY =
-      center.y -
-      Math.min(
-        size.y * STAGE3_CAMERA_INTRO_LOOK_AT_BELOW_CENTER_FACTOR,
-        STAGE3_CAMERA_INTRO_LOOK_AT_BELOW_CENTER_MAX,
-      );
-    state.lookAtY = THREE.MathUtils.clamp(
-      targetLookY,
-      minY + size.y * 0.05,
-      maxY - 0.3,
-    );
-    const baseAngle = Math.atan2(
-      camera.position.x - center.x,
-      camera.position.z - center.z,
-    );
-    state.startAngle = baseAngle + Math.PI / 2;
+
+    const config = getConfig();
+    const sp = config.camera.introStartPos;
+    const ep = config.camera.introEndPos;
+    const lk = config.camera.introLookAt;
+    state.center.set(lk.x, center.y, lk.z);
+    state.radius = Math.sqrt((sp.x - lk.x) ** 2 + (sp.z - lk.z) ** 2);
+    state.height = sp.y;
+    state.lookAtY = lk.y;
+    state.startAngle = Math.atan2(sp.x - lk.x, sp.z - lk.z);
+    const endAngle = Math.atan2(ep.x - lk.x, ep.z - lk.z);
+    let sweep = state.startAngle - endAngle;
+    if (sweep < 0) sweep += Math.PI * 2;
+    state.sweepAngleRad = sweep;
 
     const orbit = getDebugControls()?.getOrbitControls?.();
     if (orbit) orbit.enabled = false;

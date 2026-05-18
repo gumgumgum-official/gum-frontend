@@ -35,11 +35,13 @@ import {
   FLOWER_SCALE,
   FLOWER_Y_OFFSET,
   FRAGMENT_POOL_MAX,
+  FLOWER_MIN_DISTANCE,
 } from "../../../../config/stages/stage3/stage3Letter.js";
 import {
   playRandomCrackSound,
   playCrackFinalSound,
   playFlowerMagicSound,
+  playDropSound,
 } from "../playCrackSound.js";
 import { supabase } from "../../../../lib/supabase/client.js";
 import { getSessionId } from "../../../../lib/session.js";
@@ -60,6 +62,7 @@ const HANDWRITING_TABLE = "handwriting_files";
  *   getCamera: () => import("three").Camera | null,
  *   getGroundY: () => number,
  *   getCollidersRef: () => import("../islandStaticColliders.js").IslandColliderAabb[] | null,
+ *   getFlowerExclusionBoxes: () => {minX:number,maxX:number,minZ:number,maxZ:number}[] | null,
  *   getConfig: () => import("../../../../types.js").Stage3Config,
  *   getIsStageActive: () => boolean,
  *   getCameraIntroState: () => { introTopViewCommitted: boolean, completed: boolean },
@@ -75,6 +78,7 @@ export function createStage3LetterController({
   getCamera,
   getGroundY,
   getCollidersRef,
+  getFlowerExclusionBoxes = () => null,
   getConfig,
   getIsStageActive,
   getCameraIntroState,
@@ -96,6 +100,8 @@ export function createStage3LetterController({
   const standaloneFlowers = [];
   const fragmentPool = [];
   let flowerMagicPlayed = false;
+  /** 꽃 겹침 방지용 스폰 위치 기록 */
+  const spawnedFlowerXZ = [];
 
   const _hitOriginScratch = new THREE.Vector3();
 
@@ -404,6 +410,7 @@ export function createStage3LetterController({
       s.velocity.rotationZ = 0;
       setReadableRotationTowardCamera(s.group, camera);
       s.landed = true;
+      playDropSound();
       addLetterColliderIfNeeded();
       return;
     }
@@ -548,6 +555,7 @@ export function createStage3LetterController({
   function spawnFlowerAt(x, z, groundY) {
     const scene = getScene();
     if (!scene) return;
+    // 섬 정적 충돌 오브젝트 안에 스폰 금지
     const collidersRef = getCollidersRef();
     if (collidersRef) {
       for (const box of collidersRef) {
@@ -555,6 +563,21 @@ export function createStage3LetterController({
           return;
       }
     }
+    // INT_/OBJ_/DECO_ 오브젝트 침범 방지 (광역 exclusion)
+    const exclusionBoxes = getFlowerExclusionBoxes();
+    if (exclusionBoxes) {
+      for (const box of exclusionBoxes) {
+        if (x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ)
+          return;
+      }
+    }
+    // 기존 꽃과 최소 거리 유지
+    for (const prev of spawnedFlowerXZ) {
+      const dx = x - prev.x;
+      const dz = z - prev.z;
+      if (dx * dx + dz * dz < FLOWER_MIN_DISTANCE * FLOWER_MIN_DISTANCE) return;
+    }
+    spawnedFlowerXZ.push({ x, z });
     const url = pickRandomFlowerAssetUrl();
     const gy = groundY ?? getGroundY();
     void loadGltfTemplateCached(url)
@@ -689,7 +712,7 @@ export function createStage3LetterController({
       if (i !== 0 && i !== segs) {
         base.add(perp.clone().multiplyScalar((Math.random() - 0.5) * 2));
       }
-      positions.push(base.x, base.y, base.z);
+      positions.push(base.x, base.y, base.z + 0.03);
     }
     const geom = new THREE.BufferGeometry();
     geom.setAttribute(
@@ -700,7 +723,7 @@ export function createStage3LetterController({
       color: 0xffffff,
       transparent: true,
       opacity: 0,
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
     });
     const line = new THREE.Line(geom, mat);
@@ -720,10 +743,10 @@ export function createStage3LetterController({
   }
 
   function addCrackCluster(state, anchor) {
-    const branchCount = 2 + Math.floor(Math.random() * 3);
+    const branchCount = 1 + Math.floor(Math.random() * 2);
     for (let b = 0; b < branchCount; b++) {
       const angle = Math.random() * Math.PI * 2;
-      const len = 0.22 + Math.random() * 0.5;
+      const len = (0.22 + Math.random() * 0.5) * 0.7;
       const end = new THREE.Vector3(
         anchor.x + Math.cos(angle) * len,
         anchor.y + Math.sin(angle) * len,
@@ -737,9 +760,30 @@ export function createStage3LetterController({
     if (!state?.group) return;
     const verts = getLetterFrontCapVertices(state);
     if (verts.length === 0) return;
-    const clusterCount = Math.min(10, 3 + Math.floor(state.hitCount / 2));
-    for (let i = 0; i < clusterCount; i++) {
-      const anchor = verts[Math.floor(Math.random() * verts.length)];
+    const clusterCount = Math.min(20, 6 + Math.floor(state.hitCount / 2));
+
+    // bbox를 격자로 나눠 각 셀에서 앵커 선택 → 글자 전체에 골고루 퍼짐
+    const box = new THREE.Box3();
+    for (const v of verts) box.expandByPoint(v);
+    const sx = box.max.x - box.min.x || 1;
+    const sy = box.max.y - box.min.y || 1;
+    const cols = Math.ceil(Math.sqrt(clusterCount));
+    const rows = Math.ceil(clusterCount / cols);
+
+    for (let ci = 0; ci < clusterCount; ci++) {
+      const col = ci % cols;
+      const row = Math.floor(ci / cols);
+      const xMin = box.min.x + (col / cols) * sx;
+      const xMax = box.min.x + ((col + 1) / cols) * sx;
+      const yMin = box.min.y + (row / rows) * sy;
+      const yMax = box.min.y + ((row + 1) / rows) * sy;
+      const cellVerts = verts.filter(
+        (v) => v.x >= xMin && v.x < xMax && v.y >= yMin && v.y < yMax,
+      );
+      const anchor =
+        cellVerts.length > 0
+          ? cellVerts[Math.floor(Math.random() * cellVerts.length)]
+          : verts[Math.floor(Math.random() * verts.length)];
       addCrackCluster(state, anchor);
     }
   }
@@ -900,6 +944,7 @@ export function createStage3LetterController({
       ),
     resetPlayState() {
       flowerMagicPlayed = false;
+      spawnedFlowerXZ.length = 0;
     },
     cleanup(scene) {
       removeAllLetterGroupsFromScene(scene);
@@ -916,6 +961,7 @@ export function createStage3LetterController({
       pendingSvgUrlDebugId = null;
       letterLoadInProgress = false;
       flowerMagicPlayed = false;
+      spawnedFlowerXZ.length = 0;
     },
   };
 }

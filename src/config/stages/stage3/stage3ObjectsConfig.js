@@ -15,7 +15,8 @@ export const STAGE3_STANDALONE_FLOWER_GLB_PATHS = [
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
-    path: "/models/stage3/island_scene.glb",
+    path: "/models/stage3/island15.glb",
+    useStaticObstacleColliders: true,
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -27,6 +28,17 @@ export const STAGE3_OBJECTS_CONFIG = {
     groundYLerpFromIslandMinMax: 0.97,
     /** island 바운딩 max.y에서 빼는 값(m). 나무 꼭대기가 max면 조금 키워서 미세 조정 */
     groundYInsetFromIslandTop: 0.35,
+    /**
+     * 바다/물 앞에 항상 렌더링되어야 하는 GLB 노드 이름 목록.
+     * 해당 노드의 메시 전체에 renderOrder=1을 설정해 투명 정렬에서 바다보다 나중에 그린다.
+     * GLB 변경 시 이름이 바뀌면 여기만 수정하면 됨.
+     */
+    frontRenderObjectNames: [
+      "OBJ_DogBalloon",
+      "OBJ_BalloonHeart",
+      "OBJ_BalloonStar",
+      "OBJ_BalloonSun",
+    ],
   },
 
   /**
@@ -81,6 +93,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       party: "/assets/poster/festival_poster.png",
       bestGum: "/assets/poster/vote_poster.png",
       icecream: "/assets/poster/icecream_poster.png",
+      guestbook: "/assets/poster/guestbook_poster.svg",
     },
     /** `GgumddiVoteSection` 후보 카드 이미지 (순서 = 1·2·3번) */
     voteCandidateImages: [

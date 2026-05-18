@@ -47,6 +47,8 @@
  * @property {boolean} [castShadow]
  * @property {boolean} [receiveShadow]
  * @property {boolean} [useStaticObstacleColliders] - Stage3: `INT_`/`OBJ_` 메시 기반 XZ 정적 충돌(기본 true). false면 바운딩 클램프만 사용(디버그·임시)
+ * @property {number} [groundYLerpFromIslandMinMax] - Stage3: island bbox min~max Y 보간(0~1)
+ * @property {number} [groundYInsetFromIslandTop] - Stage3: island max.y에서 빼는 지면 inset(m)
  * @property {string} [island] - Stage2: 섬 GLB (island/sea/sky 분할 로드 시)
  * @property {string} [sea]
  * @property {string} [sky]

@@ -41,8 +41,8 @@ export function createStage3InputController({
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      if (isCharacterPunching()) return;
-      onEnterHit();
+      if (!isCharacterPunching()) onEnterHit();
+      return;
     }
     if (event.key === "0" || event.code === "Digit0") {
       event.preventDefault();

@@ -32,11 +32,11 @@ export const STAGE3_CHARACTER_CONFIG = {
     /** true면 펀치 애니를 GLB 클립 끝에서 역재생(맞춤 타격 타이밍은 동일 프레임 기준 유지) */
     punchAnimationReverse: true,
     /** 펀치 클립 재생 배율(1=원본 길이, 값이 클수록 더 빠름) */
-    punchAnimationTimeScale: 1.65,
+    punchAnimationTimeScale: 2.475,
     /** XZ 평면 원형 충돌 반경(m). 미설정 시 scale×0.22 (최소 0.2) */
     collisionRadius: 0.65,
     /** 섬 중심 대비 스폰 위치(월드 +X = 오른쪽) */
-    spawnOffset: { x: 1.2, z: 0 },
+    spawnOffset: { x: 6.0, z: -2.0 },
 
     /**
      * 껌딱지(사이드 캐릭터) 2마리 설정

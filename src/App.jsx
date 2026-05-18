@@ -1,5 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { ThreeCanvas } from "./components/ThreeCanvas.jsx";
 import { BeamPage } from "./pages/BeamPage.jsx";
 import { KioskPage } from "./pages/KioskPage.jsx";
 import { AirportPage } from "./pages/AirportPage.jsx";
@@ -14,6 +22,7 @@ import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
 import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
+import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
@@ -21,7 +30,23 @@ import {
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
 
-export function App() {
+const KIOSK_ALLOWED_STAGES = Object.freeze([3]);
+
+const kioskCanvasStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 0,
+};
+
+function AppLayout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const prevPathnameRef = useRef("");
+
+  const isStartRoute = location.pathname === "/start";
+  const isKioskRoute = location.pathname === "/kiosk";
+  const showKioskCanvas = isStartRoute || isKioskRoute;
+
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showGameMachineModalShell, setShowGameMachineModalShell] =
     useState(false);
@@ -44,6 +69,28 @@ export function App() {
     playUiClickSound();
     closeGameMachineModalShell();
   }, [closeGameMachineModalShell]);
+
+  // /kiosk 진입 시 Stage3 reveal 게이트 열기
+  useEffect(() => {
+    if (isKioskRoute && prevPathnameRef.current !== "/kiosk") {
+      requestStage3Reveal();
+    }
+    prevPathnameRef.current = location.pathname;
+  }, [location.pathname, isKioskRoute]);
+
+  // Stage3 → Stage6 전환 이벤트 (/kiosk에서만)
+  useEffect(() => {
+    if (!isKioskRoute) return;
+    const onStageSwitch = (e) => {
+      const { targetStage } = e.detail ?? {};
+      if (targetStage === 6) {
+        const params = new URLSearchParams(location.search);
+        navigate(`/airport?${params.toString()}`);
+      }
+    };
+    window.addEventListener("stage:switch", onStageSwitch);
+    return () => window.removeEventListener("stage:switch", onStageSwitch);
+  }, [isKioskRoute, location.search, navigate]);
 
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
@@ -94,10 +141,8 @@ export function App() {
   useEffect(() => {
     const showChime = () => setShowAirportChime(true);
     const hideChime = () => setShowAirportChime(false);
-
     window.addEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
     window.addEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
-
     return () => {
       window.removeEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
       window.removeEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
@@ -105,7 +150,7 @@ export function App() {
   }, []);
 
   return (
-    <BrowserRouter>
+    <>
       <NoticeModalBoard
         isOpen={showNoticeModal}
         onClose={handleNoticeModalClose}
@@ -138,6 +183,17 @@ export function App() {
       >
         🔔 띵-동
       </div>
+      {showKioskCanvas && (
+        <div
+          style={{
+            ...kioskCanvasStyle,
+            visibility: isKioskRoute ? "visible" : "hidden",
+            pointerEvents: isKioskRoute ? "auto" : "none",
+          }}
+        >
+          <ThreeCanvas allowedStages={KIOSK_ALLOWED_STAGES} initialStage={3} />
+        </div>
+      )}
       <Routes>
         <Route path="/start" element={<StartPage />} />
         <Route path="/beam" element={<BeamPage />} />
@@ -148,6 +204,14 @@ export function App() {
         <Route path="/" element={<Navigate to="/start" replace />} />
         <Route path="*" element={<Navigate to="/dev" replace />} />
       </Routes>
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout />
     </BrowserRouter>
   );
 }

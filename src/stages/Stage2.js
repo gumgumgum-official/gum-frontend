@@ -668,7 +668,7 @@ export function Stage2() {
           );
         } else {
           console.error(
-            "[Stage2] SPAWN_ZONE 메쉬 없음 — beam4.glb에 SPAWN_ZONE이 있어야 합니다.",
+            "[Stage2] SPAWN_ZONE 메쉬 없음 — beam5.glb에 SPAWN_ZONE이 있어야 합니다.",
           );
         }
         const refreshCharacterObstacleBoxes = () => {
@@ -940,7 +940,7 @@ function buildStage2CharacterObstacleBoxes(roots, backgroundBounds) {
   if (!Array.isArray(roots) || roots.length === 0) return [];
   const preferred = [];
   roots.forEach((root) => {
-    preferred.push(...collectIslandStaticColliderBoxes(root));
+    preferred.push(...collectIslandStaticColliderBoxes(root, backgroundBounds));
   });
   const filteredPreferred = filterCollidersExcludingDominantTerrain(
     preferred,

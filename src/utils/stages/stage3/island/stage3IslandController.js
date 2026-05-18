@@ -1,15 +1,20 @@
 /**
  * Stage3 배경 GLB onReady — 콜라이더·walkable·캐릭터·껌딱지·인트로
  */
+import * as THREE from "three";
 import {
   collectIslandStaticColliderBoxes,
   filterCollidersExcludingDominantTerrain,
+  filterCollidersExcludingInflatedMeshBounds,
+  filterCollidersExcludingSpawnOverlap,
 } from "../islandStaticColliders.js";
 import { setupFountainFromModel } from "../fountainEffect.js";
 import { createGumFollowersController } from "../gumFollowerController.js";
 import {
   collectStage3WalkableFromModel,
-  buildStage3AllowedBoundsXZ,
+  buildStage3MovementBoundsXZ,
+  resolveStage3CharacterGroundY,
+  resolveStage3SpawnXZ,
 } from "./stage3IslandWalkable.js";
 
 /**
@@ -24,6 +29,7 @@ import {
  *   setCameraRef: (camera: import("three").PerspectiveCamera) => void,
  *   setGroundY: (y: number) => void,
  *   setCollidersRef: (colliders: import("../islandStaticColliders.js").IslandColliderAabb[]) => void,
+ *   setFlowerExclusionBoxes?: (boxes: {minX:number,maxX:number,minZ:number,maxZ:number}[]) => void,
  *   setBackgroundModel: (model: import("three").Object3D) => void,
  *   setFountainState: (state: import("../fountainEffect.js").FountainState | null) => void,
  *   setPortalVortexMaterial: (material: import("three").ShaderMaterial | null) => void,
@@ -51,6 +57,7 @@ export function createStage3IslandController({
   setCameraRef,
   setGroundY,
   setCollidersRef,
+  setFlowerExclusionBoxes = null,
   setBackgroundModel,
   setFountainState,
   setPortalVortexMaterial,
@@ -94,15 +101,33 @@ export function createStage3IslandController({
     }
     onDebugOrbitTarget(center);
     setCameraRef(stageCamera);
-    setGroundY(backgroundMaxY);
     onMonitorBackgroundReady();
 
     const useStatic = config.model.useStaticObstacleColliders !== false;
+    const initialSpawnXZ = resolveStage3SpawnXZ(
+      backgroundBounds,
+      config.character?.spawnOffset,
+    );
+    const spawnCollisionRadius =
+      (typeof config.character?.collisionRadius === "number"
+        ? config.character.collisionRadius
+        : 0.55) + 0.35;
+
     const rawColliders = useStatic
-      ? collectIslandStaticColliderBoxes(model)
+      ? collectIslandStaticColliderBoxes(model, backgroundBounds)
       : [];
     const islandStaticColliders = useStatic
-      ? filterCollidersExcludingDominantTerrain(rawColliders, backgroundBounds)
+      ? filterCollidersExcludingSpawnOverlap(
+          filterCollidersExcludingInflatedMeshBounds(
+            filterCollidersExcludingDominantTerrain(
+              rawColliders,
+              backgroundBounds,
+            ),
+          ),
+          initialSpawnXZ.x,
+          initialSpawnXZ.z,
+          spawnCollisionRadius,
+        )
       : [];
 
     const {
@@ -113,9 +138,56 @@ export function createStage3IslandController({
 
     setCollidersRef(islandStaticColliders);
 
-    character.setup(backgroundMaxY, backgroundBounds, islandStaticColliders, {
+    if (setFlowerExclusionBoxes) {
+      const exclusionBoxes = [];
+      const _tmpBox = new THREE.Box3();
+      model.traverse((obj) => {
+        if (!obj.isMesh) return;
+        let p = /** @type {THREE.Object3D | null} */ (obj);
+        while (p) {
+          const n = typeof p.name === "string" ? p.name.toUpperCase() : "";
+          if (n.startsWith("INT_")) {
+            _tmpBox.setFromObject(obj);
+            if (!_tmpBox.isEmpty()) {
+              exclusionBoxes.push({
+                minX: _tmpBox.min.x,
+                maxX: _tmpBox.max.x,
+                minZ: _tmpBox.min.z,
+                maxZ: _tmpBox.max.z,
+              });
+            }
+            break;
+          }
+          p = p.parent;
+        }
+      });
+      setFlowerExclusionBoxes(exclusionBoxes);
+    }
+
+    const characterGroundY = resolveStage3CharacterGroundY({
+      backgroundMaxY,
+      backgroundBounds,
       walkableMeshes,
-      allowedBoundsXZ: buildStage3AllowedBoundsXZ(walkableBounds, hasBounds),
+      walkableBounds,
+      hasWalkableBounds: hasBounds,
+      spawnOffset: config.character?.spawnOffset,
+    });
+    setGroundY(characterGroundY);
+
+    const movementBoundsXZ = buildStage3MovementBoundsXZ(
+      walkableBounds,
+      hasBounds,
+      backgroundBounds,
+      initialSpawnXZ,
+      config.character?.boundsPadding ?? 0.5,
+    );
+
+    character.setup(characterGroundY, backgroundBounds, islandStaticColliders, {
+      walkableMeshes,
+      walkableBounds: hasBounds ? walkableBounds : null,
+      movementBoundsXZ,
+      worldSpawnXZ: initialSpawnXZ,
+      islandModel: model,
     });
 
     if (getIsStageActive()) {
@@ -145,10 +217,12 @@ export function createStage3IslandController({
 
     void gumFollowers
       .init({
-        backgroundMaxY,
+        backgroundMaxY: characterGroundY,
         isCancelled: () => !getIsStageActive() || isGumCancelled(),
         staticColliderBoxes: islandStaticColliders,
         walkableMeshes,
+        walkableBounds: hasBounds ? walkableBounds : null,
+        initialSpawnXZ,
       })
       .then(() => {
         if (!getIsStageActive()) return;

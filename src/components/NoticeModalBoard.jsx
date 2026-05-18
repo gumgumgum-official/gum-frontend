@@ -4,11 +4,10 @@ import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConf
 import { playRandomNoticePaperSound } from "../utils/stages/stage3/playNoticePaperSound.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
+import { GuestbookEmbed } from "./GuestbookEmbed";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const NOTICE_POSTER = NOTICE.posterImages;
-const THIRD_POSTER_SRC =
-  NOTICE_POSTER.icecream ?? "/assets/poster/icecream_poster.png";
 
 const wood = "oklch(0.62 0.09 60)";
 const woodDark = "oklch(0.45 0.08 55)";
@@ -33,7 +32,21 @@ const POSTER_BASE = {
  * @param {function} props.onClose
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
-  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "icecream" | null
+  const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "guestbook" | null
+  const [gbScale, setGbScale] = useState(1);
+
+  useEffect(() => {
+    if (zoomedPoster !== "guestbook") return;
+    const compute = () => {
+      const s =
+        Math.min(window.innerWidth / 960, window.innerHeight / 800) * 0.93;
+      setGbScale(Math.max(s, 0.4));
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [zoomedPoster]);
+
   const closeWithSound = useCallback(() => {
     playUiClickSound();
     onClose();
@@ -77,6 +90,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
             alignItems: "center",
             justifyContent: "center",
             padding: "clamp(10px, 1.5vw, 20px)",
+            pointerEvents: isOpen ? "auto" : "none",
           }}
         >
           <motion.div
@@ -301,18 +315,18 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 </div>
               </motion.div>
 
-              {/* 포스터 3: 아이스크림 포스터 */}
+              {/* 포스터 3: 방명록 */}
               <motion.div
                 role="button"
                 tabIndex={0}
                 onClick={() => {
                   playRandomNoticePaperSound(NOTICE.paperSoundPaths);
-                  setZoomedPoster("icecream");
+                  setZoomedPoster("guestbook");
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     playRandomNoticePaperSound(NOTICE.paperSoundPaths);
-                    setZoomedPoster("icecream");
+                    setZoomedPoster("guestbook");
                   }
                 }}
                 whileHover={{ scale: 1.02 }}
@@ -351,8 +365,8 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   }}
                 >
                   <img
-                    src={THIRD_POSTER_SRC}
-                    alt="아이스크림 포스터"
+                    src={NOTICE_POSTER.guestbook}
+                    alt="방명록 포스터"
                     draggable={false}
                     style={{
                       width: "100%",
@@ -383,7 +397,8 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  padding: 24,
+                  padding: zoomedPoster === "guestbook" ? 0 : "16px 24px 12vh",
+                  pointerEvents: zoomedPoster ? "auto" : "none",
                 }}
               >
                 <motion.div
@@ -398,38 +413,12 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   onClick={(e) => e.stopPropagation()}
                   style={{
                     position: "relative",
-                    maxWidth: "90vw",
-                    maxHeight: "85vh",
+                    ...(zoomedPoster !== "guestbook" && {
+                      maxWidth: "90vw",
+                      maxHeight: "85vh",
+                    }),
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setZoomedPoster(null)}
-                    aria-label="닫기"
-                    style={{
-                      position: "absolute",
-                      top: -12,
-                      right: -12,
-                      width: 36,
-                      height: 36,
-                      borderRadius: "50%",
-                      border: "2px solid #78350f",
-                      background:
-                        "linear-gradient(145deg, #a16207 0%, #713f12 100%)",
-                      color: "#fef3c7",
-                      fontSize: "1.2rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                      zIndex: 10,
-                    }}
-                  >
-                    ×
-                  </button>
-
                   {zoomedPoster === "feast" && (
                     <div
                       style={{
@@ -454,25 +443,15 @@ export function NoticeModalBoard({ isOpen, onClose }) {
 
                   {zoomedPoster === "vote" && <GgumddiVoteSection />}
 
-                  {zoomedPoster === "icecream" && (
+                  {zoomedPoster === "guestbook" && (
                     <div
                       style={{
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
+                        width: 960,
+                        transform: `scale(${gbScale})`,
+                        transformOrigin: "center center",
                       }}
                     >
-                      <img
-                        src={THIRD_POSTER_SRC}
-                        alt="아이스크림 포스터"
-                        draggable={false}
-                        style={{
-                          width: "100%",
-                          maxHeight: "80vh",
-                          objectFit: "contain",
-                          display: "block",
-                        }}
-                      />
+                      <GuestbookEmbed onClose={() => setZoomedPoster(null)} />
                     </div>
                   )}
                 </motion.div>

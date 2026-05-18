@@ -55,6 +55,12 @@ import { disposeStreetLightSound } from "../utils/common/playStreetLightSound.js
 import { disposePortalTransitionSound } from "../utils/stages/stage3/playPortalTransitionSound.js";
 import { disposeStage3CrackSound } from "../utils/stages/stage3/playCrackSound.js";
 import { updateFountain } from "../utils/stages/stage3/fountainEffect.js";
+import {
+  notifyStage3GpuReady,
+  onceStage3Revealed,
+  requestStage3Reveal,
+  resetStage3RevealGate,
+} from "../utils/stages/stage3/stage3RevealGate.js";
 
 export function Stage3() {
   /** @type {import("../types.js").Stage3Config} */
@@ -87,6 +93,9 @@ export function Stage3() {
    * @type {import("../utils/stages/stage3/islandStaticColliders.js").IslandColliderAabb[] | null}
    */
   let stage3CollidersRef = null;
+  /** 꽃 스폰 제외 박스: INT_/OBJ_/DECO_ 전체 오브젝트 AABB */
+  /** @type {{minX:number,maxX:number,minZ:number,maxZ:number}[]|null} */
+  let flowerExclusionBoxes = null;
 
   const deferredSetup = createDeferredStage3SetupScheduler();
 
@@ -171,6 +180,7 @@ export function Stage3() {
     getCamera: () => cameraRef,
     getGroundY: () => stage3GroundY,
     getCollidersRef: () => stage3CollidersRef,
+    getFlowerExclusionBoxes: () => flowerExclusionBoxes,
     getConfig: () => config,
     getIsStageActive: () => isStage3Active,
     getCameraIntroState: () => cameraIntroController.getState(),
@@ -285,6 +295,8 @@ export function Stage3() {
     getTextDestroyed: () => textDestroyed,
     getGumFollowers: () => gumFollowers,
     hasBlockingOverlayOpen: () => overlayController.hasBlockingOverlayOpen(),
+    isStampPanelSettledInCorner: () =>
+      stampController.isStampPanelSettledInCorner(),
     attachIntClickHintBubble: (el) =>
       interactionsController.attachIntClickHintBubble(el),
     detachIntClickHintBubble: () =>
@@ -305,6 +317,7 @@ export function Stage3() {
 
   function onEnterHit() {
     if (!sceneRef) return;
+    if (textDestroyed) return;
     const target = letterController.getHitTarget();
     character?.playHammerCue?.(() => {
       if (target) letterController.applyHitEffect(target);
@@ -328,6 +341,9 @@ export function Stage3() {
     setCollidersRef: (colliders) => {
       stage3CollidersRef = colliders;
     },
+    setFlowerExclusionBoxes: (boxes) => {
+      flowerExclusionBoxes = boxes;
+    },
     setBackgroundModel: (model) => {
       backgroundModel = model;
     },
@@ -347,7 +363,9 @@ export function Stage3() {
       stampController.updateStampMarksFilled();
     },
     onIntroAudio: () => {
-      if (isStage3Active) playStage3IntroAudioTwice();
+      onceStage3Revealed(() => {
+        if (isStage3Active) playStage3IntroAudioTwice();
+      });
     },
     onDebugOrbitTarget: (center) => {
       debugControls?.setOrbitTarget(center);
@@ -356,7 +374,9 @@ export function Stage3() {
       monitorController.onBackgroundReady();
     },
     onCameraIntroStart: (center, bounds) => {
-      cameraIntroController.start(center, bounds);
+      onceStage3Revealed(() => {
+        if (isStage3Active) cameraIntroController.start(center, bounds);
+      });
     },
     scheduleDeferredSetup: (task) => deferredSetup.schedule(task),
     registerIslandInteractions: (model, animations) => {
@@ -444,12 +464,19 @@ export function Stage3() {
         options: {
           stageName: "stage3",
           getInitialCameraConfig: () => config.camera,
-          forceOrbit: true, // OrbitControls 활성화 (마우스 드래그로 회전/줌)
+          forceOrbit: false,
           manageCursor: false, // 아이스크림 카트 호버 시 pointer 커서 직접 처리
         },
       });
 
-      monitorController.startSession();
+      // 캔버스가 보여질 때까지 monitor start 지연 (start화면 hidden 상태에서 busy 방지)
+      onceStage3Revealed(() => {
+        monitorController.startSession();
+      });
+      // 이미 visible 상태(dev·kiosk 직접 진입)면 즉시 reveal 게이트를 연다.
+      if (window.getComputedStyle(canvas).visibility !== "hidden") {
+        requestStage3Reveal();
+      }
 
       loadStage3Background({
         scene,
@@ -458,6 +485,16 @@ export function Stage3() {
         getIsActive: () => isStage3Active,
         onReady: (payload) => {
           islandController.onBackgroundReady(payload, this.camera);
+          // GPU 업로드 워밍업: compileAsync 후 render() 한 번으로 텍스처를 VRAM에 올린다.
+          void renderer
+            .compileAsync(scene, this.camera)
+            .then(() => {
+              renderer.render(scene, this.camera);
+              notifyStage3GpuReady();
+            })
+            .catch(() => {
+              notifyStage3GpuReady();
+            });
         },
       });
     },
@@ -516,6 +553,7 @@ export function Stage3() {
 
     cleanup(scene) {
       isStage3Active = false;
+      resetStage3RevealGate();
       stopStage3IntroAudio();
       gumCancelled = true;
       overlayController.resetForCleanup();

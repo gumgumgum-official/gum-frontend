@@ -115,18 +115,32 @@ export function loadStage3Background({
       };
 
       model.traverse((child) => {
-        if (child.isMesh) {
-          if (config.model.castShadow !== undefined) {
-            child.castShadow = config.model.castShadow;
-          }
-          if (config.model.receiveShadow !== undefined) {
-            child.receiveShadow = config.model.receiveShadow;
-          }
-          if (!isUnderIntInteractive(child)) {
-            child.raycast = () => {};
-          }
+        if (!(child instanceof THREE.Mesh)) return;
+        if (config.model.castShadow !== undefined) {
+          child.castShadow = config.model.castShadow;
+        }
+        if (config.model.receiveShadow !== undefined) {
+          child.receiveShadow = config.model.receiveShadow;
+        }
+        if (!isUnderIntInteractive(child)) {
+          child.raycast = () => {};
         }
       });
+
+      for (const name of config.model.frontRenderObjectNames ?? []) {
+        const obj = model.getObjectByName(name);
+        if (!obj) {
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[Stage3] frontRenderObjectNames: 노드 없음 — '${name}'`,
+            );
+          }
+          continue;
+        }
+        obj.traverse((child) => {
+          if (child instanceof THREE.Mesh) child.renderOrder = 1;
+        });
+      }
 
       if (getIsActive && !getIsActive()) {
         return;

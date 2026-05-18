@@ -1,7 +1,7 @@
 @font-face {
   font-family: "Galmuri11";
   src: url("/fonts/Galmuri11-Bold.woff2") format("woff2");
-  font-weight: 400;
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
@@ -11,6 +11,7 @@
   width: min(95vw, 860px);
   margin: 0 auto;
   font-family: "Galmuri11", "Courier New", monospace;
+  font-weight: 700;
   user-select: none;
   border-radius: 10px;
   overflow: visible;

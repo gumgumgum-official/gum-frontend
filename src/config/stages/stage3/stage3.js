@@ -10,9 +10,9 @@ export const STAGE3_CONFIG = {
   /**
    * 낙하 글자 시작 XZ (월드; island GLB 원점 기준).
    */
-  letterSpawnXZ: { x: 8.56, z: -33.72 },
+  letterSpawnXZ: { x: 2.5, z: -33 },
   /** SVG 원본 크기와 무관하게 낙하 글자 그룹이 차지할 목표 월드 높이(Y) */
-  letterTargetHeight: 3.24,
+  letterTargetHeight: 2.6,
   camera: {
     fov: 42.0,
     near: 0.1,
@@ -20,6 +20,12 @@ export const STAGE3_CONFIG = {
     // Stage3: 글자를 조금 더 위에서 내려다보는 느낌으로 카메라 상승
     position: { x: -0.4, y: 9.0, z: 19.5 },
     lookAt: { x: 0.0, y: 1.0, z: 0.0 },
+    /** 인트로 시작 카메라 위치 */
+    introStartPos: { x: 159.0, y: 196.2, z: 37.4 },
+    /** 인트로 끝 카메라 위치 */
+    introEndPos: { x: -9.0, y: 202.3, z: 136.4 },
+    /** 인트로 전 구간 고정 시선 */
+    introLookAt: { x: 6.7, y: 19.2, z: -17.9 },
   },
   background: {
     // 수평선(t: 0.45~0.7) 주변을 촘촘한 유사 톤으로 연결해
