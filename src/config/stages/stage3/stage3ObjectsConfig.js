@@ -33,7 +33,12 @@ export const STAGE3_OBJECTS_CONFIG = {
      * 해당 노드의 메시 전체에 renderOrder=1을 설정해 투명 정렬에서 바다보다 나중에 그린다.
      * GLB 변경 시 이름이 바뀌면 여기만 수정하면 됨.
      */
-    frontRenderObjectNames: ["OBJ_DogBalloon"],
+    frontRenderObjectNames: [
+      "OBJ_DogBalloon",
+      "OBJ_BalloonHeart",
+      "OBJ_BalloonStar",
+      "OBJ_BalloonSun",
+    ],
   },
 
   /**
