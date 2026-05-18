@@ -362,9 +362,6 @@ export function Stage3() {
       ensureStage3UiMounted();
       stampController.updateStampMarksFilled();
     },
-    onIntroAudio: () => {
-      if (isStage3Active) playStage3IntroAudioTwice();
-    },
     onDebugOrbitTarget: (center) => {
       debugControls?.setOrbitTarget(center);
     },
@@ -507,10 +504,13 @@ export function Stage3() {
         }
       }
       if (character) {
+        const cameraIntro = cameraIntroController.getState();
         if (
           overlayController.hasBlockingOverlayOpen() ||
           stampController.isStampIntroAnimating() ||
-          stampController.isInteractionLocked()
+          stampController.isInteractionLocked() ||
+          cameraIntro.active ||
+          !cameraIntro.completed
         ) {
           overlayController.clearMovementInputs();
         }

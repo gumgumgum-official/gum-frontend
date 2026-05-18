@@ -422,7 +422,8 @@ export function createCharacterController({
         return resolvedGroundY;
       };
       const isInsideAllowedBoundsXZ = (x, z) => {
-        if (!allowedBoundsXZ) return true;
+        // bounds 미적용 시 이동 불가(deferred walkable 대기·실패 시 안전)
+        if (!allowedBoundsXZ) return false;
         return (
           x >= allowedBoundsXZ.min.x &&
           x <= allowedBoundsXZ.max.x &&

@@ -132,12 +132,18 @@ export function loadStage3Background({
  * @param {import("../../../types.js").Stage3Config} config
  */
 export function applyStage3BackgroundMeshFlags(model, config) {
+  /** @type {Set<import("three").Object3D>} */
+  const intRoots = new Set();
+  model.traverse((node) => {
+    if (typeof node.name === "string" && node.name.startsWith("INT_")) {
+      intRoots.add(node);
+    }
+  });
+
   const isUnderIntInteractive = (mesh) => {
     let p = mesh;
     while (p) {
-      if (typeof p.name === "string" && p.name.startsWith("INT_")) {
-        return true;
-      }
+      if (intRoots.has(p)) return true;
       p = p.parent;
     }
     return false;

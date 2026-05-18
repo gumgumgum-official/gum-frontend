@@ -88,6 +88,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
     const hadCache = Boolean(initialBundle);
     if (!hadCache) setIsLoadingResults(true);
 
+    // 캐시가 있었다면 stale-while-revalidate 패턴으로 백그라운드 리페치
     void fetchVoteBundle(clientId, { force: hadCache })
       .then((next) => {
         if (!alive) return;

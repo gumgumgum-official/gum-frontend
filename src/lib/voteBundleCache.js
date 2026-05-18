@@ -35,16 +35,6 @@ export function invalidateVoteBundleCache() {
 }
 
 /**
- * @param {VoteAggregate} aggregate
- * @param {MyVote} myVote
- * @param {string} clientId
- */
-export function setCachedVoteBundle(clientId, aggregate, myVote) {
-  aggregateCache = aggregate;
-  myVoteByClientId.set(clientId, myVote);
-}
-
-/**
  * @param {string} clientId
  * @param {VoteAggregate} aggregate
  * @param {MyVote} [myVote]
@@ -113,7 +103,7 @@ const bundleInFlight = new Map();
 export async function fetchVoteBundle(clientId, { force = false } = {}) {
   if (!force) {
     const cached = getCachedVoteBundle(clientId);
-    if (cached && myVoteByClientId.has(clientId)) return cached;
+    if (cached) return cached;
 
     const pending = bundleInFlight.get(clientId);
     if (pending) return pending;
@@ -142,6 +132,6 @@ export async function fetchVoteBundle(clientId, { force = false } = {}) {
 export function prefetchVoteBundle(clientId) {
   if (!clientId) return;
   const cached = getCachedVoteBundle(clientId);
-  if (cached && myVoteByClientId.has(clientId)) return;
+  if (cached) return;
   void fetchVoteBundle(clientId).catch(() => {});
 }

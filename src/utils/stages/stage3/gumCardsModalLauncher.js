@@ -56,6 +56,8 @@ export function stopTentModalBgm() {
   if (!tentModalBgmAudio) return;
   tentModalBgmAudio.pause();
   tentModalBgmAudio.currentTime = 0;
+  tentModalBgmAudio.src = "";
+  tentModalBgmAudio = null;
 }
 
 function startTentModalBgmFadeIn(audio) {
