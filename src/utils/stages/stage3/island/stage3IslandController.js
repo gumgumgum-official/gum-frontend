@@ -146,11 +146,7 @@ export function createStage3IslandController({
         let p = /** @type {THREE.Object3D | null} */ (obj);
         while (p) {
           const n = typeof p.name === "string" ? p.name.toUpperCase() : "";
-          if (
-            n.startsWith("INT_") ||
-            n.startsWith("OBJ_") ||
-            n.startsWith("DECO_")
-          ) {
+          if (n.startsWith("INT_")) {
             _tmpBox.setFromObject(obj);
             if (!_tmpBox.isEmpty()) {
               exclusionBoxes.push({
