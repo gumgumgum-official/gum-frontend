@@ -11,7 +11,7 @@ import {
 import { applyExtendedAudioVolume } from "../../../common/audioGain.js";
 import {
   STAGE3_VENDINGMACHINE_DEBUG_BOX_ONLY,
-  VENDING_MACHINE_LAND_SOUND_PATHS,
+  VENDING_MACHINE_CAN_SOUND_PATHS,
 } from "../../../../config/stages/stage3/stage3VendingMachine.js";
 
 /**
@@ -91,6 +91,20 @@ export function createStage3VendingMachineController({
         restitution: 0.25,
       }),
     );
+  }
+
+  function playRandomVendingCanSound() {
+    if (VENDING_MACHINE_CAN_SOUND_PATHS.length === 0) return;
+    const path =
+      VENDING_MACHINE_CAN_SOUND_PATHS[
+        Math.floor(Math.random() * VENDING_MACHINE_CAN_SOUND_PATHS.length)
+      ];
+    const config = getConfig();
+    const audio = new window.Audio();
+    const v = Number(config.vendingMachine?.landSoundVolume ?? 0.22);
+    applyExtendedAudioVolume(audio, v);
+    audio.src = resolvePublicAssetUrl(path);
+    audio.play().catch(() => {});
   }
 
   function disposeDrinkGroup(group) {
@@ -324,17 +338,7 @@ export function createStage3VendingMachineController({
       if (drinkEntry.landSoundPlayed) return;
       if (e.body !== groundBody) return;
       drinkEntry.landSoundPlayed = true;
-      if (VENDING_MACHINE_LAND_SOUND_PATHS.length === 0) return;
-      const path =
-        VENDING_MACHINE_LAND_SOUND_PATHS[
-          Math.floor(Math.random() * VENDING_MACHINE_LAND_SOUND_PATHS.length)
-        ];
-      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-      const landAudio = new window.Audio();
-      const v = Number(config.vendingMachine?.landSoundVolume ?? 0.22);
-      applyExtendedAudioVolume(landAudio, v);
-      landAudio.src = base + path;
-      landAudio.play().catch(() => {});
+      playRandomVendingCanSound();
     };
     drinkEntry.landSoundHandler = landHandler;
     drinkEntry.landSoundPlayed = false;

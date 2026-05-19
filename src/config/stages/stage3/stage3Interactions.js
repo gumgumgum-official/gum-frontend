@@ -13,9 +13,6 @@ export const STAGE3_INT_SUFFIX_TO_TARGET = {
   vendingmachine: "vendingMachine", // GLB 노드명: INT_vending_machine
 };
 
-export const CLOCK_TRIGGER_RADIUS = 8;
-export const CLOCK_TRIGGER_COOLDOWN_MS = 2000;
-
 export const STAGE3_INT_CLICK_HINT_RADIUS = 15;
 export const STAGE3_INT_CLICK_HINT_OFFSET_Y = 0.2;
 
