@@ -34,6 +34,12 @@ const INTRO_BGM_URL = resolvePublicAssetUrl(
 const INTRO_ENTER_SFX_URL = resolvePublicAssetUrl("/static/sounds/click.mp3");
 const INTRO_BGM_START_OFFSET_SEC = 2;
 const INTRO_BGM_START_DELAY_SEC = 0.07;
+const KIOSK_ENTER_LOADING_VIDEO_SRC = "/assets/loading_animation.mp4";
+/** 로딩 영상 ended/error 미발생 시 /kiosk 진입 안전망 */
+const KIOSK_ENTER_LOADING_VIDEO_TIMEOUT_MS = 10_000;
+
+/** @type {HTMLVideoElement | null} */
+let _prefetchedLoadingVideo = null;
 
 export function StartPage() {
   const navigate = useNavigate();
@@ -358,9 +364,11 @@ export function StartPage() {
       const img = new Image();
       img.src = src;
     });
-    const loadingVideo = document.createElement("video");
-    loadingVideo.preload = "auto";
-    loadingVideo.src = "/assets/loading_animation.mp4";
+    if (!_prefetchedLoadingVideo) {
+      _prefetchedLoadingVideo = document.createElement("video");
+      _prefetchedLoadingVideo.preload = "auto";
+      _prefetchedLoadingVideo.src = KIOSK_ENTER_LOADING_VIDEO_SRC;
+    }
   }, [location.search]);
 
   useEffect(() => {
@@ -492,6 +500,13 @@ export function StartPage() {
     const videoPromise = new Promise((resolve) => {
       loadingVideoResolveRef.current = resolve;
     });
+    let videoTimeoutId = 0;
+    const videoTimeout = new Promise((resolve) => {
+      videoTimeoutId = window.setTimeout(
+        resolve,
+        KIOSK_ENTER_LOADING_VIDEO_TIMEOUT_MS,
+      );
+    });
 
     try {
       await new Promise((resolve) => {
@@ -499,9 +514,14 @@ export function StartPage() {
           requestAnimationFrame(resolve);
         });
       });
-      await Promise.all([waitForStage3GpuReady(), videoPromise]);
+      await Promise.all([
+        waitForStage3GpuReady(),
+        Promise.race([videoPromise, videoTimeout]),
+      ]);
       navigate(`/kiosk${location.search}`);
     } finally {
+      window.clearTimeout(videoTimeoutId);
+      // navigate 실패 시 상태 원복용 안전망 (성공 시엔 이미 언마운트 → setState no-op)
       loadingVideoResolveRef.current = null;
       setIsEnterLoadingVideo(false);
       setIsPreparingKiosk(false);
@@ -652,9 +672,10 @@ export function StartPage() {
           }}
         />
       ) : null}
-      {isEnterLoadingVideo ? (
-        <KioskEnterLoadingOverlay active onEnded={handleLoadingVideoEnded} />
-      ) : null}
+      <KioskEnterLoadingOverlay
+        active={isEnterLoadingVideo}
+        onEnded={handleLoadingVideoEnded}
+      />
     </div>
   );
 }
