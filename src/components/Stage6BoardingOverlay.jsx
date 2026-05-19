@@ -52,6 +52,7 @@ export function Stage6BoardingOverlay() {
   const [subtitleText, setSubtitleText] = useState("");
   const [showSubtitle, setShowSubtitle] = useState(false);
   const [fadeOutSubtitle, setFadeOutSubtitle] = useState(false);
+  const [hideSubtitleLabel, setHideSubtitleLabel] = useState(false);
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [nameInputValue, setNameInputValue] = useState("");
   const [passengerName, setPassengerName] = useState("");
@@ -160,6 +161,7 @@ export function Stage6BoardingOverlay() {
         typeof event?.detail?.text === "string" ? event.detail.text : "";
       if (!text) return;
       cancelSequence();
+      setHideSubtitleLabel(event?.detail?.hideLabel === true);
       showSubtitleNow(text);
     };
 
@@ -194,6 +196,7 @@ export function Stage6BoardingOverlay() {
         ? event.detail.messages
         : [];
       if (messages.length === 0) return;
+      setHideSubtitleLabel(event?.detail?.hideLabel === true);
       void runSubtitleSequence(messages);
     };
 
@@ -215,6 +218,7 @@ export function Stage6BoardingOverlay() {
       setShowSubtitle(false);
       setFadeOutSubtitle(false);
       setSubtitleText("");
+      setHideSubtitleLabel(false);
       setIsNameModalOpen(false);
       setIsOverlayOpen(false);
       setNameInputValue("");
@@ -348,7 +352,9 @@ export function Stage6BoardingOverlay() {
             fadeOutSubtitle ? "fade-out" : ""
           }`}
         >
-          <div className="subtitle-label">ANNOUNCEMENT</div>
+          {!hideSubtitleLabel ? (
+            <div className="subtitle-label">ANNOUNCEMENT</div>
+          ) : null}
           <div className="subtitle-text">
             {subtitleText.split("\n").map((line, idx, lines) => (
               <span key={`${line}-${idx}`}>

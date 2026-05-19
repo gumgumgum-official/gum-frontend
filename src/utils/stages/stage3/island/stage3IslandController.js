@@ -11,9 +11,10 @@ import {
 import { setupFountainFromModel } from "../fountainEffect.js";
 import { STAGE3_CLICK_ONCE_CLIP_NAMES } from "../../../../config/stages/stage3/stage3Interactions.js";
 import { createGumFollowersController } from "../gumFollowerController.js";
+import { applyStage3BackgroundMeshFlags } from "../backgroundLoader.js";
 import {
   collectStage3WalkableFromModel,
-  buildStage3MovementBoundsXZ,
+  buildStage3AllowedBoundsXZ,
   resolveStage3CharacterGroundY,
   resolveStage3SpawnXZ,
 } from "./stage3IslandWalkable.js";
@@ -37,7 +38,6 @@ import {
  *   setGumFollowers: (followers: ReturnType<typeof createGumFollowersController> | null) => void,
  *   drainPendingGumStickCardNums: () => string[],
  *   onUiMounted: () => void,
- *   onIntroAudio: () => void,
  *   onDebugOrbitTarget: (center: import("three").Vector3) => void,
  *   onMonitorBackgroundReady: () => void,
  *   onCameraIntroStart: (center: import("three").Vector3, bounds: import("three").Box3) => void,
@@ -65,7 +65,6 @@ export function createStage3IslandController({
   setGumFollowers,
   drainPendingGumStickCardNums,
   onUiMounted,
-  onIntroAudio,
   onDebugOrbitTarget,
   onMonitorBackgroundReady,
   onCameraIntroStart,
@@ -89,25 +88,19 @@ export function createStage3IslandController({
     const animations = /** @type {import("three").AnimationClip[]} */ (
       payload.animations ?? []
     );
+    const ambientAnimations = animations.filter(
+      (clip) => !STAGE3_CLICK_ONCE_CLIP_NAMES.has(clip.name),
+    );
     const config = getConfig();
     const scene = getScene();
     const character = getCharacter();
     if (!scene || !character) return;
 
-    const ambientAnimations = animations.filter(
-      (clip) => !STAGE3_CLICK_ONCE_CLIP_NAMES.has(clip.name),
-    );
-    setFountainState(setupFountainFromModel(model, ambientAnimations));
     setBackgroundModel(model);
-    onUiMounted();
-    if (getIsStageActive()) {
-      onIntroAudio();
-    }
-    onDebugOrbitTarget(center);
     setCameraRef(stageCamera);
-    onMonitorBackgroundReady();
+    setGroundY(backgroundMaxY);
+    onDebugOrbitTarget(center);
 
-    const useStatic = config.model.useStaticObstacleColliders !== false;
     const initialSpawnXZ = resolveStage3SpawnXZ(
       backgroundBounds,
       config.character?.spawnOffset,
@@ -117,29 +110,10 @@ export function createStage3IslandController({
         ? config.character.collisionRadius
         : 0.55) + 0.35;
 
-    const rawColliders = useStatic
-      ? collectIslandStaticColliderBoxes(model, backgroundBounds)
-      : [];
-    const islandStaticColliders = useStatic
-      ? filterCollidersExcludingSpawnOverlap(
-          filterCollidersExcludingInflatedMeshBounds(
-            filterCollidersExcludingDominantTerrain(
-              rawColliders,
-              backgroundBounds,
-            ),
-          ),
-          initialSpawnXZ.x,
-          initialSpawnXZ.z,
-          spawnCollisionRadius,
-        )
-      : [];
-
-    const {
-      meshes: walkableMeshes,
-      bounds: walkableBounds,
-      hasBounds,
-    } = collectStage3WalkableFromModel(model);
-
+    /** @type {import("../islandStaticColliders.js").IslandColliderAabb[]} */
+    const islandStaticColliders = [];
+    /** @type {import("three").Mesh[]} */
+    const walkableMeshList = [];
     setCollidersRef(islandStaticColliders);
 
     if (setFlowerExclusionBoxes) {
@@ -168,83 +142,121 @@ export function createStage3IslandController({
       setFlowerExclusionBoxes(exclusionBoxes);
     }
 
-    const characterGroundY = resolveStage3CharacterGroundY({
-      backgroundMaxY,
-      backgroundBounds,
-      walkableMeshes,
-      walkableBounds,
-      hasWalkableBounds: hasBounds,
-      spawnOffset: config.character?.spawnOffset,
-    });
-    setGroundY(characterGroundY);
-
-    const movementBoundsXZ = buildStage3MovementBoundsXZ(
-      walkableBounds,
-      hasBounds,
-      backgroundBounds,
-      initialSpawnXZ,
-      config.character?.boundsPadding ?? 0.5,
-    );
-
-    character.setup(characterGroundY, backgroundBounds, islandStaticColliders, {
-      walkableMeshes,
-      walkableBounds: hasBounds ? walkableBounds : null,
-      movementBoundsXZ,
-      worldSpawnXZ: initialSpawnXZ,
-      islandModel: model,
-    });
-
     if (getIsStageActive()) {
       onCameraIntroStart(center, backgroundBounds);
     }
 
+    onUiMounted();
+    onMonitorBackgroundReady();
+
+    // walkable 수집(deferred) 전에도 섬 AABB로 XZ 이동 상한 — 무제한 이동 방지
+    const interimAllowedBoundsXZ = buildStage3AllowedBoundsXZ(
+      backgroundBounds,
+      !backgroundBounds.isEmpty(),
+    );
+
+    character.setup(backgroundMaxY, backgroundBounds, islandStaticColliders, {
+      walkableMeshes: walkableMeshList,
+      allowedBoundsXZ: interimAllowedBoundsXZ,
+    });
+
     scheduleDeferredSetup(() => {
       if (!getIsStageActive()) return;
+
+      applyStage3BackgroundMeshFlags(model, config);
+      setFountainState(setupFountainFromModel(model, ambientAnimations));
+
+      const useStatic = config.model.useStaticObstacleColliders !== false;
+      if (useStatic) {
+        const rawColliders = collectIslandStaticColliderBoxes(
+          model,
+          backgroundBounds,
+        );
+        const filtered = filterCollidersExcludingSpawnOverlap(
+          filterCollidersExcludingInflatedMeshBounds(
+            filterCollidersExcludingDominantTerrain(
+              rawColliders,
+              backgroundBounds,
+            ),
+          ),
+          initialSpawnXZ.x,
+          initialSpawnXZ.z,
+          spawnCollisionRadius,
+        );
+        islandStaticColliders.push(...filtered);
+      }
+
+      const {
+        meshes: walkableMeshes,
+        bounds: walkableBounds,
+        hasBounds,
+      } = collectStage3WalkableFromModel(model);
+      walkableMeshList.push(...walkableMeshes);
+
+      const characterGroundY = resolveStage3CharacterGroundY({
+        backgroundMaxY,
+        backgroundBounds,
+        walkableMeshes,
+        walkableBounds,
+        hasWalkableBounds: hasBounds,
+        spawnOffset: config.character?.spawnOffset,
+      });
+      setGroundY(characterGroundY);
+
+      const walkableAllowedBoundsXZ = buildStage3AllowedBoundsXZ(
+        walkableBounds,
+        hasBounds,
+      );
+      if (walkableAllowedBoundsXZ) {
+        character.applyIslandWalkableBounds(walkableAllowedBoundsXZ);
+      }
+
       registerIslandInteractions(model, animations);
       setPortalVortexMaterial(applyPortalVortex(model));
-    });
 
-    const gumFollowers = createGumFollowersController({
-      scene,
-      glbLoader: getGlbLoader(),
-      config,
-      getUserState: () => ({
-        position: character.getPosition?.() ?? null,
-        yaw: character.getYaw?.() ?? null,
-        moving: character.getIsMoving?.() ?? false,
-      }),
-      getHeadAnchorWorld: (out) => character.getHeadAnchorWorld?.(out) ?? false,
-      renderer: getRenderer(),
-      getCamera: () => stageCamera,
-    });
-    setGumFollowers(gumFollowers);
-
-    void gumFollowers
-      .init({
-        backgroundMaxY: characterGroundY,
-        isCancelled: () => !getIsStageActive() || isGumCancelled(),
-        staticColliderBoxes: islandStaticColliders,
-        walkableMeshes,
-        walkableBounds: hasBounds ? walkableBounds : null,
-        initialSpawnXZ,
-      })
-      .then(() => {
-        if (!getIsStageActive()) return;
-        const pending = drainPendingGumStickCardNums();
-        for (const cardNum of pending) {
-          if (typeof cardNum === "string")
-            gumFollowers.addStickFollower(cardNum);
-        }
-      })
-      .catch((e) => {
-        if (import.meta.env.DEV) {
-          console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
-        }
-        gumFollowers.cleanup?.();
-        setGumFollowers(null);
+      const gumFollowers = createGumFollowersController({
+        scene,
+        glbLoader: getGlbLoader(),
+        config,
+        getUserState: () => ({
+          position: character.getPosition?.() ?? null,
+          yaw: character.getYaw?.() ?? null,
+          moving: character.getIsMoving?.() ?? false,
+        }),
+        getHeadAnchorWorld: (out) =>
+          character.getHeadAnchorWorld?.(out) ?? false,
+        renderer: getRenderer(),
+        getCamera: () => stageCamera,
       });
+      setGumFollowers(gumFollowers);
 
-    void preloadVendingMachine();
+      void gumFollowers
+        .init({
+          backgroundMaxY: characterGroundY,
+          isCancelled: () => !getIsStageActive() || isGumCancelled(),
+          staticColliderBoxes: islandStaticColliders,
+          walkableMeshes: walkableMeshList,
+          walkableBounds: hasBounds ? walkableBounds : null,
+          initialSpawnXZ,
+        })
+        .then(() => {
+          if (!getIsStageActive()) return;
+          const pending = drainPendingGumStickCardNums();
+          for (const cardNum of pending) {
+            if (typeof cardNum === "string")
+              gumFollowers.addStickFollower(cardNum);
+          }
+        })
+        .catch((e) => {
+          if (import.meta.env.DEV) {
+            console.warn("[Stage3] 껌딱지 모델 로드 실패:", e);
+          }
+          gumFollowers.cleanup?.();
+          setGumFollowers(null);
+        });
+
+      void preloadVendingMachine();
+    });
   }
 
   return { onBackgroundReady };

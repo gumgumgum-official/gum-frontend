@@ -184,6 +184,9 @@
  * @property {number} [paperSoundVolume] - 종이 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  * @property {string[]} [tentSoundPaths] - 텐트(INT_tent) 클릭 시 재생할 사운드 경로
  * @property {number} [tentSoundVolume] - 텐트 클릭 효과음 볼륨 (1 초과 시 Web Audio 증폭)
+ * @property {string} [tentModalBgmPath] - 껌 카드 모달 배경음 경로
+ * @property {number} [tentModalBgmVolume] - 껌 카드 모달 배경음 볼륨 (0~1)
+ * @property {number} [tentModalBgmFadeInSec] - 모달 BGM 페이드 인 시간(초)
  * @property {string[]} [wellSoundPaths] - 우물(INT_Well) 클릭 시 재생할 사운드 경로
  * @property {number} [wellSoundVolume] - 우물 클릭 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  * @property {string[]} [clockSoundPaths] - 시계(INT_Clock) 클릭 시 재생할 사운드 경로

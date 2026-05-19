@@ -3,6 +3,14 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
 import "./style.css";
 
+document.addEventListener(
+  "dragstart",
+  (e) => {
+    e.preventDefault();
+  },
+  { capture: true },
+);
+
 async function bootstrap() {
   if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_MSW === "true") {
     const { worker } = await import("./mocks/browser.js");

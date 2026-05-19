@@ -29,6 +29,29 @@
   box-sizing: border-box;
 }
 
+/* 전역: 텍스트·이미지 드래그 방지 (입력 필드는 선택 허용) */
+html,
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+img,
+picture,
+video,
+svg,
+canvas {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body {
   overflow: hidden;
   font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;

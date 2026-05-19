@@ -12,13 +12,16 @@ import { getSessionId } from "../lib/session.js";
 import {
   deleteMyVote,
   fetchMyVote,
-  fetchVoteResults,
   getOrCreateVoteClientId,
-  GGUMDDI_MY_VOTE_STORAGE_PREFIX,
   postVote,
   saveVoteClientId,
   updateMyVote,
 } from "../lib/voteApi.js";
+import {
+  fetchVoteBundle,
+  getCachedVoteBundle,
+  setCachedVoteFromAggregate,
+} from "../lib/voteBundleCache.js";
 import { playRandomNoticePaperSound } from "../utils/stages/stage3/playNoticePaperSound.js";
 
 type VoteId = 1 | 2 | 3;
@@ -61,16 +64,20 @@ type VoteBundle = {
 /** 껌딱지 외모짱 포스터: 클릭 시 후보 선택·투표·현황 */
 export function GgumddiVoteSection({ className }: { className?: string }) {
   const clientId = useMemo(() => getOrCreateVoteClientId(), []);
+  const initialBundle = useMemo(
+    () => getCachedVoteBundle(clientId),
+    [clientId],
+  );
 
-  const [bundle, setBundle] = useState<VoteBundle>({
-    votes: { ...INITIAL_VOTES },
-    myVote: null,
-    totalVotes: 0,
-  });
+  const [bundle, setBundle] = useState<VoteBundle>(() => ({
+    votes: initialBundle?.votes ?? { ...INITIAL_VOTES },
+    myVote: initialBundle?.myVote ?? null,
+    totalVotes: initialBundle?.totalVotes ?? 0,
+  }));
   const { votes, myVote, totalVotes } = bundle;
   const [popupOpen, setPopupOpen] = useState(false);
   const [justVotedId, setJustVotedId] = useState<VoteId | null>(null);
-  const [isLoadingResults, setIsLoadingResults] = useState(true);
+  const [isLoadingResults, setIsLoadingResults] = useState(!initialBundle);
   const [isVoting, setIsVoting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -78,33 +85,35 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
 
   useEffect(() => {
     let alive = true;
-    setIsLoadingResults(true);
-    Promise.all([fetchVoteResults(), fetchMyVote(clientId)])
-      .then(([aggregate, serverMyVote]) => {
+    const hadCache = Boolean(initialBundle);
+    if (!hadCache) setIsLoadingResults(true);
+
+    // 캐시가 있었다면 stale-while-revalidate 패턴으로 백그라운드 리페치
+    void fetchVoteBundle(clientId, { force: hadCache })
+      .then((next) => {
         if (!alive) return;
-        setBundle({
-          votes: aggregate.votes,
-          myVote: serverMyVote,
-          totalVotes: aggregate.totalVotes,
-        });
+        setBundle(next);
         setErrorMessage("");
       })
       .catch((err) => {
         if (!alive) return;
-        setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : "투표 집계를 불러오지 못했습니다.",
-        );
+        if (!hadCache) {
+          setErrorMessage(
+            err instanceof Error
+              ? err.message
+              : "투표 집계를 불러오지 못했습니다.",
+          );
+        }
       })
       .finally(() => {
         if (!alive) return;
         setIsLoadingResults(false);
       });
+
     return () => {
       alive = false;
     };
-  }, [clientId]);
+  }, [clientId, initialBundle]);
 
   useLayoutEffect(() => {
     if (justVotedId === null) return;
@@ -122,6 +131,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
           // 첫 투표
           const response = await postVote(id, { clientId });
           if (response.clientId) saveVoteClientId(response.clientId);
+          setCachedVoteFromAggregate(clientId, response, id);
           setBundle({
             votes: response.votes,
             myVote: id,
@@ -131,6 +141,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
         } else if (myVote === id) {
           // 같은 후보 재클릭 → 취소
           const response = await deleteMyVote({ clientId });
+          setCachedVoteFromAggregate(clientId, response, null);
           setBundle({
             votes: response.votes,
             myVote: null,
@@ -139,6 +150,7 @@ export function GgumddiVoteSection({ className }: { className?: string }) {
         } else {
           // 다른 후보 클릭 → 재투표
           const response = await updateMyVote(id, { clientId });
+          setCachedVoteFromAggregate(clientId, response, id);
           setBundle({
             votes: response.votes,
             myVote: id,

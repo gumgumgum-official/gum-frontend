@@ -436,3 +436,20 @@
     transform: translateY(0);
   }
 }
+
+.kioskEnterLoading {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.kioskEnterLoadingVideo {
+  width: min(72vw, 520px);
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 16px;
+}

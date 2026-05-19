@@ -17,6 +17,7 @@ import { waitForStage3GpuReady } from "../utils/stages/stage3/stage3RevealGate.j
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
 import { IntroStoryOverlay } from "../components/IntroStoryOverlay.jsx";
+import { KioskEnterLoadingOverlay } from "../components/KioskEnterLoadingOverlay.jsx";
 
 const START_BG_URL = resolvePublicAssetUrl(
   "/static/images/background_start.png",
@@ -33,6 +34,14 @@ const INTRO_BGM_URL = resolvePublicAssetUrl(
 const INTRO_ENTER_SFX_URL = resolvePublicAssetUrl("/static/sounds/click.mp3");
 const INTRO_BGM_START_OFFSET_SEC = 2;
 const INTRO_BGM_START_DELAY_SEC = 0.07;
+const KIOSK_ENTER_LOADING_VIDEO_SRC = "/assets/loading_animation.mp4";
+/** 로딩 영상 ended/error 미발생 시 /kiosk 진입 안전망 */
+const KIOSK_ENTER_LOADING_VIDEO_TIMEOUT_MS = 10_000;
+/** notifyStage3GpuReady 미호출 시 /kiosk 진입 안전망 */
+const KIOSK_GPU_READY_TIMEOUT_MS = 15_000;
+
+/** @type {HTMLVideoElement | null} */
+let _prefetchedLoadingVideo = null;
 
 export function StartPage() {
   const navigate = useNavigate();
@@ -41,7 +50,9 @@ export function StartPage() {
   const prevToast = useRef(null);
   const toastRef = useRef(null);
   const startNavigationLockedRef = useRef(false);
+  const loadingVideoResolveRef = useRef(null);
   const [isPreparingKiosk, setIsPreparingKiosk] = useState(false);
+  const [isEnterLoadingVideo, setIsEnterLoadingVideo] = useState(false);
   const [isIntroOpen, setIsIntroOpen] = useState(false);
   const [isStartFadingOut, setIsStartFadingOut] = useState(false);
   const audioCtxRef = useRef(null);
@@ -355,6 +366,11 @@ export function StartPage() {
       const img = new Image();
       img.src = src;
     });
+    if (!_prefetchedLoadingVideo) {
+      _prefetchedLoadingVideo = document.createElement("video");
+      _prefetchedLoadingVideo.preload = "auto";
+      _prefetchedLoadingVideo.src = KIOSK_ENTER_LOADING_VIDEO_SRC;
+    }
   }, [location.search]);
 
   useEffect(() => {
@@ -445,25 +461,18 @@ export function StartPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const navigateToKioskAfterWarmup = useCallback(async () => {
-    if (isCompletingKioskSession) {
-      return;
-    }
-    if (startNavigationLockedRef.current) {
-      return;
-    }
-    startNavigationLockedRef.current = true;
-    setIsPreparingKiosk(true);
-    try {
-      await waitForStage3GpuReady();
-      navigate(`/kiosk${location.search}`);
-    } finally {
-      setIsPreparingKiosk(false);
-      startNavigationLockedRef.current = false;
-    }
-  }, [isCompletingKioskSession, location.search, navigate]);
+  const handleLoadingVideoEnded = useCallback(() => {
+    const resolve = loadingVideoResolveRef.current;
+    if (!resolve) return;
+    loadingVideoResolveRef.current = null;
+    resolve();
+  }, []);
 
   const handleIntroEnter = useCallback(async () => {
+    if (isCompletingKioskSession || startNavigationLockedRef.current) {
+      return;
+    }
+
     const enterBuf = audioBuffersRef.current.enterSfx;
     if (enterBuf) {
       void playOneShot(enterBuf);
@@ -484,11 +493,58 @@ export function StartPage() {
     } else {
       await fadeOutIntroBgmHtml(700);
     }
-    await navigateToKioskAfterWarmup();
+
+    startNavigationLockedRef.current = true;
+    setIsIntroOpen(false);
+    setIsEnterLoadingVideo(true);
+    setIsPreparingKiosk(true);
+
+    const videoPromise = new Promise((resolve) => {
+      loadingVideoResolveRef.current = resolve;
+    });
+    let videoTimeoutId = 0;
+    const videoTimeout = new Promise((resolve) => {
+      videoTimeoutId = window.setTimeout(
+        resolve,
+        KIOSK_ENTER_LOADING_VIDEO_TIMEOUT_MS,
+      );
+    });
+    let gpuTimeoutId = 0;
+    const gpuTimeout = new Promise((resolve) => {
+      gpuTimeoutId = window.setTimeout(resolve, KIOSK_GPU_READY_TIMEOUT_MS);
+    });
+
+    let didNavigate = false;
+    try {
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        });
+      });
+      await Promise.all([
+        Promise.race([waitForStage3GpuReady(), gpuTimeout]),
+        Promise.race([videoPromise, videoTimeout]),
+      ]);
+      navigate(`/kiosk${location.search}`);
+      didNavigate = true;
+    } finally {
+      window.clearTimeout(videoTimeoutId);
+      window.clearTimeout(gpuTimeoutId);
+      // navigate 실패·예외 시 상태 원복 (성공 시엔 언마운트 → setState no-op)
+      loadingVideoResolveRef.current = null;
+      setIsEnterLoadingVideo(false);
+      setIsPreparingKiosk(false);
+      if (!didNavigate) {
+        setIsIntroOpen(true);
+      }
+      startNavigationLockedRef.current = false;
+    }
   }, [
     fadeOutIntroBgm,
     fadeOutIntroBgmHtml,
-    navigateToKioskAfterWarmup,
+    isCompletingKioskSession,
+    location.search,
+    navigate,
     playOneShot,
   ]);
 
@@ -628,6 +684,10 @@ export function StartPage() {
           }}
         />
       ) : null}
+      <KioskEnterLoadingOverlay
+        active={isEnterLoadingVideo}
+        onEnded={handleLoadingVideoEnded}
+      />
     </div>
   );
 }

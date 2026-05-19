@@ -9,10 +9,10 @@ export const STAGE3_LETTER_LANDING_LIFT = 0.3;
 export const STAGE3_GRAVITY = -35;
 export const STAGE3_INITIAL_VY = -12;
 export const LETTER_BOUNCE_RESTITUTION = 0.4;
-export const HITS_TO_DESTROY = 12;
+export const HITS_TO_DESTROY = 20;
 /** 본격 shatter 이전 표면 금 타격 횟수 */
-export const CRACK_HITS_BEFORE_SHATTER = 11;
-export const FINAL_SHATTER_PIECE_COUNT = 32;
+export const CRACK_HITS_BEFORE_SHATTER = 12;
+export const FINAL_SHATTER_PIECE_COUNT = 8;
 /** 꽃 간 최소 거리(m) — 이보다 가까우면 스폰 생략 */
 export const FLOWER_MIN_DISTANCE = 1.1;
 /** fragment 재타격 시 잘려 나가는 로컬 x 구간 비율 */
@@ -26,5 +26,7 @@ export const FRAGMENT_FADE_START = 0.8;
 export const FRAGMENT_FADE_END = 2.0;
 export const FLOWER_BLOOM_DURATION = 3;
 export const FLOWER_SCALE = 2;
+/** 꽃 스케일 하한 = FLOWER_SCALE × 이 비율 (최대는 FLOWER_SCALE) */
+export const FLOWER_SCALE_MIN_RATIO = 0.5;
 export const FLOWER_Y_OFFSET = 0.15;
 export const FRAGMENT_POOL_MAX = 32;
