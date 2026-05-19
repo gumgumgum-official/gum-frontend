@@ -17,6 +17,54 @@ const TOP_START_LIFT = 0.07;
 const UPPER_RING_RADIUS_FRAC = 0.27;
 /** 중간 원통 링 반경 (outerR 비율) */
 const MID_RING_RADIUS_FRAC = 1.0;
+/** 풀 수면 반경 = outerR × 이 값 */
+const POOL_RADIUS_SCALE = 2;
+/** 풀 수면 Y — bbox.min에서 올리는 비율 (보이는 받침대 높이) */
+const POOL_SURFACE_FROM_MIN = 0.28;
+/** 수면을 받침 메시 위로 살짝 띄움 (z-fighting 방지) */
+const POOL_SURFACE_Y_EPS = 0.06;
+
+const POOL_VERTEX = /* glsl */ `
+uniform float uTime;
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  vec3 pos = position;
+  vec2 p = uv - 0.5;
+  float r = length(p) * 2.0;
+  float wave =
+    sin(r * 14.0 - uTime * 3.2) * 0.045 +
+    sin((p.x * 1.4 + p.y) * 11.0 + uTime * 2.4) * 0.028 +
+    sin(r * 22.0 + uTime * 4.0) * 0.012;
+  wave *= smoothstep(1.0, 0.15, r);
+  pos.y += wave;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}
+`;
+
+const POOL_FRAGMENT = /* glsl */ `
+uniform float uTime;
+varying vec2 vUv;
+
+void main() {
+  vec2 p = vUv - 0.5;
+  float r = length(p) * 2.0;
+  if (r > 1.0) discard;
+
+  float ripple1 = sin(r * 18.0 - uTime * 3.5) * 0.5 + 0.5;
+  float ripple2 = sin((p.x * 1.2 + p.y) * 14.0 + uTime * 2.6) * 0.5 + 0.5;
+  float ripple3 = sin(r * 9.0 - uTime * 1.8 + p.x * 6.0) * 0.5 + 0.5;
+  float ripple = ripple1 * 0.45 + ripple2 * 0.35 + ripple3 * 0.2;
+
+  float edge = smoothstep(1.0, 0.55, r);
+  vec3 deep = vec3(0.28, 0.62, 0.88);
+  vec3 shallow = vec3(0.62, 0.88, 1.0);
+  vec3 color = mix(deep, shallow, ripple);
+
+  float alpha = edge * (0.38 + ripple * 0.32);
+  gl_FragColor = vec4(color, alpha);
+}
+`;
 
 const CURTAIN_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -60,6 +108,7 @@ void main() {
  *   uniforms: { uTime: { value: number }, uFlowSpeed: { value: number }, uMap: { value: import("three").Texture } },
  *   curtainMaterial: import("three").ShaderMaterial,
  *   curtainTexture: import("three").Texture,
+ *   poolMaterial: import("three").ShaderMaterial,
  * }} ProceduralFountainFx
  */
 
@@ -203,6 +252,32 @@ function disableRaycast(obj) {
 }
 
 /**
+ * @param {number} cx
+ * @param {number} cz
+ * @param {number} poolY
+ * @param {number} poolRadius
+ * @param {{ uTime: { value: number } }} uniforms
+ */
+function createPoolMesh(cx, cz, poolY, poolRadius, uniforms) {
+  const poolGeom = new THREE.CircleGeometry(poolRadius, 64);
+  const poolMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: uniforms.uTime },
+    vertexShader: POOL_VERTEX,
+    fragmentShader: POOL_FRAGMENT,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const pool = new THREE.Mesh(poolGeom, poolMat);
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.set(cx, poolY, cz);
+  pool.renderOrder = 5;
+  pool.name = "Fountain_Pool";
+  disableRaycast(pool);
+  return { mesh: pool, material: poolMat };
+}
+
+/**
  * @param {import("three").Mesh} fountainMesh
  * @param {import("three").Object3D} modelRoot
  * @returns {ProceduralFountainFx | null}
@@ -222,6 +297,8 @@ export function createProceduralFountainFx(fountainMesh, modelRoot) {
   const cz = center.z;
   const radiusXZ = Math.min(size.x, size.z) * 0.5;
   const poolY = box.min.y + size.y * 0.04;
+  const poolSurfaceY =
+    box.min.y + size.y * POOL_SURFACE_FROM_MIN + POOL_SURFACE_Y_EPS;
   const topY = box.max.y + size.y * TOP_START_LIFT;
   const outerR = radiusXZ * OUTER_RADIUS_SCALE;
 
@@ -267,6 +344,16 @@ export function createProceduralFountainFx(fountainMesh, modelRoot) {
     group.add(segment);
   }
 
+  const poolRadius = outerR * POOL_RADIUS_SCALE;
+  const { mesh: poolMesh, material: poolMaterial } = createPoolMesh(
+    cx,
+    cz,
+    poolSurfaceY,
+    poolRadius,
+    uniforms,
+  );
+  group.add(poolMesh);
+
   const fxParent = fountainMesh.parent ?? modelRoot;
   fxParent.add(group);
   group.position.copy(fountainMesh.position);
@@ -277,7 +364,7 @@ export function createProceduralFountainFx(fountainMesh, modelRoot) {
     console.log("[Stage3] fountain: round arc, straight streaks", { outerR });
   }
 
-  return { group, uniforms, curtainMaterial, curtainTexture };
+  return { group, uniforms, curtainMaterial, curtainTexture, poolMaterial };
 }
 
 /**
@@ -300,5 +387,6 @@ export function disposeProceduralFountainFx(fx) {
     mesh.geometry?.dispose();
   });
   fx.curtainMaterial.dispose();
+  fx.poolMaterial.dispose();
   fx.curtainTexture.dispose();
 }
