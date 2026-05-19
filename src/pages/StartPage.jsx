@@ -37,6 +37,8 @@ const INTRO_BGM_START_DELAY_SEC = 0.07;
 const KIOSK_ENTER_LOADING_VIDEO_SRC = "/assets/loading_animation.mp4";
 /** 로딩 영상 ended/error 미발생 시 /kiosk 진입 안전망 */
 const KIOSK_ENTER_LOADING_VIDEO_TIMEOUT_MS = 10_000;
+/** notifyStage3GpuReady 미호출 시 /kiosk 진입 안전망 */
+const KIOSK_GPU_READY_TIMEOUT_MS = 15_000;
 
 /** @type {HTMLVideoElement | null} */
 let _prefetchedLoadingVideo = null;
@@ -507,7 +509,12 @@ export function StartPage() {
         KIOSK_ENTER_LOADING_VIDEO_TIMEOUT_MS,
       );
     });
+    let gpuTimeoutId = 0;
+    const gpuTimeout = new Promise((resolve) => {
+      gpuTimeoutId = window.setTimeout(resolve, KIOSK_GPU_READY_TIMEOUT_MS);
+    });
 
+    let didNavigate = false;
     try {
       await new Promise((resolve) => {
         requestAnimationFrame(() => {
@@ -515,16 +522,21 @@ export function StartPage() {
         });
       });
       await Promise.all([
-        waitForStage3GpuReady(),
+        Promise.race([waitForStage3GpuReady(), gpuTimeout]),
         Promise.race([videoPromise, videoTimeout]),
       ]);
       navigate(`/kiosk${location.search}`);
+      didNavigate = true;
     } finally {
       window.clearTimeout(videoTimeoutId);
-      // navigate 실패 시 상태 원복용 안전망 (성공 시엔 이미 언마운트 → setState no-op)
+      window.clearTimeout(gpuTimeoutId);
+      // navigate 실패·예외 시 상태 원복 (성공 시엔 언마운트 → setState no-op)
       loadingVideoResolveRef.current = null;
       setIsEnterLoadingVideo(false);
       setIsPreparingKiosk(false);
+      if (!didNavigate) {
+        setIsIntroOpen(true);
+      }
       startNavigationLockedRef.current = false;
     }
   }, [

@@ -85,11 +85,12 @@ export function KioskEnterLoadingOverlay({ active, onEnded }) {
       <video
         ref={videoRef}
         className={styles.kioskEnterLoadingVideo}
-        src={LOADING_VIDEO_SRC}
         playsInline
         muted
         preload="auto"
-      />
+      >
+        <source src={LOADING_VIDEO_SRC} type="video/mp4" />
+      </video>
     </div>,
     document.body,
   );
