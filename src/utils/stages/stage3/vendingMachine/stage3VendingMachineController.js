@@ -93,21 +93,8 @@ export function createStage3VendingMachineController({
     );
   }
 
-  function removeSpawnedAt(index) {
-    const item = spawnedDrinks[index];
-    if (!item) return;
-    const scene = getScene();
-    if (item.body && item.landSoundHandler) {
-      item.body.removeEventListener("collide", item.landSoundHandler);
-      item.landSoundHandler = undefined;
-    }
-    if (physicsWorld && item.body) {
-      physicsWorld.removeBody(item.body);
-    }
-    if (scene) {
-      scene.remove(item.group);
-    }
-    item.group.traverse((child) => {
+  function disposeDrinkGroup(group) {
+    group.traverse((child) => {
       if (!child.isMesh) return;
       if (child.geometry) child.geometry.dispose();
       if (child.material) {
@@ -116,6 +103,19 @@ export function createStage3VendingMachineController({
         else m.dispose();
       }
     });
+  }
+
+  function removeSpawnedAt(index) {
+    const item = spawnedDrinks[index];
+    if (!item) return;
+    const scene = getScene();
+    if (item.body && item.landSoundHandler) {
+      item.body.removeEventListener("collide", item.landSoundHandler);
+      item.landSoundHandler = undefined;
+    }
+    if (physicsWorld && item.body) physicsWorld.removeBody(item.body);
+    if (scene) scene.remove(item.group);
+    disposeDrinkGroup(item.group);
     spawnedDrinks.splice(index, 1);
   }
 
@@ -171,28 +171,17 @@ export function createStage3VendingMachineController({
     initPhysics();
     syncGroundPlane();
 
-    if (machineRef) {
-      machineRef.updateMatrixWorld(true);
-      const machineBox = new THREE.Box3().setFromObject(machineRef);
-      if (!machineBox.isEmpty()) {
-        machineBox.getCenter(_machineWorld);
-      } else {
-        machineRef.getWorldPosition(_machineWorld);
-      }
+    machineRef.updateMatrixWorld(true);
+    const machineBox = new THREE.Box3().setFromObject(machineRef);
+    if (!machineBox.isEmpty()) {
+      machineBox.getCenter(_machineWorld);
     } else {
-      const p = getCharacterPosition();
-      if (p) {
-        _machineWorld.set(p.x, Math.max(getGroundY() + 0.5, p.y), p.z);
-      } else {
-        _machineWorld.set(0, getGroundY() + 0.7, 0);
-      }
+      machineRef.getWorldPosition(_machineWorld);
     }
 
     let clone;
     /** @type {THREE.Group | null} */
     let spawnRoot = null;
-    /** @type {CANNON.Vec3 | undefined} */
-    let halfExtents;
 
     if (vendingMachineTemplates.length === 0) {
       if (import.meta.env.DEV) {
@@ -248,10 +237,9 @@ export function createStage3VendingMachineController({
     spawnRoot.add(clone);
 
     // 머신의 월드 쿼터니언으로 앞면 방향을 고정 (캐릭터/카메라 위치와 무관)
-    _spawnDir.set(0, 0, 1);
-    if (machineRef) {
-      _spawnDir.applyQuaternion(machineRef.getWorldQuaternion(_machineQuat));
-    }
+    _spawnDir
+      .set(0, 0, 1)
+      .applyQuaternion(machineRef.getWorldQuaternion(_machineQuat));
     _spawnDir.y = 0;
     if (_spawnDir.lengthSq() < 1e-6) _spawnDir.set(0, 0, 1);
     _spawnDir.normalize();
@@ -294,27 +282,18 @@ export function createStage3VendingMachineController({
       _spawnDir.normalize();
     }
 
-    /** @type {THREE.Object3D} */
-    let groupForScene = clone;
-    if (spawnRoot) {
-      spawnRoot.position.set(sx, sy, sz);
-      spawnRoot.updateMatrixWorld(true);
-      groupForScene = spawnRoot;
-    } else {
-      clone.position.set(sx, sy, sz);
-      clone.updateMatrixWorld(true);
-    }
+    spawnRoot.position.set(sx, sy, sz);
+    spawnRoot.updateMatrixWorld(true);
+    const groupForScene = spawnRoot;
 
-    if (!halfExtents) {
-      const bounds = new THREE.Box3().setFromObject(groupForScene);
-      bounds.getSize(_modelSize);
-      const minHalf = 0.08;
-      halfExtents = new CANNON.Vec3(
-        Math.max(_modelSize.x * 0.5, minHalf),
-        Math.max(_modelSize.y * 0.5, minHalf),
-        Math.max(_modelSize.z * 0.5, minHalf),
-      );
-    }
+    const bounds = new THREE.Box3().setFromObject(groupForScene);
+    bounds.getSize(_modelSize);
+    const minHalf = 0.08;
+    const halfExtents = new CANNON.Vec3(
+      Math.max(_modelSize.x * 0.5, minHalf),
+      Math.max(_modelSize.y * 0.5, minHalf),
+      Math.max(_modelSize.z * 0.5, minHalf),
+    );
     const boxShape = new CANNON.Box(halfExtents);
     const body = new CANNON.Body({
       mass: 0.3,
@@ -441,16 +420,7 @@ export function createStage3VendingMachineController({
           physicsWorld.removeBody(s.body);
         }
         scene.remove(s.group);
-        s.group.traverse((child) => {
-          if (child.isMesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              const m = child.material;
-              if (Array.isArray(m)) m.forEach((x) => x.dispose());
-              else m.dispose();
-            }
-          }
-        });
+        disposeDrinkGroup(s.group);
       }
       spawnedDrinks.length = 0;
       if (physicsWorld && groundBody) {

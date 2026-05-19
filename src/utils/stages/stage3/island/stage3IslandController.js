@@ -44,7 +44,6 @@ import {
  *   scheduleDeferredSetup: (task: () => void) => void,
  *   registerIslandInteractions: (model: import("three").Object3D, animations: import("three").AnimationClip[]) => void,
  *   applyPortalVortex: (model: import("three").Object3D) => import("three").ShaderMaterial | null,
- *   preloadIceCream: () => void,
  *   preloadVendingMachine: () => void,
  * }} params
  */
@@ -73,7 +72,6 @@ export function createStage3IslandController({
   scheduleDeferredSetup,
   registerIslandInteractions,
   applyPortalVortex,
-  preloadIceCream,
   preloadVendingMachine,
 }) {
   /**
@@ -246,7 +244,6 @@ export function createStage3IslandController({
         setGumFollowers(null);
       });
 
-    void preloadIceCream();
     void preloadVendingMachine();
   }
 

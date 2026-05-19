@@ -7,11 +7,10 @@ export const STAGE3_INT_SUFFIX_TO_TARGET = {
   notice: "notice",
   gamemachine: "gameMachine",
   tent: "tent",
-  icecream: "icecream",
   portal: "portal",
   well: "well",
   clock: "clock",
-  vendingmachine: "vendingMachine",
+  vendingmachine: "vendingMachine", // GLB 노드명: INT_vending_machine
 };
 
 /** island `INT_StreetLight*` 근접 시 사운드 재생 */
