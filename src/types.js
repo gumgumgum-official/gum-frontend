@@ -100,6 +100,9 @@
  * @property {Stage3PropConfig} [bench]
  * @property {{ path: string, position?: { x?: number, y?: number, z?: number }, rotation?: { x?: number, y?: number, z?: number }, scale?: number, castShadow?: boolean, receiveShadow?: boolean }} [curtain]
  * @property {string} [boardPosterImage]
+ * @property {string} [photoboothVideoPath]
+ * @property {string[]} [photoboothPhotoSrcs]
+ * @property {number[]} [photoboothPhotoRatios]
  */
 
 /**

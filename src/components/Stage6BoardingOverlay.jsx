@@ -18,6 +18,7 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
   STAGE6_SUBTITLE_SHOW_EVENT,
 } from "../events/stage6Events.js";
+import { unblockStage6Notifications } from "../utils/stages/stage6/stage6NotificationGate.js";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const DEFAULT_SUBTITLE_LABEL = "ANNOUNCEMENT";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
@@ -236,6 +237,7 @@ export function Stage6BoardingOverlay() {
 
     const onStage6NameModalHide = () => {
       setIsNameModalOpen(false);
+      unblockStage6Notifications("name-modal");
       window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
 
@@ -251,6 +253,7 @@ export function Stage6BoardingOverlay() {
       setIsNameModalOpen(false);
       setIsOverlayOpen(false);
       setNameInputValue("");
+      unblockStage6Notifications("name-modal");
       window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
 
@@ -321,6 +324,7 @@ export function Stage6BoardingOverlay() {
       if (event.key === "Escape") {
         setIsNameModalOpen(false);
         setIsOverlayOpen(false);
+        unblockStage6Notifications("name-modal");
         window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
       }
       if (event.key === "Enter" && isNameModalOpen) {
@@ -339,6 +343,7 @@ export function Stage6BoardingOverlay() {
     setPassengerName(nextPassengerName);
     setNameInputValue(nextPassengerName);
     setIsNameModalOpen(false);
+    unblockStage6Notifications("name-modal");
     window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
 
     window.dispatchEvent(
@@ -407,6 +412,7 @@ export function Stage6BoardingOverlay() {
         aria-label="Passenger name input"
         onClick={() => {
           setIsNameModalOpen(false);
+          unblockStage6Notifications("name-modal");
           window.dispatchEvent(
             new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT),
           );
