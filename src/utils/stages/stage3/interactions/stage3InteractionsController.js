@@ -6,11 +6,6 @@ import { resolvePublicAssetUrl } from "../../../common/gltfTemplateCache.js";
 import {
   STAGE3_INT_PREFIX,
   STAGE3_INT_SUFFIX_TO_TARGET,
-  STREET_LIGHT_NAME_PREFIX,
-  STREET_LIGHT_TRIGGER_RADIUS,
-  STREET_LIGHT_TRIGGER_COOLDOWN_MS,
-  CLOCK_TRIGGER_RADIUS,
-  CLOCK_TRIGGER_COOLDOWN_MS,
   STAGE3_INT_CLICK_HINT_RADIUS,
   STAGE3_INT_CLICK_HINT_OFFSET_Y,
   PORTAL_PASS_TRIGGER_RADIUS_SCALE,
@@ -21,8 +16,6 @@ import {
   STAGE3_CLICK_ONCE_ANIM_SETS,
 } from "../../../../config/stages/stage3/stage3Interactions.js";
 import { playRandomWellClickSound } from "../playWellClickSound.js";
-import { playRandomClockClickSound } from "../../../common/playClockClickSound.js";
-import { playRandomStreetLightClickSound } from "../../../common/playStreetLightSound.js";
 import { onMinigameClose, closeMinigame } from "../minigameLauncher.js";
 import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3IntroAudio.js";
 
@@ -101,16 +94,9 @@ export function createStage3InteractionsController({
   const cameraAssistTargets = [];
   let smoothedCameraYawAssist = 0;
   let smoothedCameraYawAssistDemand = 0;
-  const streetLightWorldPositions = [];
   const intProximityTargets = [];
   /** @type {Stage3InteractionTarget | null} */
   let activeIntHintTarget = null;
-  let wasNearStreetLight = false;
-  let lastStreetLightSoundAtMs = 0;
-  const clockWorldPositions = [];
-  let wasNearClock = false;
-  let lastClockSoundAtMs = 0;
-
   const portalPassTriggerSphere = new THREE.Sphere();
   let hasPortalPassTriggerSphere = false;
   let wasInsidePortalPassTrigger = false;
@@ -424,8 +410,6 @@ export function createStage3InteractionsController({
     gumtoongjiRaycastMeshes.length = 0;
     cameraAssistTargets.length = 0;
     intProximityTargets.length = 0;
-    streetLightWorldPositions.length = 0;
-    clockWorldPositions.length = 0;
     smoothedCameraYawAssist = 0;
     smoothedCameraYawAssistDemand = 0;
     vendingMachineController.clearMachineRef();
@@ -525,12 +509,6 @@ export function createStage3InteractionsController({
       if (intTarget === "gameMachine") gameMachineRef = obj;
       if (intTarget === "vendingMachine")
         vendingMachineController.setMachineRef(obj);
-      if (intTarget === "clock") {
-        obj.updateMatrixWorld(true);
-        const worldPos = new THREE.Vector3();
-        obj.getWorldPosition(worldPos);
-        clockWorldPositions.push(worldPos);
-      }
       obj.traverse((child) => {
         if (child.isMesh) meshSet.add(child);
       });
@@ -643,15 +621,6 @@ export function createStage3InteractionsController({
       }
     }
 
-    islandModel.traverse((obj) => {
-      if (typeof obj.name !== "string") return;
-      if (!obj.name.startsWith(STREET_LIGHT_NAME_PREFIX)) return;
-      obj.updateMatrixWorld(true);
-      const worldPos = new THREE.Vector3();
-      obj.getWorldPosition(worldPos);
-      streetLightWorldPositions.push(worldPos);
-    });
-
     if (gameMachineRef) {
       unlistenMinigameClose = onMinigameClose(() => {
         onGameMachineModalClose();
@@ -668,60 +637,6 @@ export function createStage3InteractionsController({
     }
 
     vendingMachineController.warnMachineNotFound(rootNames);
-  }
-
-  function updateStreetLightProximitySound() {
-    const userPos = getCharacter()?.getPosition?.();
-    if (!userPos || streetLightWorldPositions.length === 0) {
-      wasNearStreetLight = false;
-      return;
-    }
-    const radiusSq = STREET_LIGHT_TRIGGER_RADIUS * STREET_LIGHT_TRIGGER_RADIUS;
-    const isNear = streetLightWorldPositions.some((p) => {
-      const dx = p.x - userPos.x;
-      const dz = p.z - userPos.z;
-      return dx * dx + dz * dz <= radiusSq;
-    });
-    if (!isNear) {
-      wasNearStreetLight = false;
-      return;
-    }
-    const now = Date.now();
-    if (
-      !wasNearStreetLight &&
-      now - lastStreetLightSoundAtMs >= STREET_LIGHT_TRIGGER_COOLDOWN_MS
-    ) {
-      playRandomStreetLightClickSound();
-      lastStreetLightSoundAtMs = now;
-    }
-    wasNearStreetLight = true;
-  }
-
-  function updateClockProximitySound() {
-    const userPos = getCharacter()?.getPosition?.();
-    if (!userPos || clockWorldPositions.length === 0) {
-      wasNearClock = false;
-      return;
-    }
-    const radiusSq = CLOCK_TRIGGER_RADIUS * CLOCK_TRIGGER_RADIUS;
-    const isNear = clockWorldPositions.some((p) => {
-      const dx = p.x - userPos.x;
-      const dz = p.z - userPos.z;
-      return dx * dx + dz * dz <= radiusSq;
-    });
-    if (!isNear) {
-      wasNearClock = false;
-      return;
-    }
-    const now = Date.now();
-    if (
-      !wasNearClock &&
-      now - lastClockSoundAtMs >= CLOCK_TRIGGER_COOLDOWN_MS
-    ) {
-      playRandomClockClickSound();
-      lastClockSoundAtMs = now;
-    }
-    wasNearClock = true;
   }
 
   function updateIntClickHintBubble() {
@@ -967,12 +882,6 @@ export function createStage3InteractionsController({
   function cleanup() {
     detachIntClickHintBubble();
     intRaycastMeshes.length = 0;
-    streetLightWorldPositions.length = 0;
-    wasNearStreetLight = false;
-    lastStreetLightSoundAtMs = 0;
-    clockWorldPositions.length = 0;
-    wasNearClock = false;
-    lastClockSoundAtMs = 0;
     if (unlistenMinigameClose) {
       unlistenMinigameClose();
       unlistenMinigameClose = null;
@@ -1005,8 +914,6 @@ export function createStage3InteractionsController({
     update(delta) {
       if (gumtoongjiMixer) gumtoongjiMixer.update(delta);
       for (const set of clickOnceSets.values()) set.mixer.update(delta);
-      updateStreetLightProximitySound();
-      updateClockProximitySound();
       updateIntClickHintBubble();
       updatePortalPassTrigger();
     },

@@ -15,17 +15,13 @@ const FLOWER_MAGIC_PATHS = [
   "/static/sounds/text_crack/flower_magic.mp3",
   "/static/sounds/text_crack/flower_magic2.mp3",
 ];
-const DROP_PATH = "/static/sounds/text_crack/drop.mp3";
 const getCrackVolume = () => Number(STAGE3_AUDIO_CONFIG.crackVolume ?? 1.6);
 const getCrackFinalVolume = () =>
   Number(STAGE3_AUDIO_CONFIG.crackFinalVolume ?? 1.6);
 const getFlowerMagicVolume = () =>
   Number(STAGE3_AUDIO_CONFIG.flowerMagicVolume ?? 1.6);
-const getDropVolume = () => Number(STAGE3_AUDIO_CONFIG.dropVolume ?? 1.6);
 
 let lastCrackIdx = -1;
-/** @type {HTMLAudioElement | null} */
-let dropAudio = null;
 /** @type {HTMLAudioElement | null} */
 let crackFinalAudio = null;
 /** @type {HTMLAudioElement[]} */
@@ -89,30 +85,11 @@ export function playCrackFinalSound() {
   if (p && typeof p.catch === "function") p.catch(() => {});
 }
 
-/** 글자가 바닥에 첫 착지하는 순간 1회 재생. */
-export function playDropSound() {
-  if (!dropAudio) {
-    dropAudio = new window.Audio();
-    dropAudio.preload = "auto";
-    dropAudio.src = resolvePublicAssetUrl(DROP_PATH);
-  }
-  applyExtendedAudioVolume(dropAudio, getDropVolume());
-  dropAudio.pause();
-  dropAudio.currentTime = 0;
-  const p = dropAudio.play();
-  if (p && typeof p.catch === "function") p.catch(() => {});
-}
-
 export function disposeStage3CrackSound() {
   if (crackFinalAudio) {
     crackFinalAudio.pause();
     crackFinalAudio.src = "";
     crackFinalAudio = null;
-  }
-  if (dropAudio) {
-    dropAudio.pause();
-    dropAudio.src = "";
-    dropAudio = null;
   }
   for (const a of flowerMagicAudios) {
     a.pause();
