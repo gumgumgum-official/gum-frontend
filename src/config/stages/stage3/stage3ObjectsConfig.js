@@ -164,19 +164,6 @@ export const STAGE3_OBJECTS_CONFIG = {
   },
 
   /**
-   * GLB `INT_StreetLight*` 클릭 시 랜덤 1종.
-   * 단일 HTMLAudioElement로 `src` 전환(매 클릭 `new Audio()`는 일부 환경에서 이전 트랙만 재생되는 경우가 있음).
-   */
-  streetLight: {
-    streetLightSoundPaths: [
-      "/static/sounds/light/the_sound_of_a_light_1.mp3",
-      "/static/sounds/light/the_sound_of_a_light_2.mp3",
-      "/static/sounds/light/the_sound_of_a_light_3.mp3",
-    ],
-    streetLightSoundVolume: 2.8,
-  },
-
-  /**
    * 포탈: GLB의 `INT_Portal` 메시를 클릭하면 `targetStage`로 전환합니다.
    * `position` / `normal` / `halfWidth`는 예전 평면 통과 로직용으로 남겨 두었으며 현재는 사용하지 않습니다.
    */

@@ -52,7 +52,6 @@ import {
   stopStage3IntroAudio,
 } from "../utils/common/stage3IntroAudio.js";
 import { disposeNoticePaperAudio } from "../utils/stages/stage3/playNoticePaperSound.js";
-import { disposeStreetLightSound } from "../utils/common/playStreetLightSound.js";
 import { disposePortalTransitionSound } from "../utils/stages/stage3/playPortalTransitionSound.js";
 import { disposeStage3CrackSound } from "../utils/stages/stage3/playCrackSound.js";
 import { updateFountain } from "../utils/stages/stage3/fountainEffect.js";
@@ -610,7 +609,6 @@ export function Stage3() {
       dispatchGumCardsModalClose();
       interactionsController.cleanup();
       disposeNoticePaperAudio();
-      disposeStreetLightSound();
       disposePortalTransitionSound();
       disposeStage3CrackSound();
 
