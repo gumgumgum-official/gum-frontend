@@ -290,7 +290,12 @@ export function createStage3InteractionsController({
         }
         return false;
       }
+      const eggTap = tryRegisterEasterEggFromRayTarget("icecream");
       vendingMachineController.spawnFromMachine();
+      tryAdvanceStampSequence("icecream");
+      if (eggTap?.stampSubtitle) {
+        dispatchSubtitleLine(eggTap.stampSubtitle);
+      }
       return true;
     }
 
