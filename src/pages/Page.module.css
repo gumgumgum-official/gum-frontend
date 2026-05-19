@@ -452,4 +452,5 @@
   width: min(72vw, 520px);
   max-height: 72vh;
   object-fit: contain;
+  border-radius: 16px;
 }
