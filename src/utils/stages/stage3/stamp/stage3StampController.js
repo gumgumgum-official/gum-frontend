@@ -268,13 +268,10 @@ export function createStage3StampController({
     const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
     if (panel) panel.classList.add("stage3-stamp-panel--hidden");
 
-    dispatchSubtitleSequence(
-      [
-        { text: "어딘가에서 걱정들이 쏟아지고 있어요...", holdMs: 2500 },
-        { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2000 },
-      ],
-      { hideLabel: true },
-    );
+    dispatchSubtitleSequence([
+      { text: "어딘가에서 걱정들이 쏟아지고 있어요...", holdMs: 2500 },
+      { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2000 },
+    ]);
 
     stage3EntryStampRevealTimerId = window.setTimeout(() => {
       stage3EntryStampRevealTimerId = null;
