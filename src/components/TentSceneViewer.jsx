@@ -23,6 +23,7 @@ function getTentSubtitleCfg() {
   const tent = STAGE3_OBJECTS_CONFIG.tent;
   return {
     messages: tent?.tentSceneSubtitles ?? [],
+    label: tent?.tentSceneSubtitleLabel ?? "타로껌",
     totalMs: tent?.tentSceneSubtitleTotalMs ?? 7400,
   };
 }
@@ -67,13 +68,13 @@ export function TentSceneViewer({
   useEffect(() => {
     if (skipBubbleSequence) return;
 
-    const { messages, totalMs } = getTentSubtitleCfg();
+    const { messages, label, totalMs } = getTentSubtitleCfg();
     if (messages.length === 0) return;
 
     const runSubtitleSequence = () => {
       window.dispatchEvent(
         new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
-          detail: { messages, hideLabel: true },
+          detail: { messages, label, variant: "tent" },
         }),
       );
       return [setTimeout(() => onCardOpenRef.current?.(), totalMs)];

@@ -125,12 +125,14 @@ export const STAGE3_OBJECTS_CONFIG = {
       position: [-0.38, 6.169, 4.83],
       target: [0.03, 3.474, -1.068],
     },
+    /** 텐트 자막 이름 pill (흰 배경 + ✦) */
+    tentSceneSubtitleLabel: "타로껌",
     /** 텐트 씬 진입 대사 — Stage6BoardingOverlay subtitle-box 시퀀스 */
     tentSceneSubtitles: [
       { text: "안녕, 만나서 반가워", holdMs: 2500 },
       {
         text: "이곳에서 너에게 필요한 껌딱지 카드를 고를 수 있어!",
-        holdMs: 3500,
+        holdMs: 3700,
       },
     ],
     /** runSubtitleSequence: hold + fade(600) + gap(200) × 구간 */

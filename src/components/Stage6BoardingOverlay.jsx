@@ -19,6 +19,7 @@ import {
   STAGE6_SUBTITLE_SHOW_EVENT,
 } from "../events/stage6Events.js";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
+const DEFAULT_SUBTITLE_LABEL = "ANNOUNCEMENT";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
 /** '탑승권 발급받기' 클릭 시 재생 (랜덤 1종) */
 const TICKET_ISSUE_SOUND_PATHS = [
@@ -53,6 +54,10 @@ export function Stage6BoardingOverlay() {
   const [showSubtitle, setShowSubtitle] = useState(false);
   const [fadeOutSubtitle, setFadeOutSubtitle] = useState(false);
   const [hideSubtitleLabel, setHideSubtitleLabel] = useState(false);
+  const [subtitleLabelText, setSubtitleLabelText] = useState(
+    DEFAULT_SUBTITLE_LABEL,
+  );
+  const [subtitleVariant, setSubtitleVariant] = useState(null);
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [nameInputValue, setNameInputValue] = useState("");
   const [passengerName, setPassengerName] = useState("");
@@ -156,12 +161,30 @@ export function Stage6BoardingOverlay() {
       }
     };
 
+    const applySubtitleVariant = (event) => {
+      setSubtitleVariant(event?.detail?.variant === "tent" ? "tent" : null);
+    };
+
+    const applySubtitleLabel = (event) => {
+      if (event?.detail?.hideLabel === true) {
+        setHideSubtitleLabel(true);
+        return;
+      }
+      setHideSubtitleLabel(false);
+      const label =
+        typeof event?.detail?.label === "string"
+          ? event.detail.label.trim()
+          : "";
+      setSubtitleLabelText(label || DEFAULT_SUBTITLE_LABEL);
+    };
+
     const handleSubtitleShowEvent = (event) => {
       const text =
         typeof event?.detail?.text === "string" ? event.detail.text : "";
       if (!text) return;
       cancelSequence();
-      setHideSubtitleLabel(event?.detail?.hideLabel === true);
+      applySubtitleVariant(event);
+      applySubtitleLabel(event);
       showSubtitleNow(text);
     };
 
@@ -174,11 +197,13 @@ export function Stage6BoardingOverlay() {
         typeof event?.detail?.text === "string" ? event.detail.text : "";
       if (!text) return;
       cancelSequence();
+      setSubtitleVariant(null);
       showSubtitleNow(text);
     };
 
     const onAirportSubtitleHide = () => {
       cancelSequence();
+      setSubtitleVariant(null);
       void hideSubtitleNow();
     };
 
@@ -188,6 +213,7 @@ export function Stage6BoardingOverlay() {
 
     const onStage6SubtitleHide = () => {
       cancelSequence();
+      setSubtitleVariant(null);
       void hideSubtitleNow();
     };
 
@@ -196,7 +222,8 @@ export function Stage6BoardingOverlay() {
         ? event.detail.messages
         : [];
       if (messages.length === 0) return;
-      setHideSubtitleLabel(event?.detail?.hideLabel === true);
+      applySubtitleVariant(event);
+      applySubtitleLabel(event);
       void runSubtitleSequence(messages);
     };
 
@@ -219,6 +246,8 @@ export function Stage6BoardingOverlay() {
       setFadeOutSubtitle(false);
       setSubtitleText("");
       setHideSubtitleLabel(false);
+      setSubtitleLabelText(DEFAULT_SUBTITLE_LABEL);
+      setSubtitleVariant(null);
       setIsNameModalOpen(false);
       setIsOverlayOpen(false);
       setNameInputValue("");
@@ -346,14 +375,19 @@ export function Stage6BoardingOverlay() {
         </div>
       </div>
 
-      <div className="subtitle-container" aria-live="polite">
+      <div
+        className={`subtitle-container${
+          subtitleVariant === "tent" ? " subtitle-container--tent" : ""
+        }`}
+        aria-live="polite"
+      >
         <div
           className={`subtitle-box ${showSubtitle ? "visible" : ""} ${
             fadeOutSubtitle ? "fade-out" : ""
           }`}
         >
           {!hideSubtitleLabel ? (
-            <div className="subtitle-label">ANNOUNCEMENT</div>
+            <div className="subtitle-label">{subtitleLabelText}</div>
           ) : null}
           <div className="subtitle-text">
             {subtitleText.split("\n").map((line, idx, lines) => (
