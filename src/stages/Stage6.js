@@ -12,6 +12,12 @@ import {
 } from "../utils/common/gltfTemplateCache.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6/stage6.js";
+import { preloadStage6AirportGlb } from "../utils/stages/stage6/stage6AirportPreload.js";
+import {
+  clearRetainedStage3Whiteout,
+  hasRetainedStage3Whiteout,
+  releaseRetainedStage3Whiteout,
+} from "../utils/stages/stage3/stage3ToStage6Whiteout.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC,
@@ -203,8 +209,7 @@ export function Stage6() {
   const fbxLoader = new FBXLoader();
   const isElectronLike = isElectronLikeUserAgent();
   const stage6ModelUrl = resolvePublicAssetUrl(config.model.path);
-  // Stage6 진입 직전에 디코더/파서를 워밍업해서 첫 표시 지연을 줄인다.
-  void loadGltfTemplateCached(stage6ModelUrl).catch(() => {});
+  preloadStage6AirportGlb();
   let isStage6Active = true;
   const intRaycastMeshes = [];
   const pointer = new THREE.Vector2();
@@ -263,6 +268,17 @@ export function Stage6() {
     if (!loadingOverlay) return false;
     const style = window.getComputedStyle(loadingOverlay);
     return style.display !== "none" && style.visibility !== "hidden";
+  }
+
+  function applyStage6SceneBackground(scene) {
+    scene.background = new THREE.Color(config.background.color);
+  }
+
+  function revealStage6Scene(scene) {
+    applyStage6SceneBackground(scene);
+    if (hasRetainedStage3Whiteout()) {
+      releaseRetainedStage3Whiteout();
+    }
   }
 
   /** @type {{ toneMappingExposure: number, renderer: THREE.WebGLRenderer } | null} */
@@ -1101,7 +1117,7 @@ export function Stage6() {
       }
       cameraRef = this.camera;
 
-      scene.background = new THREE.Color(config.background.color);
+      scene.background = null;
       character = createCharacterController({
         scene,
         glbLoader,
@@ -1295,6 +1311,7 @@ export function Stage6() {
 
           objects.push(model);
           scene.add(model);
+          revealStage6Scene(scene);
 
           // 애니메이션 시스템 초기화 (§5: mixer 1개, gltf.scene 전체)
           setupCharAnimations(model, gltf.animations ?? []);
@@ -1369,6 +1386,9 @@ export function Stage6() {
             `❌ Stage6 배경 로드 에러 (${config.model.path}):`,
             err,
           );
+          if (isStage6Active) {
+            revealStage6Scene(scene);
+          }
           // 배경 로드 실패해도 안내 방송은 진행 (기존 동작 유지)
           scheduleAirplaneCallSign();
         });
@@ -1624,6 +1644,7 @@ export function Stage6() {
         stage6ExposureRestore = null;
       }
 
+      clearRetainedStage3Whiteout();
       scene.background = null;
     },
   };

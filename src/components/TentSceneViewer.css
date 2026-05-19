@@ -18,13 +18,6 @@
   cursor: default;
 }
 
-.speech-bubble-stage6.tent-bubble {
-  white-space: normal;
-  max-width: min(94vw, 320px);
-  word-break: keep-all;
-  text-align: center;
-}
-
 .tent-btn--close {
   position: absolute;
   top: 1.2rem;

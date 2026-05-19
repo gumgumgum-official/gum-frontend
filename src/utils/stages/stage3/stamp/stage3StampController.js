@@ -54,10 +54,10 @@ export function createStage3StampController({
   let stage3StampIntroAnimating = false;
   let stage3InteractionLocked = true;
 
-  function dispatchSubtitleSequence(messages) {
+  function dispatchSubtitleSequence(messages, options = {}) {
     window.dispatchEvent(
       new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
-        detail: { messages },
+        detail: { messages, hideLabel: options.hideLabel === true },
       }),
     );
   }
@@ -268,10 +268,13 @@ export function createStage3StampController({
     const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
     if (panel) panel.classList.add("stage3-stamp-panel--hidden");
 
-    dispatchSubtitleSequence([
-      { text: "어딘가에서 걱정들이 쏟아지고 있어요...", holdMs: 2500 },
-      { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2000 },
-    ]);
+    dispatchSubtitleSequence(
+      [
+        { text: "어딘가에서 걱정들이 쏟아지고 있어요...", holdMs: 2500 },
+        { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2000 },
+      ],
+      { hideLabel: true },
+    );
 
     stage3EntryStampRevealTimerId = window.setTimeout(() => {
       stage3EntryStampRevealTimerId = null;
