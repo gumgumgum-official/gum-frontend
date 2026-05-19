@@ -9,6 +9,7 @@ import {
   filterCollidersExcludingSpawnOverlap,
 } from "../islandStaticColliders.js";
 import { setupFountainFromModel } from "../fountainEffect.js";
+import { STAGE3_CLICK_ONCE_CLIP_NAMES } from "../../../../config/stages/stage3/stage3Interactions.js";
 import { createGumFollowersController } from "../gumFollowerController.js";
 import { applyStage3BackgroundMeshFlags } from "../backgroundLoader.js";
 import {
@@ -43,7 +44,7 @@ import {
  *   scheduleDeferredSetup: (task: () => void) => void,
  *   registerIslandInteractions: (model: import("three").Object3D, animations: import("three").AnimationClip[]) => void,
  *   applyPortalVortex: (model: import("three").Object3D) => import("three").ShaderMaterial | null,
- *   preloadIceCream: () => void,
+ *   preloadVendingMachine: () => void,
  * }} params
  */
 export function createStage3IslandController({
@@ -70,7 +71,7 @@ export function createStage3IslandController({
   scheduleDeferredSetup,
   registerIslandInteractions,
   applyPortalVortex,
-  preloadIceCream,
+  preloadVendingMachine,
 }) {
   /**
    * @param {{
@@ -86,6 +87,9 @@ export function createStage3IslandController({
     const { model, center, backgroundMaxY, backgroundBounds } = payload;
     const animations = /** @type {import("three").AnimationClip[]} */ (
       payload.animations ?? []
+    );
+    const ambientAnimations = animations.filter(
+      (clip) => !STAGE3_CLICK_ONCE_CLIP_NAMES.has(clip.name),
     );
     const config = getConfig();
     const scene = getScene();
@@ -160,7 +164,7 @@ export function createStage3IslandController({
       if (!getIsStageActive()) return;
 
       applyStage3BackgroundMeshFlags(model, config);
-      setFountainState(setupFountainFromModel(model, animations));
+      setFountainState(setupFountainFromModel(model, ambientAnimations));
 
       const useStatic = config.model.useStaticObstacleColliders !== false;
       if (useStatic) {
@@ -251,7 +255,7 @@ export function createStage3IslandController({
           setGumFollowers(null);
         });
 
-      void preloadIceCream();
+      void preloadVendingMachine();
     });
   }
 

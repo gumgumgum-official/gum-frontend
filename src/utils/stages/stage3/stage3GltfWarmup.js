@@ -9,11 +9,11 @@ import {
 } from "../../common/gltfTemplateCache.js";
 
 /**
- * @param {{ includeIcecreamSpawnPaths?: boolean }} [options]
+ * @param {{ includeVendingMachineSpawnPaths?: boolean }} [options]
  * @returns {string[]}
  */
 function getStage3PrewarmAbsoluteUrls(options = {}) {
-  const { includeIcecreamSpawnPaths = true } = options;
+  const { includeVendingMachineSpawnPaths = true } = options;
   /** @type {string[]} */
   const urls = [];
   urls.push(resolvePublicAssetUrl(STAGE3_CONFIG.model.path));
@@ -36,8 +36,8 @@ function getStage3PrewarmAbsoluteUrls(options = {}) {
     STAGE3_CONFIG.character?.gumFollowers?.models?.idleModelPath ??
     "/models/common/gum/gum_idle.glb";
   urls.push(resolvePublicAssetUrl(gumIdlePath));
-  if (includeIcecreamSpawnPaths) {
-    for (const rel of STAGE3_CONFIG.icecreamCart?.spawnPaths ?? []) {
+  if (includeVendingMachineSpawnPaths) {
+    for (const rel of STAGE3_CONFIG.vendingMachine?.spawnPaths ?? []) {
       urls.push(rel.startsWith("http") ? rel : resolvePublicAssetUrl(rel));
     }
   }
@@ -60,7 +60,7 @@ export function warmStage3GltfTemplateUrls() {
  */
 export async function waitForStage3GltfTemplatesReady() {
   const urls = getStage3PrewarmAbsoluteUrls({
-    includeIcecreamSpawnPaths: false,
+    includeVendingMachineSpawnPaths: false,
   });
   await Promise.all(
     urls.map(async (u) => {

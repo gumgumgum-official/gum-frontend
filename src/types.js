@@ -208,30 +208,24 @@
  * @property {number} [portalTransitionSoundVolume] - 포탈 전환 효과음 볼륨 (1 초과 시 Web Audio 증폭)
  */
 
-/** Stage3 아이스크림 클릭 스폰 설정 (카트 메시는 island GLB 내 INT_icecream) */
 /**
- * @typedef {Object} Stage3IcecreamCartConfig
- * @property {string} [path]
- * @property {{x?: number, y?: number, z?: number}} [position]
- * @property {{x?: number, y?: number, z?: number}} [rotation]
- * @property {number} [scale]
- * @property {string[]} [spawnPaths] - 카트 클릭 시 복제해 스폰할 GLB 경로(public 기준, 예: /models/…)
- * @property {number} [spawnScale] - 스폰 아이스크림 스케일
- * @property {number} [maxVisualSize] - 스폰 아이스크림의 최대 외곽 길이(월드 단위)
- * @property {number} [minVisualSize] - 스폰 아이스크림의 최소 외곽 길이(월드 단위)
- * @property {number} [spawnRadiusMin] - 카트 중심 주변 스폰 최소 반경(m)
- * @property {number} [spawnRadiusMax] - 카트 중심 주변 스폰 최대 반경(m)
- * @property {number} [spawnHeightAboveCart] - 카트 중심 Y 위 추가 높이(m)
- * @property {number} [spawnHeightJitter] - 스폰 높이 무작위 오차(m)
- * @property {number} [launchHorizontalMin] - 스폰 직후 수평 속도 하한(m/s)
- * @property {number} [launchHorizontalSpread] - 수평 속도 무작위 가산(m/s)
- * @property {number} [launchUpMin] - 수직 초기 속도 하한(m/s)
- * @property {number} [launchUpSpread] - 수직 초기 속도 무작위 가산(m/s)
- * @property {number} [launchTowardPlayerSpread] - 캐릭터 방향 발사 시 좌우 무작위 각(rad)
- * @property {number} [physicsGroundYOffset] - 아이스크림 Cannon 지면 Y 보정(m)
- * @property {number} [maxSpawns] - 스폰 최대 개수
- * @property {number} [physicsSubsteps] - Cannon 물리 스텝당 서브스텝 수 (기본 2, 낮을수록 성능 우선)
- * @property {number} [landSoundVolume] - 착지 시 icecream 효과음 볼륨 (1 초과 시 Web Audio 증폭)
+ * @typedef {Object} Stage3VendingMachineConfig
+ * @property {string[]} [spawnPaths] - 벤딩머신 클릭 시 복제해 스폰할 GLB 경로(public 기준)
+ * @property {number} [spawnScale]
+ * @property {number} [maxVisualSize]
+ * @property {number} [minVisualSize]
+ * @property {number} [spawnRadiusMin]
+ * @property {number} [spawnLateralOffset]
+ * @property {number} [spawnHeightAboveMachine]
+ * @property {number} [launchHorizontalMin]
+ * @property {number} [launchHorizontalSpread]
+ * @property {number} [launchUpMin]
+ * @property {number} [launchUpSpread]
+ * @property {number} [launchTowardPlayerSpread]
+ * @property {number} [physicsGroundYOffset]
+ * @property {number} [maxSpawns]
+ * @property {number} [physicsSubsteps]
+ * @property {number} [landSoundVolume]
  */
 
 /**
@@ -261,7 +255,7 @@
  * @property {string} [characterPunchModelPath] - 캐릭터 punch(망치질) 애니메이션 GLB 경로
  * @property {Stage2ModelConfig} model
  * @property {Stage3CharacterConfig} character
- * @property {Stage3IcecreamCartConfig} [icecreamCart]
+ * @property {Stage3VendingMachineConfig} [vendingMachine]
  * @property {Stage3PropConfig} [tree1]
  * @property {Stage3PropConfig} [notice]
  * @property {Stage3PortalConfig} [portal_bright]

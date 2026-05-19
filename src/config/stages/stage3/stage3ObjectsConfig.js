@@ -42,42 +42,38 @@ export const STAGE3_OBJECTS_CONFIG = {
   },
 
   /**
-   * 아이스크림 클릭 스폰(캐논) 설정.
-   * GLB 내 `INT_icecream` / `INT_IceCart` 등(icecream 타깃)을 클릭하면 `spawnPaths` GLB를 복제해 튀어나옴.
+   * 벤딩머신 클릭 스폰(캐논) 설정.
+   * GLB 내 `INT_vending_machine`을 클릭하면 `spawnPaths` GLB를 복제해 튀어나옴.
    */
-  icecreamCart: {
+  vendingMachine: {
     spawnPaths: [
-      "/models/stage3/icecream.glb",
-      "/models/stage3/rainbow_icecream.glb",
+      "/models/stage3/can/can_red.glb",
+      "/models/stage3/can/can_blue.glb",
+      "/models/stage3/can/can_green.glb",
+      "/models/stage3/can/can_yellow.glb",
+      "/models/stage3/can/can_orange.glb",
+      "/models/stage3/can/can_pink.glb",
+      "/models/stage3/can/can_purple.glb",
+      "/models/stage3/can/can_navy.glb",
+      "/models/stage3/can/can_black.glb",
     ],
-    spawnScale: 0.65,
-    // 원본 GLB 스케일 편차 방지용: 스폰 모델의 최대 외곽 길이(월드 단위) 상한
-    maxVisualSize: 1.75,
-    // 원본 GLB가 너무 작게 잡히는 경우 가시성 보장용 최소 외곽 길이
-    minVisualSize: 0.6,
-    /** 카트 중심에서 스폰 지점까지 최소 거리(m) */
-    spawnRadiusMin: 0.52,
-    /** 카트 중심에서 스폰 지점까지 최대 거리(m) */
-    spawnRadiusMax: 1.95,
-    /** 스폰 높이: 카트 중심 Y + 이 값과 지면+0.45 중 큰 값 */
-    spawnHeightAboveCart: 0.8,
-    /** 스폰 높이 ± 무작위 흔들림(m) */
-    spawnHeightJitter: 0.28,
-    /** 튀어나갈 때 수평 속도 최소(m/s), 여기에 launchHorizontalSpread만큼 무작위 가산 */
+    spawnScale: 0.32,
+    maxVisualSize: 0.88,
+    minVisualSize: 0.3,
+    /** 머신 앞면 표면까지 거리(m) */
+    spawnRadiusMin: 0.45,
+    /** 앞면 방향 기준 오른쪽 오프셋(m). 양수=오른쪽, 음수=왼쪽 */
+    spawnLateralOffset: 0.18,
+    /** 머신 bbox 중심 Y에서 아래로 내려 하단 슬롯 위치를 맞춤 */
+    spawnHeightAboveMachine: -0.45,
     launchHorizontalMin: 3.7,
     launchHorizontalSpread: 2,
-    /** 수직 초기 속도 최소(m/s), 여기에 launchUpSpread만큼 무작위 가산 */
     launchUpMin: 4.2,
     launchUpSpread: 2.4,
-    /** 캐릭터 방향으로 던질 때 좌우 흔들림(라디안). 0이면 정확히 캐릭터 쪽 */
-    launchTowardPlayerSpread: 0.28,
-    /**
-     * 아이스크림 물리 바닥 = 처리지 Y + 이 값. 섬 메시가 더 높게 보이면 파묻혀 보이므로 올려 맞춤(m).
-     */
+    launchTowardPlayerSpread: 0.15,
     physicsGroundYOffset: 0.48,
     maxSpawns: 20,
     physicsSubsteps: 2,
-    /** 스폰 아이스크림이 지면에 닿을 때 `static/sounds/icecream` 재생 볼륨 (1 초과 시 Web Audio 증폭) */
     landSoundVolume: 2.8,
   },
 

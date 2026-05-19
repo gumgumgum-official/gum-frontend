@@ -7,10 +7,10 @@ export const STAGE3_INT_SUFFIX_TO_TARGET = {
   notice: "notice",
   gamemachine: "gameMachine",
   tent: "tent",
-  icecream: "icecream",
   portal: "portal",
   well: "well",
   clock: "clock",
+  vendingmachine: "vendingMachine", // GLB 노드명: INT_vending_machine
 };
 
 /** island `INT_StreetLight*` 근접 시 사운드 재생 */
@@ -60,3 +60,13 @@ export const STAGE3_CLICK_ONCE_ANIM_SETS = [
     clipNames: ["INT_WellAction"],
   },
 ];
+
+/**
+ * 클릭·상호작용 시에만 재생되는 클립 이름 집합.
+ * fountain ambient loop에서 이 클립들을 제외해 LoopOnce 전용 믹서와 충돌을 막는다.
+ * GUMTOONGJI_CLIP_NAMES 또는 STAGE3_CLICK_ONCE_ANIM_SETS에 클립을 추가하면 자동으로 반영된다.
+ */
+export const STAGE3_CLICK_ONCE_CLIP_NAMES = new Set([
+  ...GUMTOONGJI_CLIP_NAMES,
+  ...STAGE3_CLICK_ONCE_ANIM_SETS.flatMap((s) => s.clipNames),
+]);

@@ -3,7 +3,6 @@
  */
 import * as THREE from "three";
 import { resolvePublicAssetUrl } from "../../../common/gltfTemplateCache.js";
-import { STAGE3_ICECREAM_DEBUG_BOX_ONLY } from "../../../../config/stages/stage3/stage3IceCream.js";
 import {
   STAGE3_INT_PREFIX,
   STAGE3_INT_SUFFIX_TO_TARGET,
@@ -28,7 +27,7 @@ import { onMinigameClose, closeMinigame } from "../minigameLauncher.js";
 import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3IntroAudio.js";
 
 /**
- * @typedef {"notice" | "gameMachine" | "tent" | "icecream" | "portal" | "well" | "clock" | "gumtoongji"} Stage3InteractionTarget
+ * @typedef {"notice" | "gameMachine" | "tent" | "vendingMachine" | "portal" | "well" | "clock" | "gumtoongji"} Stage3InteractionTarget
  */
 
 /**
@@ -37,7 +36,7 @@ import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3
  *   getCanvas: () => HTMLCanvasElement | null,
  *   getConfig: () => import("../../../../types.js").Stage3Config,
  *   getCharacter: () => { getPosition?: () => import("three").Vector3; getIsMoving?: () => boolean } | null,
- *   getIceCreamController: () => ReturnType<typeof import("../iceCream/stage3IceCreamController.js").createStage3IceCreamController>,
+ *   getVendingMachineController: () => ReturnType<typeof import("../vendingMachine/stage3VendingMachineController.js").createStage3VendingMachineController>,
  *   getCameraIntroState: () => { completed: boolean; active: boolean },
  *   isInteractionBlocked: () => boolean,
  *   getPortalTransitionInProgress: () => boolean,
@@ -66,7 +65,7 @@ export function createStage3InteractionsController({
   getCanvas,
   getConfig,
   getCharacter,
-  getIceCreamController,
+  getVendingMachineController,
   getCameraIntroState,
   isInteractionBlocked,
   getPortalTransitionInProgress,
@@ -186,16 +185,6 @@ export function createStage3InteractionsController({
    */
   function intSuffixToTarget(suffix) {
     const lower = normalizeIntNameToken(suffix);
-    if (
-      lower === "icecart" ||
-      lower === "icecreamcart" ||
-      lower === "icecream" ||
-      (lower.includes("ice") &&
-        lower.includes("cream") &&
-        lower.includes("cart"))
-    ) {
-      return "icecream";
-    }
     const mapped = STAGE3_INT_SUFFIX_TO_TARGET[lower];
     return /** @type {Stage3InteractionTarget | null} */ (mapped ?? null);
   }
@@ -207,14 +196,6 @@ export function createStage3InteractionsController({
       if (typeof p.name === "string" && p.name.startsWith(STAGE3_INT_PREFIX)) {
         const suffix = p.name.slice(STAGE3_INT_PREFIX.length);
         return intSuffixToTarget(suffix);
-      }
-      p = p.parent;
-    }
-    p = hitObject;
-    while (p) {
-      const n = normalizeIntNameToken(p.name);
-      if (n.includes("icecart") || n.includes("icecreamcart")) {
-        return "icecream";
       }
       p = p.parent;
     }
@@ -290,33 +271,34 @@ export function createStage3InteractionsController({
       return true;
     }
 
-    const iceCreamController = getIceCreamController();
+    const vendingMachineController = getVendingMachineController();
 
-    if (target === "icecream") {
+    if (target === "vendingMachine") {
+      if (!vendingMachineController.getMachineRef()) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] vendingMachine 클릭 감지됨. 하지만 머신 ref가 없습니다(INT 네이밍/계층 확인).",
+          );
+        }
+        return false;
+      }
+      if (!vendingMachineController.hasTemplates()) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            "[Stage3] 벤딩머신 템플릿이 비어 있습니다. GLB 경로·네트워크를 확인하세요.",
+          );
+        }
+        return false;
+      }
       const eggTap = tryRegisterEasterEggFromRayTarget("icecream");
-      if (!iceCreamController.getCartRef()) {
-        if (import.meta.env.DEV) {
-          console.warn(
-            "[Stage3] icecream 클릭 감지됨. 하지만 카트 ref가 없습니다(INT 네이밍/계층 확인).",
-          );
-        }
-        return false;
-      }
-      if (!iceCreamController.hasTemplates()) {
-        if (import.meta.env.DEV) {
-          console.warn(
-            "[Stage3] 아이스크림 템플릿이 비어 있습니다. GLB 경로·네트워크를 확인하세요.",
-          );
-        }
-        return false;
-      }
-      iceCreamController.spawnFromCart();
+      vendingMachineController.spawnFromMachine();
       tryAdvanceStampSequence("icecream");
       if (eggTap?.stampSubtitle) {
         dispatchSubtitleLine(eggTap.stampSubtitle);
       }
       return true;
     }
+
     if (target === "notice") {
       const eggTap = tryRegisterEasterEggFromRayTarget("notice");
       showNoticeModal();
@@ -374,7 +356,7 @@ export function createStage3InteractionsController({
       if (gHits.length > 0) return "gumtoongji";
     }
 
-    const iceCreamController = getIceCreamController();
+    const vendingMachineController = getVendingMachineController();
     if (intRaycastMeshes.length === 0) return null;
     const hits = _raycaster.intersectObjects(intRaycastMeshes, false);
     if (hits.length === 0) return null;
@@ -382,8 +364,8 @@ export function createStage3InteractionsController({
       const hitObj = hits[i].object;
       const resolved = resolveIntPointerTarget(hitObj);
       if (resolved) return resolved;
-      if (iceCreamController.isCartHit(hitObj)) {
-        return "icecream";
+      if (vendingMachineController.isMachineHit(hitObj)) {
+        return "vendingMachine";
       }
     }
     return null;
@@ -418,12 +400,7 @@ export function createStage3InteractionsController({
     if (!camera || !canvas) return;
     if (isInteractionBlocked()) return;
     const target = getPointerHitTarget(event.clientX, event.clientY);
-    if (!target) {
-      if (STAGE3_ICECREAM_DEBUG_BOX_ONLY) {
-        getIceCreamController().spawnFromCart();
-      }
-      return;
-    }
+    if (!target) return;
     event.preventDefault();
     event.stopPropagation();
     runInteractionForTarget(target);
@@ -442,7 +419,7 @@ export function createStage3InteractionsController({
    * @param {import("three").AnimationClip[]} [animations]
    */
   function registerIslandInteractions(islandModel, animations = []) {
-    const iceCreamController = getIceCreamController();
+    const vendingMachineController = getVendingMachineController();
     intRaycastMeshes.length = 0;
     gumtoongjiRaycastMeshes.length = 0;
     cameraAssistTargets.length = 0;
@@ -451,7 +428,7 @@ export function createStage3InteractionsController({
     clockWorldPositions.length = 0;
     smoothedCameraYawAssist = 0;
     smoothedCameraYawAssistDemand = 0;
-    iceCreamController.clearCartRef();
+    vendingMachineController.clearMachineRef();
     gameMachineRef = null;
     hasPortalPassTriggerSphere = false;
     wasInsidePortalPassTrigger = false;
@@ -531,21 +508,12 @@ export function createStage3InteractionsController({
     const meshSet = new Set();
     const assistRootSet = /** @type {Set<THREE.Object3D>} */ (new Set());
     const rootNames = [];
-    const nonIntCartCandidates = [];
 
     islandModel.traverse((obj) => {
       if (
         typeof obj.name !== "string" ||
         !obj.name.startsWith(STAGE3_INT_PREFIX)
       ) {
-        const normalized = normalizeIntNameToken(obj.name);
-        if (
-          normalized &&
-          (normalized.includes("icecart") ||
-            normalized.includes("icecreamcart"))
-        ) {
-          nonIntCartCandidates.push(obj);
-        }
         return;
       }
       rootNames.push(obj.name);
@@ -555,7 +523,8 @@ export function createStage3InteractionsController({
         assistRootSet.add(obj);
       }
       if (intTarget === "gameMachine") gameMachineRef = obj;
-      if (intTarget === "icecream") iceCreamController.setCartRef(obj);
+      if (intTarget === "vendingMachine")
+        vendingMachineController.setMachineRef(obj);
       if (intTarget === "clock") {
         obj.updateMatrixWorld(true);
         const worldPos = new THREE.Vector3();
@@ -567,25 +536,9 @@ export function createStage3InteractionsController({
       });
     });
 
-    if (!iceCreamController.getCartRef() && nonIntCartCandidates.length > 0) {
-      const fallbackCart = nonIntCartCandidates[0];
-      iceCreamController.setCartRef(fallbackCart);
-      fallbackCart.traverse((child) => {
-        if (child.isMesh) {
-          child.raycast = THREE.Mesh.prototype.raycast;
-          meshSet.add(child);
-        }
-      });
-      if (import.meta.env.DEV) {
-        console.warn(
-          `[Stage3] INT_ 카트 미검출 → fallback 카트 사용: '${fallbackCart.name}'`,
-        );
-      }
-    }
-
-    const cartRef = iceCreamController.getCartRef();
-    if (cartRef) {
-      assistRootSet.add(cartRef);
+    const machineRef = vendingMachineController.getMachineRef();
+    if (machineRef) {
+      assistRootSet.add(machineRef);
     }
 
     /** @type {THREE.Object3D | null} */
@@ -714,7 +667,7 @@ export function createStage3InteractionsController({
       });
     }
 
-    iceCreamController.warnCartNotFound(rootNames);
+    vendingMachineController.warnMachineNotFound(rootNames);
   }
 
   function updateStreetLightProximitySound() {
