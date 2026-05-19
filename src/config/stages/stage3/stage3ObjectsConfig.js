@@ -127,9 +127,9 @@ export const STAGE3_OBJECTS_CONFIG = {
     },
     /** 텐트 씬 진입 대사 — Stage6BoardingOverlay subtitle-box 시퀀스 */
     tentSceneSubtitles: [
-      { text: "안녕! 만나서 반가워! ", holdMs: 2500 },
+      { text: "안녕, 만나서 반가워", holdMs: 2500 },
       {
-        text: "여기는 너에게 필요한 껌딱지 카드를 고를 수 있는 타로점이야",
+        text: "이곳에서 너에게 필요한 껌딱지 카드를 고를 수 있어!",
         holdMs: 3500,
       },
     ],
