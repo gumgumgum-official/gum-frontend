@@ -6,9 +6,14 @@ import * as THREE from "three";
 /** @type {RegExp} */
 export const FOUNTAIN_MESH_NAME_RE = /^OBJ_?Fountain$/i;
 
-const CURTAIN_SEGMENTS = 20;
+const CURTAIN_SEGMENTS = 24;
 const CURVE_ROWS = 28;
 const FLOW_SPEED = 0.8;
+/** 물줄기 텍스처·알파 두께 */
+const CURTAIN_STREAK_COUNT = 7;
+const CURTAIN_STREAK_WIDTH = 6;
+const CURTAIN_VEIL_ALPHA = 0.3;
+const CURTAIN_ALPHA = 1.0;
 /** 풀 가장자리 반경 = radiusXZ × 이 값 (클수록 포물선이 크고 둥글게) */
 const OUTER_RADIUS_SCALE = 0.5;
 /** 물줄기 시작 Y — 분수 메시 bbox.max.y에서 위로 올리는 비율(분수 높이 기준) */
@@ -21,10 +26,16 @@ const RADIUS_PROFILE_KEYFRAMES = [
   { t: 0, r: 0 },
   { t: 0.1, r: 0.24 },
   { t: 0.22, r: 0.26 },
-  { t: 0.3, r: 0.35 },
-  { t: 0.38, r: 0.5 },
-  { t: 0.4, r: 0.7 },
-  { t: 0.42, r: 0.8 },
+  { t: 0.31, r: 0.35 },
+  { t: 0.33, r: 0.38 },
+  { t: 0.35, r: 0.4 },
+  { t: 0.37, r: 0.5 },
+  { t: 0.38, r: 0.6 },
+  { t: 0.4, r: 0.75 },
+  { t: 0.42, r: 0.88 },
+  { t: 0.45, r: 0.95 },
+  { t: 0.48, r: 0.98 },
+  { t: 0.5, r: 1.0 },
   { t: 0.55, r: 1.1 },
   { t: 0.66, r: 1.3 },
   { t: 0.82, r: 1.4 },
@@ -103,15 +114,17 @@ void main() {
   float topFade = smoothstep(1.0, 0.88, vUv.y);
   float bottomFade = smoothstep(0.0, 0.28, vUv.y);
   float sideFade =
-    smoothstep(0.0, 0.06, vUv.x) * smoothstep(1.0, 0.94, vUv.x);
+    smoothstep(0.0, 0.03, vUv.x) * smoothstep(1.0, 0.97, vUv.x);
 
-  float alpha = tex.a * topSource * topFade * bottomFade * sideFade;
+  float body = tex.a * topSource * topFade * bottomFade * sideFade;
+  float veil = topSource * topFade * bottomFade * sideFade * ${CURTAIN_VEIL_ALPHA.toFixed(2)};
+  float alpha = min(1.0, body + veil);
   vec3 color = mix(
     vec3(0.45, 0.76, 0.95),
     vec3(0.92, 0.98, 1.0),
-    tex.r * topSource
+    clamp(tex.r * topSource + veil, 0.0, 1.0)
   );
-  gl_FragColor = vec4(color, alpha * 0.8);
+  gl_FragColor = vec4(color, alpha * ${CURTAIN_ALPHA.toFixed(2)});
 }
 `;
 
@@ -233,18 +246,23 @@ function createFallingWaterTexture() {
   ctx.fillStyle = rimGrad;
   ctx.fillRect(0, 0, 64, 36);
 
-  const streakCount = 9;
-  const slotW = 64 / streakCount;
-  for (let i = 0; i < streakCount; i++) {
-    const x = i * slotW + slotW * 0.38;
-    const w = 2.2;
+  const veilGrad = ctx.createLinearGradient(0, 0, 0, 256);
+  veilGrad.addColorStop(0, `rgba(220,245,255,${CURTAIN_VEIL_ALPHA + 0.18})`);
+  veilGrad.addColorStop(0.45, `rgba(185,225,255,${CURTAIN_VEIL_ALPHA})`);
+  veilGrad.addColorStop(1, "rgba(150,205,245,0)");
+  ctx.fillStyle = veilGrad;
+  ctx.fillRect(0, 0, 64, 256);
+
+  const slotW = 64 / CURTAIN_STREAK_COUNT;
+  for (let i = 0; i < CURTAIN_STREAK_COUNT; i++) {
+    const x = i * slotW + (slotW - CURTAIN_STREAK_WIDTH) * 0.5;
     const streakGrad = ctx.createLinearGradient(0, 0, 0, 256);
-    streakGrad.addColorStop(0, "rgba(255,255,255,0.65)");
-    streakGrad.addColorStop(0.25, "rgba(220,245,255,0.45)");
-    streakGrad.addColorStop(0.65, "rgba(170,215,255,0.15)");
-    streakGrad.addColorStop(1, "rgba(130,195,245,0)");
+    streakGrad.addColorStop(0, "rgba(255,255,255,0.78)");
+    streakGrad.addColorStop(0.25, "rgba(230,248,255,0.55)");
+    streakGrad.addColorStop(0.65, "rgba(185,220,255,0.22)");
+    streakGrad.addColorStop(1, "rgba(140,200,245,0)");
     ctx.fillStyle = streakGrad;
-    ctx.fillRect(x, 8, w, 248);
+    ctx.fillRect(x, 6, CURTAIN_STREAK_WIDTH, 250);
   }
 
   const tex = new THREE.CanvasTexture(canvas);
