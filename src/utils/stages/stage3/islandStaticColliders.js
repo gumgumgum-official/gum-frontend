@@ -120,7 +120,7 @@ function hasObjNamedChild(obj) {
 }
 
 /**
- * @param {THREE.Box3} box
+ * @param {IslandColliderAabb} box
  * @param {number} feetY
  * @param {number} [bodyHeight=1.65]
  * @returns {boolean}
@@ -335,8 +335,9 @@ function collectPortalPassZones(islandRoot) {
   let vortexMesh = null;
   portalRoot.traverse((child) => {
     if (vortexMesh) return;
-    if (!child.isMesh) return;
-    if (PORTAL_VORTEX_MESH_RE.test(child.name)) vortexMesh = child;
+    const mesh = /** @type {import("three").Mesh} */ (child);
+    if (!mesh.isMesh) return;
+    if (PORTAL_VORTEX_MESH_RE.test(mesh.name)) vortexMesh = mesh;
   });
 
   if (vortexMesh) {
@@ -457,20 +458,21 @@ export function collectIslandStaticColliderBoxes(
   const portalPassZones = collectPortalPassZones(islandRoot);
 
   islandRoot.traverse((obj) => {
-    if (!obj.isMesh) return;
-    if (!isUnderIntSubtree(obj)) return;
-    if (isUnderFenceSubtree(obj)) return;
+    const mesh = /** @type {import("three").Mesh} */ (obj);
+    if (!mesh.isMesh) return;
+    if (!isUnderIntSubtree(mesh)) return;
+    if (isUnderFenceSubtree(mesh)) return;
 
-    tmp.setFromObject(obj);
+    tmp.setFromObject(mesh);
     const candidate = boxToColliderCandidate(
       tmp,
       backgroundBounds,
       wellPassZones,
       portalPassZones,
-      getCollidableSourceName(obj),
+      getCollidableSourceName(mesh),
     );
     if (candidate) {
-      candidate.src = getCollidableSourceName(obj);
+      candidate.src = getCollidableSourceName(mesh);
       out.push(candidate);
     }
   });

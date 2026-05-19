@@ -57,6 +57,9 @@ function findClip(clips, regex) {
  *     options?: { reverse?: boolean },
  *   ) => void,
  *   isPunching: () => boolean,
+ *   applyIslandWalkableBounds: (
+ *     allowedBounds: import("three").Box3 | null,
+ *   ) => void,
  * }}
  */
 export function createCharacterController({
