@@ -21,9 +21,9 @@ export const STAGE3_CONFIG = {
     position: { x: -0.4, y: 9.0, z: 19.5 },
     lookAt: { x: 0.0, y: 1.0, z: 0.0 },
     /** 인트로 시작 카메라 위치 */
-    introStartPos: { x: 159.0, y: 196.2, z: 37.4 },
+    introStartPos: { x: 159.0, y: 128.1, z: 37.4 },
     /** 인트로 끝 카메라 위치 */
-    introEndPos: { x: -9.0, y: 202.3, z: 136.4 },
+    introEndPos: { x: -9.0, y: 134.2, z: 136.4 },
     /** 인트로 전 구간 고정 시선 */
     introLookAt: { x: 6.7, y: 19.2, z: -17.9 },
   },
