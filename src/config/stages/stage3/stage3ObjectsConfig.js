@@ -15,7 +15,7 @@ export const STAGE3_STANDALONE_FLOWER_GLB_PATHS = [
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
-    path: "/models/stage3/island15.glb",
+    path: "/models/stage3/island16.glb",
     useStaticObstacleColliders: true,
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
@@ -65,7 +65,7 @@ export const STAGE3_OBJECTS_CONFIG = {
     /** 앞면 방향 기준 오른쪽 오프셋(m). 양수=오른쪽, 음수=왼쪽 */
     spawnLateralOffset: 0.18,
     /** 머신 bbox 중심 Y에서 아래로 내려 하단 슬롯 위치를 맞춤 */
-    spawnHeightAboveMachine: -0.45,
+    spawnHeightAboveMachine: -2.2,
     launchHorizontalMin: 3.7,
     launchHorizontalSpread: 2,
     launchUpMin: 4.2,
