@@ -7,12 +7,36 @@ const PINK_MID = "#ffb3d1";
 const PINK_SOFT = "#ffd9e8";
 const FG = "oklch(0.32 0.13 350)";
 const MUTED = "oklch(0.55 0.1 340)";
-const FONT = '"Galmuri11","Galmuri9",monospace';
+/** 피그마 DOS Gothic 계열 — CDN: fonts-archive/DOSGothic (MIT), 미지원 글리프는 Galmuri 폴백 */
+const FONT = '"DOSGothic","Galmuri11","Galmuri9",monospace';
+/** ♡ 전용 — 로컬 `public/fonts/DungGeunMo.woff` */
+const FONT_HEART = '"DungGeunMo",monospace';
 
 const GRAD_CARD = "linear-gradient(180deg,#ffffff 0%,#fff0f6 100%)";
 const GRAD_PINK = "linear-gradient(180deg,#ffb3d1 0%,#ff7eb6 100%)";
 const SHADOW = "4px 4px 0 #ff5fa2";
 const SHADOW_SM = "2px 2px 0 #ff5fa2";
+
+// Figma 프로필 카드 (node 451:47 — 꿈딱지 디자인)
+const PROFILE_BORDER = "#f4a0bc";
+const PROFILE_ACCENT = "#eb477e";
+const PROFILE_STATUS_FG = "#422442";
+const PROFILE_CARD_BG =
+  "linear-gradient(180deg, rgb(255, 255, 222) 12.987%, rgb(255, 255, 255) 60.173%)";
+const PROFILE_HEADER_BG =
+  "linear-gradient(180deg, #ffffff 0%, #ffffff 16.667%, #fff7a2 100%)";
+const PROFILE_OUTER_SHADOW =
+  "0 12px 18.8px rgba(0, 0, 0, 0.25), inset 0 -16px 11.4px 1px rgba(0, 0, 0, 0.13)";
+
+// Figma 투데이 카드 (node 451:48)
+const TODAY_CARD_BG =
+  "linear-gradient(180deg, rgb(255, 255, 222) 12.987%, rgb(255, 255, 255) 100%)";
+const TODAY_OUTER_SHADOW =
+  "0 12px 18.8px rgba(0, 0, 0, 0.25), inset 0 -15px 13px 0 rgba(0, 0, 0, 0.1)";
+
+// Figma 방명록 제출 버튼 — 기본 452:56, 호버 453:59
+const GUESTBOOK_SUBMIT_BG = "#fcf3c5";
+const GUESTBOOK_SUBMIT_BORDER = "#fbe36a";
 
 // ── Shared style objects ──────────────────────────────────────────────────────
 /** @type {{
@@ -77,23 +101,158 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Galmuri 픽셀 폰트 (CDN)
+// DOS Gothic (피그마 DOSGothic) + DungGeunMo(♡, 로컬 woff) + Galmuri 폴백 — CDN 외 폰트는 public
+const DOS_GOTHIC_WOFF2 =
+  "https://cdn.jsdelivr.net/gh/fonts-archive/DOSGothic@master/DOSGothic.woff2";
 const FONT_CSS = `
+@font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}")format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}")format("woff2");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"DungGeunMo";src:url("/fonts/DungGeunMo.woff")format("woff");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11.woff2")format("woff2");font-weight:400;font-display:swap}
 @font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11-Bold.woff2")format("woff2");font-weight:700;font-display:swap}
 @font-face{font-family:"Galmuri9";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri9.woff2")format("woff2");font-weight:400;font-display:swap}
 `;
 
-// ── ProfileCard ───────────────────────────────────────────────────────────────
+const GUESTBOOK_HIDE_SCROLLBAR_CSS = `
+.guestbookEmbed-hideScrollbar{
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+.guestbookEmbed-hideScrollbar::-webkit-scrollbar{
+  display:none;
+  width:0;
+  height:0;
+}
+`;
+
+const GUESTBOOK_SUBMIT_BTN_CSS = `
+.guestbookEmbed-submitBtn{
+  box-sizing:border-box;
+  font-family:"DOSGothic","Galmuri11","Galmuri9",monospace;
+  font-size:1.125rem;
+  font-weight:700;
+  padding:0.5rem 1.25rem;
+  border-radius:10px;
+  border:1px solid ${GUESTBOOK_SUBMIT_BORDER};
+  background:${GUESTBOOK_SUBMIT_BG};
+  color:${PROFILE_STATUS_FG};
+  cursor:pointer;
+  box-shadow:none;
+  outline:none;
+  transition:background 0.12s ease,border-color 0.12s ease,color 0.12s ease;
+}
+.guestbookEmbed-submitBtn:hover:not(:disabled){
+  background:${PROFILE_ACCENT};
+  border-color:${PROFILE_ACCENT};
+  color:#fff;
+}
+.guestbookEmbed-submitBtn:disabled{
+  opacity:0.6;
+  cursor:not-allowed;
+}
+`;
+
+// ── ProfileCard (Figma 451:47) ────────────────────────────────────────────────
+function ProfileCardIconCloud() {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: 44,
+        height: 25,
+        overflow: "hidden",
+        flexShrink: 0,
+      }}
+    >
+      <img
+        alt=""
+        src="/assets/guestbook/profile_card_icons.png"
+        style={{
+          position: "absolute",
+          height: "342.47%",
+          width: "190.84%",
+          left: "-90.84%",
+          top: "-54.79%",
+          maxWidth: "none",
+        }}
+      />
+    </div>
+  );
+}
+
+function ProfileCardIconClover() {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: 32,
+        height: 33,
+        overflow: "hidden",
+        flexShrink: 0,
+      }}
+    >
+      <img
+        alt=""
+        src="/assets/guestbook/profile_card_icons.png"
+        style={{
+          position: "absolute",
+          height: "294.12%",
+          width: "297.62%",
+          left: "-171.43%",
+          top: "-143.53%",
+          maxWidth: "none",
+        }}
+      />
+    </div>
+  );
+}
+
 function ProfileCard() {
   return (
-    <div style={{ ...S.pixelCard, padding: "1rem" }}>
+    <div
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        border: `3px solid ${PROFILE_BORDER}`,
+        borderRadius: 23,
+        boxShadow: PROFILE_OUTER_SHADOW,
+        background: PROFILE_CARD_BG,
+        padding: "12px 14px 14px",
+      }}
+    >
       <div
         style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "6px 10px",
+          border: `2px solid ${PROFILE_BORDER}`,
+          borderRadius: 15,
+          background: PROFILE_HEADER_BG,
+          marginBottom: 12,
+        }}
+      >
+        <ProfileCardIconCloud />
+        <div
+          style={{
+            fontFamily: FONT,
+            fontWeight: 700,
+            fontSize: "1.125rem",
+            color: PROFILE_ACCENT,
+            lineHeight: 1.2,
+          }}
+        >
+          프로필
+        </div>
+      </div>
+
+      <div
+        style={{
+          border: `2px solid ${PROFILE_BORDER}`,
+          borderRadius: 15,
           overflow: "hidden",
-          borderRadius: "0.5rem",
-          border: `2px solid ${PINK}`,
-          background: PINK_SOFT,
+          marginBottom: 12,
+          background: "#fff",
         }}
       >
         <img
@@ -104,55 +263,184 @@ function ProfileCard() {
             width: "100%",
             height: "auto",
             imageRendering: "pixelated",
-            margin: "0 auto",
           }}
           width={512}
           height={512}
         />
       </div>
-      <div style={{ marginTop: "0.75rem", textAlign: "center" }}>
-        <div style={{ fontSize: "1rem", fontWeight: 700, color: PINK }}>
-          ♥ 삐삐 ♥
-        </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 10,
+        }}
+      >
         <p
           style={{
-            marginTop: "0.25rem",
-            fontSize: "0.75rem",
-            lineHeight: 1.6,
-            color: FG,
+            margin: 0,
+            fontFamily: FONT,
+            fontSize: "0.8125rem",
+            lineHeight: 1.5,
+            color: PROFILE_STATUS_FG,
+            flex: 1,
+            minWidth: 0,
           }}
         >
-          내 방에 온 걸 환영해~♥
-          <br />
-          픽셀 세상의 작은 기록장이에요.
+          모두에게 행복이 가득하길..~
         </p>
+        <ProfileCardIconClover />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+          fontFamily: FONT,
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          color: PROFILE_ACCENT,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <span>TODAY 202</span>
+        <span>TOTAL 221,020</span>
       </div>
     </div>
   );
 }
 
-// ── TodayCard ─────────────────────────────────────────────────────────────────
+// ── TodayCard (Figma 451:48) ───────────────────────────────────────────────────
+function TodayCardIconCherry() {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: 34,
+        height: 33,
+        overflow: "hidden",
+        flexShrink: 0,
+      }}
+    >
+      <img
+        alt=""
+        src="/assets/guestbook/today_card_cherry.png"
+        style={{
+          position: "absolute",
+          height: "316.46%",
+          width: "304.88%",
+          left: "-13.41%",
+          top: "-53.16%",
+          maxWidth: "none",
+        }}
+      />
+    </div>
+  );
+}
+
 function TodayCard() {
   return (
-    <div style={{ ...S.pixelCardSm, padding: "0.75rem" }}>
+    <div
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        border: `3px solid ${PROFILE_BORDER}`,
+        borderRadius: 23,
+        boxShadow: TODAY_OUTER_SHADOW,
+        background: TODAY_CARD_BG,
+        padding: "12px 14px 14px",
+      }}
+    >
       <div
         style={{
-          marginBottom: "0.25rem",
-          fontSize: "0.6875rem",
-          fontWeight: 700,
-          color: PINK,
+          position: "relative",
+          marginBottom: 12,
+          borderRadius: 15,
+          overflow: "hidden",
+          border: `2px solid ${PROFILE_BORDER}`,
+          aspectRatio: "386 / 65",
         }}
       >
-        TODAY is..
+        <img
+          alt=""
+          src="/assets/guestbook/today_card_top.png"
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 10px",
+          }}
+        >
+          <TodayCardIconCherry />
+          <div
+            style={{
+              fontFamily: FONT,
+              fontWeight: 700,
+              fontSize: "1.125rem",
+              color: PROFILE_ACCENT,
+              lineHeight: 1.2,
+            }}
+          >
+            TODAY is ...
+          </div>
+        </div>
       </div>
-      <p style={{ fontSize: "0.75rem", color: FG, margin: 0 }}>
-        오늘은 책 읽는 날 📚
+
+      <p
+        style={{
+          margin: 0,
+          fontFamily: FONT,
+          fontSize: "0.8125rem",
+          lineHeight: 1.5,
+          color: PROFILE_STATUS_FG,
+        }}
+      >
+        모두에게 행복이 가득하길..~
       </p>
     </div>
   );
 }
 
 const GUESTBOOK_MSG_MAX_LEN = 200;
+
+/** Figma 453:58 — ♡는 DungGeunMo(로컬), 「등록하기」는 DOS Gothic */
+function GuestbookSubmitLabel() {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.05em",
+        lineHeight: 1,
+        color: "inherit",
+      }}
+    >
+      <span style={{ fontFamily: FONT_HEART }} aria-hidden="true">
+        ♡
+      </span>
+      <span style={{ fontFamily: FONT }}> 등록하기 </span>
+      <span style={{ fontFamily: FONT_HEART }} aria-hidden="true">
+        ♡
+      </span>
+    </span>
+  );
+}
 
 // ── GuestbookForm ─────────────────────────────────────────────────────────────
 function GuestbookForm({ onSuccess }) {
@@ -230,10 +518,10 @@ function GuestbookForm({ onSuccess }) {
         </span>
         <button
           type="submit"
-          style={{ ...S.pixelBtn, opacity: submitting ? 0.6 : 1 }}
+          className="guestbookEmbed-submitBtn"
           disabled={submitting}
         >
-          {submitting ? "저장 중…" : "남기기 ♥"}
+          {submitting ? "저장 중…" : <GuestbookSubmitLabel />}
         </button>
       </div>
       {toast && (
@@ -305,7 +593,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
 
   return (
     <>
-      <style>{FONT_CSS}</style>
+      <style>{`${FONT_CSS}\n${GUESTBOOK_HIDE_SCROLLBAR_CSS}\n${GUESTBOOK_SUBMIT_BTN_CSS}`}</style>
       <div
         style={{
           fontFamily: FONT,
@@ -318,6 +606,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
       >
         {/* pixel-card overflow-hidden (BrowserFrame) */}
         <div
+          className={isFullscreen ? "guestbookEmbed-hideScrollbar" : undefined}
           style={{
             ...S.pixelCard,
             ...(isFullscreen && {
@@ -510,6 +799,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                   <GuestbookForm onSuccess={handlePostAdded} />
 
                   <div
+                    className="guestbookEmbed-hideScrollbar"
                     style={{
                       marginTop: "1.25rem",
                       maxHeight: isFullscreen
