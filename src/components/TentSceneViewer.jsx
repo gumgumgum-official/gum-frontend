@@ -39,7 +39,7 @@ export function TentSceneViewer({
   onCardOpen,
   skipBubbleSequence = false,
 }) {
-  const FADE_IN_MS = 600;
+  const FADE_IN_MS = 2000;
   const canvasRef = useRef(null);
   const rootRef = useRef(null);
   const onCardOpenRef = useRef(onCardOpen);
@@ -48,6 +48,7 @@ export function TentSceneViewer({
   }, [onCardOpen]);
 
   const [isVisible, setIsVisible] = useState(false);
+  const isVisibleRef = useRef(false);
 
   const handleClose = useCallback(() => {
     dispatchTentSubtitleHide();
@@ -55,10 +56,17 @@ export function TentSceneViewer({
   }, [onClose]);
 
   useEffect(() => {
-    const rafId = requestAnimationFrame(() => {
-      setIsVisible(true);
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        isVisibleRef.current = true;
+        setIsVisible(true);
+      });
     });
-    return () => cancelAnimationFrame(rafId);
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
   }, []);
 
   useEffect(() => {
@@ -190,6 +198,7 @@ export function TentSceneViewer({
     let animId;
     const tick = () => {
       animId = requestAnimationFrame(tick);
+      if (!isVisibleRef.current) return;
       controls.update();
       renderer.render(scene, camera);
     };
@@ -225,14 +234,16 @@ export function TentSceneViewer({
   }, []);
 
   return (
-    <div
-      ref={rootRef}
-      className={`tent-scene-viewer${isVisible ? " is-visible" : ""}`}
-    >
-      <canvas ref={canvasRef} className="tent-scene-canvas" />
-      <button className="tent-btn tent-btn--close" onClick={handleClose}>
-        ✕
-      </button>
+    <div className="tent-scene-viewer">
+      <div
+        ref={rootRef}
+        className={`tent-scene-viewer__content${isVisible ? " is-visible" : ""}`}
+      >
+        <canvas ref={canvasRef} className="tent-scene-canvas" />
+        <button className="tent-btn tent-btn--close" onClick={handleClose}>
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
