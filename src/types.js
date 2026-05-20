@@ -15,7 +15,7 @@
 /**
  * initThreeApp 옵션
  * @typedef {Object} InitThreeAppOptions
- * @property {number[]} [allowedStages] - 허용 Stage 목록 (예: [2], [3, 6])
+ * @property {readonly number[]} [allowedStages] - 허용 Stage 목록 (예: [2], [3, 6])
  * @property {number} [initialStage] - 시작 Stage
  * @property {boolean} [enableKeyboardSwitch] - 키보드 2~6 전환 활성화
  * @property {boolean} [skipStage3Intro] - `/dev` 등: Stage3 상공 카메라·인트로 사운드 생략

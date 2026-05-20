@@ -42,7 +42,6 @@ video,
 svg,
 canvas {
   -webkit-user-drag: none;
-  user-drag: none;
 }
 
 input,
@@ -265,6 +264,16 @@ body {
 
 .airport-chime-indicator.visible {
   opacity: 1;
+}
+
+/* Stage3 섬 경계 알림 — 배경·글자 가독성 (6단계 공항 알림과 분리) */
+.airport-chime-indicator.stage3-island-exit-toast {
+  background: rgba(255, 255, 255, 0.27);
+  color: #422442;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(66, 36, 66, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .subtitle-container {
