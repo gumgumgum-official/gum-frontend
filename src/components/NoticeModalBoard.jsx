@@ -390,6 +390,11 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 onClick={() => setZoomedPoster(null)}
+                className={
+                  zoomedPoster === "guestbook"
+                    ? "guestbookEmbed-hideScrollbar"
+                    : undefined
+                }
                 style={{
                   position: "fixed",
                   inset: 0,
@@ -404,9 +409,10 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                         backgroundSize: "cover",
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
-                        padding: "clamp(10px, 2.5vw, 28px)",
+                        padding: "clamp(20px, 3vw, 36px)",
                         boxSizing: "border-box",
                         overflow: "auto",
+                        overflowX: "hidden",
                       }
                     : {
                         background: "rgba(0,0,0,0.6)",

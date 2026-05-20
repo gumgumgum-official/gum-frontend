@@ -27,8 +27,9 @@ const PROFILE_CARD_BG =
   "linear-gradient(180deg, rgb(255, 255, 222) 12.987%, rgb(255, 255, 255) 60.173%)";
 const PROFILE_HEADER_BG =
   "linear-gradient(180deg, #ffffff 0%, #ffffff 16.667%, #fff7a2 100%)";
-const PROFILE_OUTER_SHADOW =
-  "0 12px 18.8px rgba(0, 0, 0, 0.25), inset 0 -16px 11.4px 1px rgba(0, 0, 0, 0.13)";
+const PROFILE_DROP_SHADOW = "0 12px 18.8px rgba(0, 0, 0, 0.25)";
+const PROFILE_INSET_SHADOW = "inset 0 -16px 11.4px 1px rgba(0, 0, 0, 0.13)";
+const PROFILE_OUTER_SHADOW = `${PROFILE_DROP_SHADOW}, ${PROFILE_INSET_SHADOW}`;
 
 // Figma 투데이 카드 (node 480:140)
 const TODAY_CARD_BG =
@@ -142,14 +143,24 @@ const FONT_CSS = `
 `;
 
 const GUESTBOOK_HIDE_SCROLLBAR_CSS = `
-.guestbookEmbed-hideScrollbar{
+.guestbookEmbed-hideScrollbar,
+.guestbookEmbed-input{
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
-.guestbookEmbed-hideScrollbar::-webkit-scrollbar{
+.guestbookEmbed-hideScrollbar::-webkit-scrollbar,
+.guestbookEmbed-input::-webkit-scrollbar{
   display:none;
   width:0;
   height:0;
+  background:transparent;
+}
+.guestbookEmbed-hideScrollbar::-webkit-scrollbar-thumb,
+.guestbookEmbed-hideScrollbar::-webkit-scrollbar-track,
+.guestbookEmbed-input::-webkit-scrollbar-thumb,
+.guestbookEmbed-input::-webkit-scrollbar-track{
+  display:none;
+  background:transparent;
 }
 `;
 
@@ -164,7 +175,7 @@ const GUESTBOOK_SUBMIT_BTN_CSS = `
 .guestbookEmbed-submitBtn{
   box-sizing:border-box;
   font-family:"DOSGothic","Galmuri11","Galmuri9",monospace;
-  font-size:1.125rem;
+  font-size:1rem;
   font-weight:700;
   padding:0.5rem 1.25rem;
   border-radius:10px;
@@ -346,7 +357,7 @@ function ProfileCardHeader() {
           style={{
             fontFamily: FONT,
             fontWeight: 700,
-            fontSize: "1.5rem",
+            fontSize: "1.25rem",
             color: PROFILE_ACCENT,
             lineHeight: 1.2,
           }}
@@ -409,7 +420,7 @@ function ProfileCard() {
           alignItems: "center",
           gap: 8,
           fontFamily: FONT,
-          fontSize: "1.125rem",
+          fontSize: "1rem",
           fontWeight: 700,
           color: PROFILE_ACCENT,
           whiteSpace: "nowrap",
@@ -482,7 +493,7 @@ function TodayCardHeader() {
           style={{
             fontFamily: FONT_TODAY_TITLE,
             fontWeight: 400,
-            fontSize: "1.5rem",
+            fontSize: "1.25rem",
             color: PROFILE_ACCENT,
             lineHeight: 1,
             whiteSpace: "nowrap",
@@ -514,8 +525,9 @@ function TodayCard() {
       <p
         style={{
           margin: 0,
+          padding: "6px",
           fontFamily: FONT,
-          fontSize: "1.125rem",
+          fontSize: "1rem",
           lineHeight: 1.35,
           color: PROFILE_STATUS_FG,
         }}
@@ -590,7 +602,7 @@ function GuestbookHeader() {
         style={{
           fontFamily: FONT,
           fontWeight: 700,
-          fontSize: "1.5rem",
+          fontSize: "1.25rem",
           color: PROFILE_ACCENT,
           lineHeight: 1.2,
         }}
@@ -636,7 +648,7 @@ function GuestbookSubmitLabel() {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: "0.05em",
+        gap: "0.25em",
         lineHeight: 1,
         color: "inherit",
       }}
@@ -644,7 +656,7 @@ function GuestbookSubmitLabel() {
       <span style={{ fontFamily: FONT_HEART }} aria-hidden="true">
         ♡
       </span>
-      <span style={{ fontFamily: FONT }}> 등록하기 </span>
+      <span style={{ fontFamily: FONT }}>등록하기</span>
       <span style={{ fontFamily: FONT_HEART }} aria-hidden="true">
         ♡
       </span>
@@ -766,14 +778,18 @@ function GuestbookForm({ onSuccess }) {
 }
 
 // ── GuestbookEntry (Figma 480:158) ────────────────────────────────────────────
+const GUESTBOOK_ENTRY_GRID = `${GUESTBOOK_PHOTO_SIZE}px minmax(0, 1fr)`;
+const GUESTBOOK_ENTRY_GAP = 12;
+
 function GuestbookEntry({ index, name, date, message }) {
   return (
     <article>
       <div
         style={{
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: GUESTBOOK_ENTRY_GRID,
+          columnGap: GUESTBOOK_ENTRY_GAP,
           alignItems: "center",
-          gap: 8,
           height: 37,
           padding: "0 12px",
           background: GUESTBOOK_NAMEBAR_BG,
@@ -782,31 +798,56 @@ function GuestbookEntry({ index, name, date, message }) {
           boxSizing: "border-box",
         }}
       >
-        <span style={{ fontSize: "1rem", color: "#000", whiteSpace: "nowrap" }}>
-          NO.
-        </span>
-        <span
+        <div
           style={{
-            fontSize: "1rem",
-            color: "#000",
-            minWidth: "0.5rem",
-            whiteSpace: "nowrap",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 6,
+            minWidth: 0,
           }}
         >
-          {index}
-        </span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexShrink: 0,
+            }}
+          >
+            <span
+              style={{ fontSize: "1rem", color: "#000", whiteSpace: "nowrap" }}
+            >
+              NO.
+            </span>
+            <span
+              style={{
+                fontSize: "1rem",
+                color: "#000",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {index}
+            </span>
+          </div>
+          <span
+            style={{
+              fontSize: "1rem",
+              fontWeight: 700,
+              color: PROFILE_ACCENT,
+              whiteSpace: "nowrap",
+              textAlign: "right",
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {name}
+          </span>
+        </div>
         <span
           style={{
-            fontSize: "1.125rem",
-            fontWeight: 700,
-            color: PROFILE_ACCENT,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {name}
-        </span>
-        <span
-          style={{
+            justifySelf: "end",
             fontSize: "0.8125rem",
             color: GUESTBOOK_DATE_COLOR,
             whiteSpace: "nowrap",
@@ -817,8 +858,9 @@ function GuestbookEntry({ index, name, date, message }) {
       </div>
       <div
         style={{
-          display: "flex",
-          gap: 12,
+          display: "grid",
+          gridTemplateColumns: GUESTBOOK_ENTRY_GRID,
+          columnGap: GUESTBOOK_ENTRY_GAP,
           padding: "12px",
           background: "#fff",
           alignItems: "flex-start",
@@ -828,7 +870,6 @@ function GuestbookEntry({ index, name, date, message }) {
         <p
           style={{
             margin: 0,
-            flex: 1,
             minWidth: 0,
             fontFamily: FONT,
             fontSize: "1.25rem",
@@ -874,7 +915,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
     <>
       <style>{`${FONT_CSS}\n${GUESTBOOK_HIDE_SCROLLBAR_CSS}\n${GUESTBOOK_INPUT_CSS}\n${GUESTBOOK_SUBMIT_BTN_CSS}`}</style>
       <div
-        className={isFullscreen ? "guestbookEmbed-hideScrollbar" : undefined}
+        className="guestbookEmbed-hideScrollbar"
         style={{
           fontFamily: FONT,
           color: FG,
@@ -883,10 +924,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
           imageRendering: "pixelated",
           width: "100%",
           boxSizing: "border-box",
-          ...(isFullscreen && {
-            maxHeight: "min(880px, calc(100dvh - 64px))",
-            overflowY: "auto",
-          }),
+          overflow: "visible",
         }}
       >
         <div
@@ -895,6 +933,10 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
             gridTemplateColumns: "280px minmax(0, 1fr)",
             gap: "1rem",
             width: "100%",
+            boxSizing: "border-box",
+            ...(isFullscreen && {
+              padding: "16px 20px 20px",
+            }),
           }}
         >
           <div
@@ -916,7 +958,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                 boxSizing: "border-box",
                 border: `3px solid ${PROFILE_BORDER}`,
                 borderRadius: 23,
-                boxShadow: PROFILE_OUTER_SHADOW,
+                boxShadow: PROFILE_DROP_SHADOW,
                 background: PROFILE_CARD_BG,
                 padding: "12px 14px 14px",
                 overflow: "hidden",
@@ -932,6 +974,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                     ? "min(430px, calc(100dvh - 400px))"
                     : "430px",
                   overflowY: "auto",
+                  background: "#fff",
                 }}
               >
                 {postsLoading ? (
@@ -942,7 +985,6 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                       color: GUESTBOOK_DATE_COLOR,
                       textAlign: "center",
                       padding: "1.5rem 0",
-                      background: "#fff",
                     }}
                   >
                     불러오는 중…
@@ -955,7 +997,6 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                       color: GUESTBOOK_DATE_COLOR,
                       textAlign: "center",
                       padding: "1.5rem 0",
-                      background: "#fff",
                       borderTop: `1px solid ${PROFILE_BORDER}`,
                     }}
                   >
