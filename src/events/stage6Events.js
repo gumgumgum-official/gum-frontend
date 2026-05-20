@@ -19,6 +19,7 @@ export const STAGE6_NAME_MODAL_HIDE_EVENT = "gum:stage6-name-modal:hide";
 export const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
 export const STAGE6_BOARDING_PASS_ISSUED_EVENT =
   "gum:stage6-boarding:pass-issued";
+export const STAGE6_SCREEN_FADE_EVENT = "gum:stage6-screen-fade";
 
 export const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
 export const STAGE6_INTERACTION_UNLOCK_EVENT = "gum:stage6-interaction-unlock";

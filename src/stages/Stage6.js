@@ -26,6 +26,7 @@ import {
   STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
   STAGE6_FINISH_EVENT,
+  STAGE6_SCREEN_FADE_EVENT,
   STAGE6_INT_CLICK_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
   STAGE6_INTERACTION_UNLOCK_EVENT,
@@ -70,8 +71,8 @@ const CHAR_ANIM_MAP = {
   INT_Gum_Airplane: ["Plane_Throw_Rig", "Plane_Throw_Prop"],
   INT_Gum_Lollipop: ["Lollipop_ArmShake_Rig", "Lollipop_Shake"],
 };
-const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["OBJ_ATM", "OBJ_Tel"]);
-const ATM_OBJECT_NAME = "OBJ_ATM";
+const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["INT_ATM", "OBJ_Tel"]);
+const ATM_OBJECT_NAME = "INT_ATM";
 const TEL_OBJECT_NAME = "OBJ_Tel";
 const TEL_EMISSIVE_DARK_STRENGTH = 0.06;
 const TEL_EMISSIVE_BRIGHT_STRENGTH = 1.25;
@@ -245,6 +246,7 @@ export function Stage6() {
   let isEscalatorRiding = false;
   let isEscalatorFading = false;
   let escFadeProgress = 0;
+  let escRidingTime = 0;
   /** @type {THREE.Object3D | null} */
   let escRidingStep = null;
   /** @type {THREE.Object3D[]} */
@@ -257,10 +259,17 @@ export function Stage6() {
   const ESC_CHAR_Y_OFFSET = 0.05;
   /** 탑승 직전 step으로 스냅하는 보간 속도 */
   const ESC_SNAP_SPEED = 8;
+  /** fade 시작까지 라이딩 유지 시간 (초) */
+  const ESC_FADE_DELAY = 5.0;
+  /** fade 지속 시간 (초) */
+  const ESC_FADE_DURATION = 2.0;
   let isEscalatorSnapping = false;
+  /** 에스컬레이터 이동 방향 yaw (라디안) — 탑승 시점에 step 분포로 계산 */
+  let escFacingYaw = 0;
   const _escStepBox = new THREE.Box3();
   const _escStepWorldPos = new THREE.Vector3();
   const _escFrontStepPos = new THREE.Vector3();
+  const _escTopStepPos = new THREE.Vector3();
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -1194,6 +1203,8 @@ export function Stage6() {
       isEscalatorSnapping = false;
       isEscalatorFading = false;
       escFadeProgress = 0;
+      escRidingTime = 0;
+      escFacingYaw = 0;
       escRidingStep = null;
       escSteps.length = 0;
       escNoBoardingCooldown = 0;
@@ -1606,13 +1617,31 @@ export function Stage6() {
         const posRef = character.getPosition();
         const preX = posRef?.x ?? 0;
         const preZ = posRef?.z ?? 0;
-        // 이동 전 위치가 frustum 안에 있을 때만 제약 적용
-        // (스폰 위치가 frustum 밖이면 frustum 안으로 진입할 수 있도록 허용)
         const wasInView = posRef
           ? isInCameraView(preX, posRef.y, preZ, this.camera)
           : false;
-        character.update(delta, this.camera, { skipCameraFollow: true });
-        if (posRef && wasInView) {
+
+        // 에스컬레이터 탑승 중 — step 위치를 먼저 갱신하고 overrideY 계산
+        let overrideY;
+        if ((isEscalatorSnapping || isEscalatorRiding) && escRidingStep) {
+          escRidingStep.updateMatrixWorld(true);
+          escRidingStep.getWorldPosition(_escStepWorldPos);
+          const targetY = _escStepWorldPos.y + ESC_CHAR_Y_OFFSET;
+          if (isEscalatorRiding) {
+            overrideY = targetY;
+          } else if (posRef) {
+            const snapAlpha = 1 - Math.exp(-ESC_SNAP_SPEED * delta);
+            overrideY = posRef.y + (targetY - posRef.y) * snapAlpha;
+          }
+        }
+
+        character.update(delta, this.camera, {
+          skipCameraFollow: true,
+          overrideY,
+        });
+
+        // frustum 클램프 — 에스컬레이터 탑승 중엔 적용 안 함
+        if (posRef && wasInView && !isEscalatorSnapping && !isEscalatorRiding) {
           const y = posRef.y;
           const cam = this.camera;
           if (!isInCameraView(posRef.x, y, posRef.z, cam)) {
@@ -1648,9 +1677,10 @@ export function Stage6() {
         escNoBoardingCooldown = Math.max(0, escNoBoardingCooldown - delta);
         const charPos = character.getPosition();
         if (charPos) {
-          // 현재 프레임에서 Y 최소(바닥) step 찾기
           let frontStep = null;
+          let topStep = null;
           let minY = Infinity;
+          let maxY = -Infinity;
           for (const step of escSteps) {
             step.updateMatrixWorld(true);
             step.getWorldPosition(_escStepWorldPos);
@@ -1658,6 +1688,11 @@ export function Stage6() {
               minY = _escStepWorldPos.y;
               frontStep = step;
               _escFrontStepPos.copy(_escStepWorldPos);
+            }
+            if (_escStepWorldPos.y > maxY) {
+              maxY = _escStepWorldPos.y;
+              topStep = step;
+              _escTopStepPos.copy(_escStepWorldPos);
             }
           }
           if (frontStep) {
@@ -1679,64 +1714,64 @@ export function Stage6() {
                 isSceneInteractionLocked = true;
                 escRidingStep = frontStep;
                 escFadeProgress = 0;
+                escRidingTime = 0;
                 isEscalatorFading = false;
+                // 에스컬레이터 이동 방향: 최하단 step → 최상단 step XZ 방향
+                if (topStep) {
+                  const ddx = _escTopStepPos.x - _escFrontStepPos.x;
+                  const ddz = _escTopStepPos.z - _escFrontStepPos.z;
+                  if (Math.abs(ddx) > 0.01 || Math.abs(ddz) > 0.01) {
+                    escFacingYaw = Math.atan2(ddx, ddz);
+                  }
+                }
               }
             }
           }
         }
       }
 
-      // 에스컬레이터 탑승 전 스냅 (자연스럽게 step 위로 이동)
-      if (isEscalatorSnapping && escRidingStep && character) {
-        escRidingStep.updateMatrixWorld(true);
-        escRidingStep.getWorldPosition(_escStepWorldPos);
-        const posRef = character.getPosition();
-        if (posRef) {
-          const targetY = _escStepWorldPos.y + ESC_CHAR_Y_OFFSET;
-          const snapAlpha = 1 - Math.exp(-ESC_SNAP_SPEED * delta);
-          posRef.x += (_escStepWorldPos.x - posRef.x) * snapAlpha;
-          posRef.z += (_escStepWorldPos.z - posRef.z) * snapAlpha;
-          posRef.y += (targetY - posRef.y) * snapAlpha;
-          const snapDist =
-            Math.abs(posRef.x - _escStepWorldPos.x) +
-            Math.abs(posRef.z - _escStepWorldPos.z);
-          if (snapDist < 0.05) {
-            isEscalatorSnapping = false;
-            isEscalatorRiding = true;
+      // 에스컬레이터 탑승 전 스냅 + 라이딩 — 스냅 시작부터 타이머 카운트
+      if (
+        (isEscalatorSnapping || isEscalatorRiding) &&
+        escRidingStep &&
+        character
+      ) {
+        escRidingTime += delta;
+
+        if (isEscalatorSnapping) {
+          const posRef = character.getPosition();
+          if (posRef) {
+            const snapAlpha = 1 - Math.exp(-ESC_SNAP_SPEED * delta);
+            posRef.x += (_escStepWorldPos.x - posRef.x) * snapAlpha;
+            posRef.z += (_escStepWorldPos.z - posRef.z) * snapAlpha;
+            const snapDist =
+              Math.abs(posRef.x - _escStepWorldPos.x) +
+              Math.abs(posRef.z - _escStepWorldPos.z);
+            if (snapDist < 0.05) {
+              isEscalatorSnapping = false;
+              isEscalatorRiding = true;
+            }
+          }
+        } else {
+          const posRef = character.getPosition();
+          if (posRef) {
+            posRef.x = _escStepWorldPos.x;
+            posRef.z = _escStepWorldPos.z;
           }
         }
-      }
 
-      // 에스컬레이터 라이딩 — step 위치 추적 + fade out
-      if (isEscalatorRiding && escRidingStep && character) {
-        escRidingStep.updateMatrixWorld(true);
-        escRidingStep.getWorldPosition(_escStepWorldPos);
-        const posRef = character.getPosition();
-        if (posRef) {
-          posRef.x = _escStepWorldPos.x;
-          posRef.z = _escStepWorldPos.z;
-          posRef.y = _escStepWorldPos.y + ESC_CHAR_Y_OFFSET;
-        }
+        character.setFacingYaw(escFacingYaw);
 
-        if (
-          !isEscalatorFading &&
-          !isInCameraView(
-            _escStepWorldPos.x,
-            _escStepWorldPos.y,
-            _escStepWorldPos.z,
-            this.camera,
-          )
-        ) {
+        if (!isEscalatorFading && escRidingTime >= ESC_FADE_DELAY) {
           isEscalatorFading = true;
+          window.dispatchEvent(new CustomEvent(STAGE6_SCREEN_FADE_EVENT));
         }
 
         if (isEscalatorFading) {
-          const ESC_FADE_DURATION = 0.6;
           escFadeProgress = Math.min(
             escFadeProgress + delta / ESC_FADE_DURATION,
             1,
           );
-          character.setOpacity(1 - escFadeProgress);
           if (escFadeProgress >= 1 && !isFinishFired) {
             isFinishFired = true;
             startStage6LoadingTransition(() => {

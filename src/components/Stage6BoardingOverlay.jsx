@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  cancelStage6LoadingTransition,
-  startStage6LoadingTransition,
-} from "../utils/stages/stage6/stage6LoadingTransition.js";
+import { cancelStage6LoadingTransition } from "../utils/stages/stage6/stage6LoadingTransition.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import {
   AIRPORT_SUBTITLE_HIDE_EVENT,
@@ -10,11 +7,11 @@ import {
   AIRPORT_SUBTITLE_UPDATE_EVENT,
   STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
-  STAGE6_FINISH_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
   STAGE6_INTERACTION_UNLOCK_EVENT,
   STAGE6_NAME_MODAL_HIDE_EVENT,
   STAGE6_NAME_MODAL_SHOW_EVENT,
+  STAGE6_SCREEN_FADE_EVENT,
   STAGE6_SUBTITLE_HIDE_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
   STAGE6_SUBTITLE_SHOW_EVENT,
@@ -57,6 +54,7 @@ export function Stage6BoardingOverlay() {
   const [nameInputValue, setNameInputValue] = useState("");
   const [passengerName, setPassengerName] = useState("");
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
+  const [isScreenFading, setIsScreenFading] = useState(false);
   const nameInputRef = useRef(null);
   const timersRef = useRef([]);
   /** subtitle effect의 `schedule` — 언마운트/reset 시 timersRef와 함께 정리 */
@@ -218,9 +216,12 @@ export function Stage6BoardingOverlay() {
       setSubtitleText("");
       setIsNameModalOpen(false);
       setIsOverlayOpen(false);
+      setIsScreenFading(false);
       setNameInputValue("");
       window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
+
+    const onScreenFade = () => setIsScreenFading(true);
 
     window.addEventListener(AIRPORT_SUBTITLE_SHOW_EVENT, onAirportSubtitleShow);
     window.addEventListener(
@@ -243,6 +244,7 @@ export function Stage6BoardingOverlay() {
       onStage6NameModalHide,
     );
     window.addEventListener(STAGE6_BOARDING_RESET_EVENT, onBoardingReset);
+    window.addEventListener(STAGE6_SCREEN_FADE_EVENT, onScreenFade);
 
     return () => {
       clearTimers();
@@ -280,6 +282,7 @@ export function Stage6BoardingOverlay() {
         onStage6NameModalHide,
       );
       window.removeEventListener(STAGE6_BOARDING_RESET_EVENT, onBoardingReset);
+      window.removeEventListener(STAGE6_SCREEN_FADE_EVENT, onScreenFade);
     };
   }, []);
 
@@ -326,14 +329,27 @@ export function Stage6BoardingOverlay() {
 
   const boardFlight = () => {
     setIsOverlayOpen(false);
-    window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
-    startStage6LoadingTransition(() => {
-      window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
-    });
+    window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
+    window.dispatchEvent(
+      new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
+        detail: {
+          messages: [
+            {
+              text: "이제 에스컬레이터를 타고\n탑승하러 가세요 ✈",
+              holdMs: 3000,
+            },
+          ],
+        },
+      }),
+    );
   };
 
   return (
     <>
+      <div
+        className={`esc-screen-fade${isScreenFading ? " active" : ""}`}
+        aria-hidden="true"
+      />
       <div id="loading-overlay" aria-hidden="true">
         <div id="loading-bg" />
         <canvas id="airplane-canvas" />

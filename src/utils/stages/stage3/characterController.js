@@ -525,15 +525,20 @@ export function createCharacterController({
         characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
       } else {
         const p = characterModel.position;
-        const nextGroundY = resolveGroundY(p.x, p.z);
-        const targetY = nextGroundY + characterGroundLift;
-        const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
-        characterYPosition = THREE.MathUtils.lerp(
-          characterYPosition,
-          targetY,
-          easeAlpha,
-        );
-        characterModel.position.y = characterYPosition;
+        if (options.overrideY != null) {
+          characterYPosition = options.overrideY;
+          characterModel.position.y = options.overrideY;
+        } else {
+          const nextGroundY = resolveGroundY(p.x, p.z);
+          const targetY = nextGroundY + characterGroundLift;
+          const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
+          characterYPosition = THREE.MathUtils.lerp(
+            characterYPosition,
+            targetY,
+            easeAlpha,
+          );
+          characterModel.position.y = characterYPosition;
+        }
       }
 
       isMoving = moved;
@@ -697,6 +702,11 @@ export function createCharacterController({
     },
 
     isPunching: () => isPunchPlaying,
+
+    setFacingYaw(yRad) {
+      if (characterModel) characterModel.rotation.y = yRad;
+      if (idleCharacterModel) idleCharacterModel.rotation.y = yRad;
+    },
 
     /** 캐릭터 모델 전체 메시 opacity 일괄 설정 (에스컬레이터 fade out 용) */
     setOpacity(opacity) {
