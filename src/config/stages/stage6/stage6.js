@@ -62,7 +62,7 @@ export const STAGE6_CONFIG = {
       STAGE6_USER_GROUND_OFFSET_MIN,
     ),
     moveSpeed: STAGE6_MOVE_SPEED,
-    spawnOffset: { x: -5, z: -3 },
+    spawnOffset: { x: -2.5, z: -0.5 },
     /** 캐릭터 초기 바라보는 방향(도). 필요 시 음수/양수로 조정 */
     spawnRotationDeg: 0,
     escalatorFrontDistance: 1.15,

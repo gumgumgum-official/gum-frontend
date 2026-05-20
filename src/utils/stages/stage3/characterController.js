@@ -267,14 +267,16 @@ export function createCharacterController({
           if (worldSpawnXZ && Number.isFinite(worldSpawnXZ.x)) {
             spawnX = worldSpawnXZ.x;
             spawnZ = worldSpawnXZ.z;
-          } else if (!bounds.isEmpty()) {
-            spawnX = (bounds.min.x + bounds.max.x) * 0.5;
-            spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
-          }
-          const off = config.character?.spawnOffset;
-          if (off) {
-            spawnX += off.x ?? 0;
-            spawnZ += off.z ?? 0;
+          } else {
+            if (!bounds.isEmpty()) {
+              spawnX = (bounds.min.x + bounds.max.x) * 0.5;
+              spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
+            }
+            const off = config.character?.spawnOffset;
+            if (off) {
+              spawnX += off.x ?? 0;
+              spawnZ += off.z ?? 0;
+            }
           }
           const charCfg = /** @type {any} */ (config.character);
           const spawnRotationRadRaw = Number(charCfg?.spawnRotationRad);
