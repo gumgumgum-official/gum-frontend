@@ -1281,6 +1281,7 @@ export function Stage6() {
       );
       onInteractionLock = () => {
         isSceneInteractionLocked = true;
+        hideCharBubble();
       };
       onInteractionUnlock = () => {
         isSceneInteractionLocked = false;
@@ -1356,15 +1357,14 @@ export function Stage6() {
       };
       canvas.addEventListener("pointerdown", onPointerDown, { capture: true });
       onPointerMove = (event) => {
-        const hit = getPointerHitTarget(event);
-        const isCharacterHit = !!hit && CHAR_ROOT_NAMES.includes(hit.intName);
-        // 씬 잠금 중에도 캐릭터 hover 애니메이션은 허용.
-        if (isSceneInteractionLocked && !isCharacterHit) {
+        if (isSceneInteractionLocked) {
           canvas.style.cursor = "default";
           hoveredCharacterName = null;
+          hideCharBubble();
           return;
         }
-
+        const hit = getPointerHitTarget(event);
+        const isCharacterHit = !!hit && CHAR_ROOT_NAMES.includes(hit.intName);
         if (isCharacterHit && hit) {
           if (hoveredCharacterName !== hit.intName) {
             playCharacter(hit.intName);
