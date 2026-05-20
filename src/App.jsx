@@ -78,7 +78,7 @@ function AppLayout() {
     "/assets/photo_booth/photo3.png",
   ]);
   const [stage6PhotoboothPhotoRatios, setStage6PhotoboothPhotoRatios] =
-    useState([0.25, 0.55, 0.82]);
+    useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
 

@@ -1134,6 +1134,13 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  opacity: 1;
+  transition: opacity 320ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.stage6-photobooth-modal-overlay--exiting {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .stage6-photobooth-modal-content {
@@ -1234,15 +1241,6 @@ body {
 
 .stage6-photobooth-frame img.revealed {
   opacity: 1;
-}
-
-.stage6-photobooth-frame-num {
-  position: absolute;
-  bottom: 4px;
-  right: 5px;
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.15);
-  font-family: "Montserrat", sans-serif;
 }
 
 .stage6-photobooth-strip-logo {
