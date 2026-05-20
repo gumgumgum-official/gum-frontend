@@ -45,6 +45,28 @@ const GUESTBOOK_NAMEBAR_BG = "#ffecf2";
 const GUESTBOOK_DATE_COLOR = "#9f9f9f";
 const GUESTBOOK_PLACEHOLDER = "#f4a0bc";
 const GUESTBOOK_PHOTO_SIZE = 150;
+const GUESTBOOK_PROFILE_AVATARS = [
+  "/assets/guestbook/profile/random1.svg",
+  "/assets/guestbook/profile/random2.svg",
+  "/assets/guestbook/profile/random3.svg",
+  "/assets/guestbook/profile/random4.svg",
+];
+
+function pickRandomAvatarIndex(excludeIndex = -1) {
+  const candidates = GUESTBOOK_PROFILE_AVATARS.map((_, i) => i).filter(
+    (i) => i !== excludeIndex,
+  );
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function avatarIndexFromKey(key) {
+  const s = String(key);
+  let hash = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    hash = (hash + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % GUESTBOOK_PROFILE_AVATARS.length;
+}
 
 // Figma 방명록 제출 버튼 — 기본 452:56, 호버 453:59
 const GUESTBOOK_SUBMIT_BG = "#fcf3c5";
@@ -614,9 +636,34 @@ function GuestbookHeader() {
   );
 }
 
-function GuestbookPhotoBox() {
+/**
+ * @param {Object} props
+ * @param {string | number} [props.avatarKey] - 게시글별 고정 아바타 (목록)
+ * @param {boolean} [props.interactive] - 클릭 시 다른 랜덤 아바타 (작성 폼)
+ */
+function GuestbookPhotoBox({ avatarKey, interactive = false }) {
+  const [randomIndex, setRandomIndex] = useState(() => pickRandomAvatarIndex());
+  const index = avatarKey != null ? avatarIndexFromKey(avatarKey) : randomIndex;
+
+  function cycleAvatar() {
+    setRandomIndex((prev) => pickRandomAvatarIndex(prev));
+  }
+
   return (
     <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? cycleAvatar : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                cycleAvatar();
+              }
+            }
+          : undefined
+      }
       style={{
         width: GUESTBOOK_PHOTO_SIZE,
         height: GUESTBOOK_PHOTO_SIZE,
@@ -626,16 +673,17 @@ function GuestbookPhotoBox() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        cursor: interactive ? "pointer" : undefined,
       }}
     >
       <img
         alt=""
-        src="/assets/guestbook/profile_character.png"
+        src={GUESTBOOK_PROFILE_AVATARS[index]}
+        draggable={false}
         style={{
           width: "86%",
           height: "86%",
           objectFit: "contain",
-          imageRendering: "pixelated",
         }}
       />
     </div>
@@ -719,7 +767,7 @@ function GuestbookForm({ onSuccess }) {
           alignItems: "flex-start",
         }}
       >
-        <GuestbookPhotoBox />
+        <GuestbookPhotoBox interactive />
         <div
           style={{
             flex: 1,
@@ -782,7 +830,7 @@ function GuestbookForm({ onSuccess }) {
 const GUESTBOOK_ENTRY_GRID = `${GUESTBOOK_PHOTO_SIZE}px minmax(0, 1fr)`;
 const GUESTBOOK_ENTRY_GAP = 12;
 
-function GuestbookEntry({ index, name, date, message }) {
+function GuestbookEntry({ index, name, date, message, postId }) {
   return (
     <article>
       <div
@@ -867,13 +915,13 @@ function GuestbookEntry({ index, name, date, message }) {
           alignItems: "flex-start",
         }}
       >
-        <GuestbookPhotoBox />
+        <GuestbookPhotoBox avatarKey={postId} />
         <p
           style={{
             margin: 0,
             minWidth: 0,
             fontFamily: FONT,
-            fontSize: "1.25rem",
+            fontSize: "1rem",
             lineHeight: 1.35,
             color: PROFILE_STATUS_FG,
             whiteSpace: "pre-wrap",
@@ -1017,6 +1065,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                     posts.map((p, i) => (
                       <GuestbookEntry
                         key={p.id}
+                        postId={p.id}
                         index={posts.length - i}
                         name={p.nickname ?? "익명"}
                         date={formatGuestbookDate(p.created_at)}
