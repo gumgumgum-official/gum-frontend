@@ -35,23 +35,11 @@ const POSTER_BASE = {
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
   const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "guestbook" | null
-  const [gbScale, setGbScale] = useState(1);
   const voteClientId = useMemo(
     () => (isOpen ? getOrCreateVoteClientId() : null),
     [isOpen],
   );
 
-  useEffect(() => {
-    if (zoomedPoster !== "guestbook") return;
-    const compute = () => {
-      const s =
-        Math.min(window.innerWidth / 960, window.innerHeight / 800) * 0.93;
-      setGbScale(Math.max(s, 0.4));
-    };
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, [zoomedPoster]);
   const closeWithSound = useCallback(() => {
     playUiClickSound();
     onClose();
@@ -405,13 +393,26 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 style={{
                   position: "fixed",
                   inset: 0,
-                  background: "rgba(0,0,0,0.6)",
                   zIndex: 10001,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  padding: zoomedPoster === "guestbook" ? 0 : "16px 24px 12vh",
                   pointerEvents: zoomedPoster ? "auto" : "none",
+                  ...(zoomedPoster === "guestbook"
+                    ? {
+                        backgroundColor: "#fff",
+                        backgroundImage: `url(${NOTICE.guestbookFullscreenBg})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                        backgroundRepeat: "no-repeat",
+                        padding: "clamp(10px, 2.5vw, 28px)",
+                        boxSizing: "border-box",
+                        overflow: "auto",
+                      }
+                    : {
+                        background: "rgba(0,0,0,0.6)",
+                        padding: "16px 24px 12vh",
+                      }),
                 }}
               >
                 <motion.div
@@ -426,10 +427,16 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   onClick={(e) => e.stopPropagation()}
                   style={{
                     position: "relative",
-                    ...(zoomedPoster !== "guestbook" && {
-                      maxWidth: "90vw",
-                      maxHeight: "85vh",
-                    }),
+                    ...(zoomedPoster === "guestbook"
+                      ? {
+                          width: "100%",
+                          maxWidth: "min(960px, 100%)",
+                          margin: "auto",
+                        }
+                      : {
+                          maxWidth: "90vw",
+                          maxHeight: "85vh",
+                        }),
                   }}
                 >
                   {zoomedPoster === "feast" && (
@@ -457,15 +464,10 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   {zoomedPoster === "vote" && <GgumddiVoteSection />}
 
                   {zoomedPoster === "guestbook" && (
-                    <div
-                      style={{
-                        width: 960,
-                        transform: `scale(${gbScale})`,
-                        transformOrigin: "center center",
-                      }}
-                    >
-                      <GuestbookEmbed onClose={() => setZoomedPoster(null)} />
-                    </div>
+                    <GuestbookEmbed
+                      variant="fullscreen"
+                      onClose={() => setZoomedPoster(null)}
+                    />
                   )}
                 </motion.div>
               </motion.div>

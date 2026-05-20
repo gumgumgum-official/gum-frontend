@@ -15,6 +15,13 @@ const SHADOW = "4px 4px 0 #ff5fa2";
 const SHADOW_SM = "2px 2px 0 #ff5fa2";
 
 // ── Shared style objects ──────────────────────────────────────────────────────
+/** @type {{
+ *   pixelCard: import("react").CSSProperties;
+ *   pixelCardSm: import("react").CSSProperties;
+ *   pixelInput: import("react").CSSProperties;
+ *   pixelBtn: import("react").CSSProperties;
+ *   notePaper: import("react").CSSProperties;
+ * }} */
 const S = {
   pixelCard: {
     background: GRAD_CARD,
@@ -272,7 +279,12 @@ function GuestbookEntry({ name, date, message }) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export function GuestbookEmbed({ onClose }) {
+/**
+ * @param {Object} props
+ * @param {() => void} props.onClose
+ * @param {"default" | "fullscreen"} [props.variant] - `NoticeModalBoard` 전체 화면 배경 모드
+ */
+export function GuestbookEmbed({ onClose, variant = "default" }) {
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(true);
 
@@ -289,6 +301,8 @@ export function GuestbookEmbed({ onClose }) {
     setPosts((prev) => [post, ...prev]);
   }
 
+  const isFullscreen = variant === "fullscreen";
+
   return (
     <>
       <style>{FONT_CSS}</style>
@@ -299,10 +313,21 @@ export function GuestbookEmbed({ onClose }) {
           WebkitFontSmoothing: "none",
           MozOsxFontSmoothing: "grayscale",
           imageRendering: "pixelated",
+          ...(isFullscreen && { width: "100%" }),
         }}
       >
         {/* pixel-card overflow-hidden (BrowserFrame) */}
-        <div style={S.pixelCard}>
+        <div
+          style={{
+            ...S.pixelCard,
+            ...(isFullscreen && {
+              width: "100%",
+              maxHeight: "min(880px, calc(100dvh - 64px))",
+              overflowY: "auto",
+              boxSizing: "border-box",
+            }),
+          }}
+        >
           {/* 타이틀바 */}
           <div
             style={{
@@ -487,7 +512,9 @@ export function GuestbookEmbed({ onClose }) {
                   <div
                     style={{
                       marginTop: "1.25rem",
-                      maxHeight: "430px",
+                      maxHeight: isFullscreen
+                        ? "min(430px, calc(100dvh - 400px))"
+                        : "430px",
                       display: "flex",
                       flexDirection: "column",
                       gap: "0.75rem",
