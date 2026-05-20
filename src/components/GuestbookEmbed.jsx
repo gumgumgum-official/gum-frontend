@@ -11,13 +11,15 @@ const MUTED = "oklch(0.55 0.1 340)";
 const FONT = '"DOSGothic","Galmuri11","Galmuri9",monospace';
 /** ♡ 전용 — 로컬 `public/fonts/DungGeunMo.woff` */
 const FONT_HEART = '"DungGeunMo",monospace';
+/** Figma 480:143 — TODAY is ... (DOSIyagiBoldface) */
+const FONT_TODAY_TITLE = '"DOSIyagiBoldface","DOSGothic","Galmuri11",monospace';
 
 const GRAD_CARD = "linear-gradient(180deg,#ffffff 0%,#fff0f6 100%)";
 const GRAD_PINK = "linear-gradient(180deg,#ffb3d1 0%,#ff7eb6 100%)";
 const SHADOW = "4px 4px 0 #ff5fa2";
 const SHADOW_SM = "2px 2px 0 #ff5fa2";
 
-// Figma 프로필 카드 (node 451:47 — 꿈딱지 디자인)
+// Figma 프로필 카드 (node 484:200 — 꿈딱지 디자인)
 const PROFILE_BORDER = "#f4a0bc";
 const PROFILE_ACCENT = "#eb477e";
 const PROFILE_STATUS_FG = "#422442";
@@ -28,11 +30,19 @@ const PROFILE_HEADER_BG =
 const PROFILE_OUTER_SHADOW =
   "0 12px 18.8px rgba(0, 0, 0, 0.25), inset 0 -16px 11.4px 1px rgba(0, 0, 0, 0.13)";
 
-// Figma 투데이 카드 (node 451:48)
+// Figma 투데이 카드 (node 480:140)
 const TODAY_CARD_BG =
   "linear-gradient(180deg, rgb(255, 255, 222) 12.987%, rgb(255, 255, 255) 100%)";
 const TODAY_OUTER_SHADOW =
   "0 12px 18.8px rgba(0, 0, 0, 0.25), inset 0 -15px 13px 0 rgba(0, 0, 0, 0.1)";
+
+// Figma 방명록 (480:135) — 배경 480:136, 헤더 486:6, 작성 480:149, 게시글 480:158
+const GUESTBOOK_WRITE_BG = "#ffecf2";
+const GUESTBOOK_WRITE_BORDER = "#f9cfda";
+const GUESTBOOK_NAMEBAR_BG = "#ffecf2";
+const GUESTBOOK_DATE_COLOR = "#9f9f9f";
+const GUESTBOOK_PLACEHOLDER = "#f4a0bc";
+const GUESTBOOK_PHOTO_SIZE = 150;
 
 // Figma 방명록 제출 버튼 — 기본 452:56, 호버 453:59
 const GUESTBOOK_SUBMIT_BG = "#fcf3c5";
@@ -101,12 +111,30 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Figma 480:165 — (2026.05.22 10:00) */
+function formatGuestbookDate(iso) {
+  const d = new Date(iso);
+  const date = formatDate(iso);
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return `(${date} ${time})`;
+}
+
+function sortPostsNewestFirst(posts) {
+  return [...posts].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+}
+
 // DOS Gothic (피그마 DOSGothic) + DungGeunMo(♡, 로컬 woff) + Galmuri 폴백 — CDN 외 폰트는 public
 const DOS_GOTHIC_WOFF2 =
   "https://cdn.jsdelivr.net/gh/fonts-archive/DOSGothic@master/DOSGothic.woff2";
+const DOS_IYAGI_BOLDFACE_TTF =
+  "https://cdn.jsdelivr.net/gh/hurss/fonts@master/ttf/DOSIyagiBoldface.ttf";
 const FONT_CSS = `
 @font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}")format("woff2");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}")format("woff2");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"DOSIyagiBoldface";src:url("${DOS_IYAGI_BOLDFACE_TTF}")format("truetype");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"DungGeunMo";src:url("/fonts/DungGeunMo.woff")format("woff");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11.woff2")format("woff2");font-weight:400;font-display:swap}
 @font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11-Bold.woff2")format("woff2");font-weight:700;font-display:swap}
@@ -122,6 +150,13 @@ const GUESTBOOK_HIDE_SCROLLBAR_CSS = `
   display:none;
   width:0;
   height:0;
+}
+`;
+
+const GUESTBOOK_INPUT_CSS = `
+.guestbookEmbed-input::placeholder{
+  color:${GUESTBOOK_PLACEHOLDER};
+  opacity:1;
 }
 `;
 
@@ -152,14 +187,31 @@ const GUESTBOOK_SUBMIT_BTN_CSS = `
 }
 `;
 
-// ── ProfileCard (Figma 451:47) ────────────────────────────────────────────────
+// ── GuestbookTitle (Figma 486:5) ─────────────────────────────────────────────
+function GuestbookTitle() {
+  return (
+    <img
+      alt="껌's 미니홈피"
+      src="/assets/guestbook/title.svg"
+      style={{
+        display: "block",
+        width: "100%",
+        height: "auto",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+// ── ProfileCard (Figma 484:200) ───────────────────────────────────────────────
+/** Figma 480:148 — 구름 아이콘 */
 function ProfileCardIconCloud() {
   return (
     <div
       style={{
         position: "relative",
-        width: 44,
-        height: 25,
+        width: 31,
+        height: 30,
         overflow: "hidden",
         flexShrink: 0,
       }}
@@ -170,8 +222,8 @@ function ProfileCardIconCloud() {
         style={{
           position: "absolute",
           height: "342.47%",
-          width: "190.84%",
-          left: "-90.84%",
+          width: "326.27%",
+          left: "-187.56%",
           top: "-54.79%",
           maxWidth: "none",
         }}
@@ -180,29 +232,128 @@ function ProfileCardIconCloud() {
   );
 }
 
+/** Figma 480:178 — 클로버 아이콘 */
 function ProfileCardIconClover() {
+  return (
+    <img
+      alt=""
+      src="/assets/guestbook/clover.svg"
+      width={31}
+      height={31}
+      draggable={false}
+      style={{
+        display: "block",
+        width: 31,
+        height: 31,
+        flexShrink: 0,
+        objectFit: "contain",
+      }}
+    />
+  );
+}
+
+/** Figma 498:2 — 프로필 사진 (480:174 배경 + 480:175 캐릭터 + 480:177 테두리) */
+function ProfileCardPhoto() {
   return (
     <div
       style={{
         position: "relative",
-        width: 32,
-        height: 33,
+        width: "100%",
+        aspectRatio: "307 / 170",
+        boxSizing: "border-box",
+        border: `2px solid ${PROFILE_BORDER}`,
+        borderRadius: 15,
         overflow: "hidden",
-        flexShrink: 0,
+        marginBottom: 21,
       }}
     >
       <img
         alt=""
-        src="/assets/guestbook/profile_card_icons.png"
+        src="/assets/guestbook/profile_photo_bg.png"
         style={{
           position: "absolute",
-          height: "294.12%",
-          width: "297.62%",
-          left: "-171.43%",
-          top: "-143.53%",
-          maxWidth: "none",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          opacity: 0.5,
+          pointerEvents: "none",
         }}
       />
+      <div
+        style={{
+          position: "absolute",
+          left: "16.61%",
+          top: "8.24%",
+          width: "67.1%",
+          height: "90.59%",
+          overflow: "hidden",
+          pointerEvents: "none",
+        }}
+      >
+        <img
+          alt="삐삐 프로필"
+          src="/assets/guestbook/profile_character.png"
+          style={{
+            position: "absolute",
+            height: "200.81%",
+            width: "100.04%",
+            left: "-0.02%",
+            top: "-33.2%",
+            maxWidth: "none",
+            imageRendering: "pixelated",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Figma 480:146 + 480:147 + 480:148 */
+function ProfileCardHeader() {
+  return (
+    <div
+      style={{
+        position: "relative",
+        marginBottom: 15,
+        border: `2px solid ${PROFILE_BORDER}`,
+        borderRadius: 15,
+        overflow: "hidden",
+        minHeight: 63,
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: PROFILE_HEADER_BG,
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 10px",
+          minHeight: 63,
+          boxSizing: "border-box",
+        }}
+      >
+        <ProfileCardIconCloud />
+        <div
+          style={{
+            fontFamily: FONT,
+            fontWeight: 700,
+            fontSize: "1.5rem",
+            color: PROFILE_ACCENT,
+            lineHeight: 1.2,
+          }}
+        >
+          프로필
+        </div>
+      </div>
     </div>
   );
 }
@@ -220,73 +371,29 @@ function ProfileCard() {
         padding: "12px 14px 14px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "6px 10px",
-          border: `2px solid ${PROFILE_BORDER}`,
-          borderRadius: 15,
-          background: PROFILE_HEADER_BG,
-          marginBottom: 12,
-        }}
-      >
-        <ProfileCardIconCloud />
-        <div
-          style={{
-            fontFamily: FONT,
-            fontWeight: 700,
-            fontSize: "1.125rem",
-            color: PROFILE_ACCENT,
-            lineHeight: 1.2,
-          }}
-        >
-          프로필
-        </div>
-      </div>
+      <ProfileCardHeader />
+      <ProfileCardPhoto />
 
-      <div
-        style={{
-          border: `2px solid ${PROFILE_BORDER}`,
-          borderRadius: 15,
-          overflow: "hidden",
-          marginBottom: 12,
-          background: "#fff",
-        }}
-      >
-        <img
-          src="/assets/pixel-character.png"
-          alt="삐삐 프로필"
-          style={{
-            display: "block",
-            width: "100%",
-            height: "auto",
-            imageRendering: "pixelated",
-          }}
-          width={512}
-          height={512}
-        />
-      </div>
-
+      {/* Figma 480:176 + 480:178 */}
       <div
         style={{
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "space-between",
           gap: 8,
-          marginBottom: 10,
+          marginBottom: 8,
         }}
       >
         <p
           style={{
             margin: 0,
             fontFamily: FONT,
-            fontSize: "0.8125rem",
-            lineHeight: 1.5,
+            fontSize: "0.875rem",
+            lineHeight: 1.35,
             color: PROFILE_STATUS_FG,
             flex: 1,
             minWidth: 0,
+            whiteSpace: "nowrap",
           }}
         >
           모두에게 행복이 가득하길..~
@@ -294,6 +401,7 @@ function ProfileCard() {
         <ProfileCardIconClover />
       </div>
 
+      {/* Figma 480:179 + 480:180 */}
       <div
         style={{
           display: "flex",
@@ -301,7 +409,7 @@ function ProfileCard() {
           alignItems: "center",
           gap: 8,
           fontFamily: FONT,
-          fontSize: "0.75rem",
+          fontSize: "1.125rem",
           fontWeight: 700,
           color: PROFILE_ACCENT,
           whiteSpace: "nowrap",
@@ -314,30 +422,75 @@ function ProfileCard() {
   );
 }
 
-// ── TodayCard (Figma 451:48) ───────────────────────────────────────────────────
+// ── TodayCard (Figma 480:140) ─────────────────────────────────────────────────
+/** Figma 480:144 — 체리 아이콘 */
 function TodayCardIconCherry() {
+  return (
+    <img
+      alt=""
+      src="/assets/guestbook/today_card_cherry.png"
+      width={27}
+      height={26}
+      draggable={false}
+      style={{
+        display: "block",
+        width: 27,
+        height: 26,
+        flexShrink: 0,
+        mixBlendMode: "multiply",
+      }}
+    />
+  );
+}
+
+/** Figma 500:2 — 투데이 헤더 (480:142 + 480:143 + 480:144) */
+function TodayCardHeader() {
   return (
     <div
       style={{
         position: "relative",
-        width: 34,
-        height: 33,
+        marginBottom: 10,
+        width: "100%",
+        aspectRatio: "309.753 / 52.16",
+        border: `2px solid ${PROFILE_BORDER}`,
+        borderRadius: 15,
         overflow: "hidden",
-        flexShrink: 0,
+        boxSizing: "border-box",
       }}
     >
-      <img
-        alt=""
-        src="/assets/guestbook/today_card_cherry.png"
+      <div
+        aria-hidden
         style={{
           position: "absolute",
-          height: "316.46%",
-          width: "304.88%",
-          left: "-13.41%",
-          top: "-53.16%",
-          maxWidth: "none",
+          inset: 0,
+          background: PROFILE_HEADER_BG,
         }}
       />
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          height: "100%",
+          padding: "0 11px",
+          boxSizing: "border-box",
+        }}
+      >
+        <TodayCardIconCherry />
+        <div
+          style={{
+            fontFamily: FONT_TODAY_TITLE,
+            fontWeight: 400,
+            fontSize: "1.5rem",
+            color: PROFILE_ACCENT,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          TODAY is ...
+        </div>
+      </div>
     </div>
   );
 }
@@ -355,69 +508,126 @@ function TodayCard() {
         padding: "12px 14px 14px",
       }}
     >
-      <div
-        style={{
-          position: "relative",
-          marginBottom: 12,
-          borderRadius: 15,
-          overflow: "hidden",
-          border: `2px solid ${PROFILE_BORDER}`,
-          aspectRatio: "386 / 65",
-        }}
-      >
-        <img
-          alt=""
-          src="/assets/guestbook/today_card_top.png"
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 10px",
-          }}
-        >
-          <TodayCardIconCherry />
-          <div
-            style={{
-              fontFamily: FONT,
-              fontWeight: 700,
-              fontSize: "1.125rem",
-              color: PROFILE_ACCENT,
-              lineHeight: 1.2,
-            }}
-          >
-            TODAY is ...
-          </div>
-        </div>
-      </div>
+      <TodayCardHeader />
 
+      {/* Figma 480:145 */}
       <p
         style={{
           margin: 0,
           fontFamily: FONT,
-          fontSize: "0.8125rem",
-          lineHeight: 1.5,
+          fontSize: "1.125rem",
+          lineHeight: 1.35,
           color: PROFILE_STATUS_FG,
         }}
       >
-        모두에게 행복이 가득하길..~
+        기분 좋당
       </p>
     </div>
   );
 }
 
 const GUESTBOOK_MSG_MAX_LEN = 200;
+
+/** @type {import("react").CSSProperties} */
+const GUESTBOOK_INPUT_STYLE = {
+  fontFamily: FONT,
+  background: "#fff",
+  border: `1px solid ${PROFILE_BORDER}`,
+  borderRadius: 3,
+  padding: "0.5rem 0.75rem",
+  fontSize: "1rem",
+  color: PROFILE_STATUS_FG,
+  outline: "none",
+  width: "100%",
+  boxSizing: "border-box",
+  display: "block",
+};
+
+// ── Guestbook panel (Figma 480:135) ─────────────────────────────────────────────
+function GuestbookRibbonIcon() {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: 34,
+        height: 32,
+        overflow: "hidden",
+        flexShrink: 0,
+      }}
+    >
+      <img
+        alt=""
+        src="/assets/guestbook/guestbook_ribbon.png"
+        style={{
+          position: "absolute",
+          height: "308.64%",
+          width: "290.7%",
+          left: 0,
+          top: "-149.38%",
+          maxWidth: "none",
+        }}
+      />
+    </div>
+  );
+}
+
+function GuestbookHeader() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 10px",
+        border: `2px solid ${PROFILE_BORDER}`,
+        borderRadius: 15,
+        background: PROFILE_HEADER_BG,
+        marginBottom: 12,
+      }}
+    >
+      <GuestbookRibbonIcon />
+      <div
+        style={{
+          fontFamily: FONT,
+          fontWeight: 700,
+          fontSize: "1.5rem",
+          color: PROFILE_ACCENT,
+          lineHeight: 1.2,
+        }}
+      >
+        방명록
+      </div>
+    </div>
+  );
+}
+
+function GuestbookPhotoBox() {
+  return (
+    <div
+      style={{
+        width: GUESTBOOK_PHOTO_SIZE,
+        height: GUESTBOOK_PHOTO_SIZE,
+        flexShrink: 0,
+        background: "#fff",
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <img
+        alt=""
+        src="/assets/guestbook/profile_character.png"
+        style={{
+          width: "86%",
+          height: "86%",
+          objectFit: "contain",
+          imageRendering: "pixelated",
+        }}
+      />
+    </div>
+  );
+}
 
 /** Figma 453:58 — ♡는 DungGeunMo(로컬), 「등록하기」는 DOS Gothic */
 function GuestbookSubmitLabel() {
@@ -482,57 +692,70 @@ function GuestbookForm({ onSuccess }) {
     <form
       onSubmit={onSubmit}
       style={{
-        ...S.pixelCard,
-        padding: "1rem",
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.75rem",
+        background: GUESTBOOK_WRITE_BG,
+        borderTop: `2px solid ${GUESTBOOK_WRITE_BORDER}`,
+        borderBottom: `2px solid ${GUESTBOOK_WRITE_BORDER}`,
+        marginBottom: 12,
       }}
     >
-      <div style={{ fontSize: "0.875rem", fontWeight: 700, color: PINK }}>
-        ✎ 방명록 남기기
-      </div>
-      <input
-        style={S.pixelInput}
-        placeholder="이름"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <textarea
-        style={S.pixelInput}
-        rows={3}
-        placeholder="삐삐에게 한마디~ ♥"
-        value={msg}
-        maxLength={GUESTBOOK_MSG_MAX_LEN}
-        onChange={(e) => setMsg(e.target.value)}
-      />
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          gap: 12,
+          padding: "14px 12px 12px",
+          alignItems: "flex-start",
         }}
       >
-        <span style={{ fontSize: "0.6875rem", color: MUTED }}>
-          {msg.length}/{GUESTBOOK_MSG_MAX_LEN}
-        </span>
-        <button
-          type="submit"
-          className="guestbookEmbed-submitBtn"
-          disabled={submitting}
+        <GuestbookPhotoBox />
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
         >
-          {submitting ? "저장 중…" : <GuestbookSubmitLabel />}
-        </button>
+          <input
+            className="guestbookEmbed-input"
+            style={{ ...GUESTBOOK_INPUT_STYLE, height: 43 }}
+            placeholder="닉네임"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <textarea
+            className="guestbookEmbed-input"
+            style={{
+              ...GUESTBOOK_INPUT_STYLE,
+              minHeight: 99,
+              resize: "vertical",
+            }}
+            placeholder="자유롭게 하고싶은 말을 남겨주세요~"
+            value={msg}
+            maxLength={GUESTBOOK_MSG_MAX_LEN}
+            onChange={(e) => setMsg(e.target.value)}
+          />
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="submit"
+              className="guestbookEmbed-submitBtn"
+              disabled={submitting}
+            >
+              {submitting ? "저장 중…" : <GuestbookSubmitLabel />}
+            </button>
+          </div>
+        </div>
       </div>
       {toast && (
         <div
           style={{
-            borderRadius: "0.375rem",
-            border: `2px solid ${PINK}`,
-            background: PINK_SOFT,
+            margin: "0 12px 12px",
+            borderRadius: 10,
+            border: `1px solid ${PROFILE_BORDER}`,
+            background: "#fff",
             padding: "0.5rem 0.75rem",
             fontSize: "0.75rem",
-            color: PINK,
+            color: PROFILE_STATUS_FG,
           }}
         >
           {toast}
@@ -542,27 +765,83 @@ function GuestbookForm({ onSuccess }) {
   );
 }
 
-// ── GuestbookEntry ────────────────────────────────────────────────────────────
-function GuestbookEntry({ name, date, message }) {
+// ── GuestbookEntry (Figma 480:158) ────────────────────────────────────────────
+function GuestbookEntry({ index, name, date, message }) {
   return (
-    <div style={S.notePaper}>
+    <article>
       <div
         style={{
-          marginBottom: "0.5rem",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          fontSize: "0.6875rem",
-          color: PINK,
+          gap: 8,
+          height: 37,
+          padding: "0 12px",
+          background: GUESTBOOK_NAMEBAR_BG,
+          borderTop: `1px solid ${PROFILE_BORDER}`,
+          fontFamily: FONT,
+          boxSizing: "border-box",
         }}
       >
-        <span style={{ fontWeight: 700 }}>♥ {name}</span>
-        <span>{date}</span>
+        <span style={{ fontSize: "1rem", color: "#000", whiteSpace: "nowrap" }}>
+          NO.
+        </span>
+        <span
+          style={{
+            fontSize: "1rem",
+            color: "#000",
+            minWidth: "0.5rem",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {index}
+        </span>
+        <span
+          style={{
+            fontSize: "1.125rem",
+            fontWeight: 700,
+            color: PROFILE_ACCENT,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {name}
+        </span>
+        <span
+          style={{
+            fontSize: "0.8125rem",
+            color: GUESTBOOK_DATE_COLOR,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {date}
+        </span>
       </div>
-      <p style={{ fontSize: "0.75rem", lineHeight: 1.6, margin: 0 }}>
-        {message}
-      </p>
-    </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          padding: "12px",
+          background: "#fff",
+          alignItems: "flex-start",
+        }}
+      >
+        <GuestbookPhotoBox />
+        <p
+          style={{
+            margin: 0,
+            flex: 1,
+            minWidth: 0,
+            fontFamily: FONT,
+            fontSize: "1.25rem",
+            lineHeight: 1.35,
+            color: "#000",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {message}
+        </p>
+      </div>
+    </article>
   );
 }
 
@@ -580,272 +859,119 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
     const base = getGumServerBaseUrl();
     fetch(`${base}/api/posts`)
       .then((r) => r.json())
-      .then((d) => setPosts(d.posts ?? []))
+      .then((d) => setPosts(sortPostsNewestFirst(d.posts ?? [])))
       .catch(() => setPosts([]))
       .finally(() => setPostsLoading(false));
   }, []);
 
   function handlePostAdded(post) {
-    setPosts((prev) => [post, ...prev]);
+    setPosts((prev) => sortPostsNewestFirst([post, ...prev]));
   }
 
   const isFullscreen = variant === "fullscreen";
 
   return (
     <>
-      <style>{`${FONT_CSS}\n${GUESTBOOK_HIDE_SCROLLBAR_CSS}\n${GUESTBOOK_SUBMIT_BTN_CSS}`}</style>
+      <style>{`${FONT_CSS}\n${GUESTBOOK_HIDE_SCROLLBAR_CSS}\n${GUESTBOOK_INPUT_CSS}\n${GUESTBOOK_SUBMIT_BTN_CSS}`}</style>
       <div
+        className={isFullscreen ? "guestbookEmbed-hideScrollbar" : undefined}
         style={{
           fontFamily: FONT,
           color: FG,
           WebkitFontSmoothing: "none",
           MozOsxFontSmoothing: "grayscale",
           imageRendering: "pixelated",
-          ...(isFullscreen && { width: "100%" }),
+          width: "100%",
+          boxSizing: "border-box",
+          ...(isFullscreen && {
+            maxHeight: "min(880px, calc(100dvh - 64px))",
+            overflowY: "auto",
+          }),
         }}
       >
-        {/* pixel-card overflow-hidden (BrowserFrame) */}
         <div
-          className={isFullscreen ? "guestbookEmbed-hideScrollbar" : undefined}
           style={{
-            ...S.pixelCard,
-            ...(isFullscreen && {
-              width: "100%",
-              maxHeight: "min(880px, calc(100dvh - 64px))",
-              overflowY: "auto",
-              boxSizing: "border-box",
-            }),
+            display: "grid",
+            gridTemplateColumns: "280px minmax(0, 1fr)",
+            gap: "1rem",
+            width: "100%",
           }}
         >
-          {/* 타이틀바 */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              borderBottom: `2px solid ${PINK}`,
-              background: PINK_MID,
-              padding: "0.5rem 0.75rem",
+              flexDirection: "column",
+              gap: "1rem",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                color: "#fff",
-                fontSize: "0.875rem",
-              }}
-            >
-              <span>♥</span>
-              <span>ppippi&apos;s mini home</span>
-            </div>
-            <div style={{ display: "flex", gap: "0.375rem" }}>
-              {["_", "□"].map((label, i) => (
-                <span
-                  key={i}
-                  style={{
-                    display: "grid",
-                    placeItems: "center",
-                    width: "1.25rem",
-                    height: "1.25rem",
-                    borderRadius: "50%",
-                    border: `2px solid ${PINK}`,
-                    background: "#fff",
-                    fontSize: "0.625rem",
-                    color: PINK,
-                  }}
-                >
-                  {label}
-                </span>
-              ))}
-              <span
-                onClick={onClose}
-                style={{
-                  display: "grid",
-                  placeItems: "center",
-                  width: "1.25rem",
-                  height: "1.25rem",
-                  borderRadius: "50%",
-                  border: `2px solid ${PINK}`,
-                  background: PINK,
-                  fontSize: "0.625rem",
-                  color: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                ✕
-              </span>
-            </div>
+            <GuestbookTitle />
+            <ProfileCard />
+            <TodayCard />
           </div>
 
-          {/* URL바 */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              borderBottom: `2px solid ${PINK}`,
-              background: "#fff0f6",
-              padding: "0.375rem 0.75rem",
-              color: PINK,
-              fontSize: "0.875rem",
-            }}
-          >
-            <span>←</span>
-            <span>→</span>
-            <span>⟳</span>
+          <div style={{ minWidth: 0 }}>
             <div
               style={{
-                flex: 1,
+                width: "100%",
+                boxSizing: "border-box",
+                border: `3px solid ${PROFILE_BORDER}`,
+                borderRadius: 23,
+                boxShadow: PROFILE_OUTER_SHADOW,
+                background: PROFILE_CARD_BG,
+                padding: "12px 14px 14px",
                 overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                borderRadius: "999px",
-                border: `2px solid ${PINK}`,
-                background: "#fff",
-                padding: "0.25rem 0.75rem",
-                fontSize: "0.75rem",
-                color: PINK,
-                marginLeft: "0.5rem",
               }}
             >
-              🔒 https://ppippi.home/
-            </div>
-            <span>★</span>
-          </div>
+              <GuestbookHeader />
+              <GuestbookForm onSuccess={handlePostAdded} />
 
-          {/* 컨텐츠 영역 */}
-          <div
-            style={{
-              background: "rgba(255,245,250,0.6)",
-              padding: "1rem 2rem 2rem",
-            }}
-          >
-            {/* PixelNav */}
-            <nav
-              style={{
-                marginBottom: "1.5rem",
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: "0.75rem",
-              }}
-            >
               <div
+                className="guestbookEmbed-hideScrollbar"
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  color: PINK,
+                  maxHeight: isFullscreen
+                    ? "min(430px, calc(100dvh - 400px))"
+                    : "430px",
+                  overflowY: "auto",
                 }}
               >
-                <span style={{ fontSize: "1.5rem" }}>♥</span>
-                <span style={{ fontSize: "1.125rem", fontWeight: 700 }}>
-                  삐삐홈
-                </span>
-              </div>
-            </nav>
-
-            {/* 2컬럼 그리드 */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "280px minmax(0,1fr)",
-                gap: "1rem",
-              }}
-            >
-              {/* 좌: 프로필 + 오늘 */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "1rem",
-                }}
-              >
-                <ProfileCard />
-                <TodayCard />
-              </div>
-
-              {/* 우: 방명록 */}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ ...S.pixelCard, padding: "1rem 1.5rem" }}>
+                {postsLoading ? (
                   <div
                     style={{
-                      marginBottom: "1rem",
-                      display: "flex",
-                      alignItems: "flex-end",
-                      justifyContent: "space-between",
-                      borderBottom: `2px dashed ${PINK}`,
-                      paddingBottom: "0.5rem",
+                      fontFamily: FONT,
+                      fontSize: "0.875rem",
+                      color: GUESTBOOK_DATE_COLOR,
+                      textAlign: "center",
+                      padding: "1.5rem 0",
+                      background: "#fff",
                     }}
                   >
-                    <h2
-                      style={{
-                        fontSize: "1.125rem",
-                        fontWeight: 700,
-                        color: PINK,
-                        margin: 0,
-                      }}
-                    >
-                      ✎ 방명록
-                    </h2>
-                    <span style={{ fontSize: "0.6875rem", color: MUTED }}>
-                      총 <b style={{ color: PINK }}>{posts.length}</b>개의
-                      메시지
-                    </span>
+                    불러오는 중…
                   </div>
-
-                  <GuestbookForm onSuccess={handlePostAdded} />
-
+                ) : posts.length === 0 ? (
                   <div
-                    className="guestbookEmbed-hideScrollbar"
                     style={{
-                      marginTop: "1.25rem",
-                      maxHeight: isFullscreen
-                        ? "min(430px, calc(100dvh - 400px))"
-                        : "430px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.75rem",
-                      overflowY: "auto",
-                      paddingRight: "0.5rem",
+                      fontFamily: FONT,
+                      fontSize: "0.875rem",
+                      color: GUESTBOOK_DATE_COLOR,
+                      textAlign: "center",
+                      padding: "1.5rem 0",
+                      background: "#fff",
+                      borderTop: `1px solid ${PROFILE_BORDER}`,
                     }}
                   >
-                    {postsLoading ? (
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: MUTED,
-                          textAlign: "center",
-                          padding: "1.5rem 0",
-                        }}
-                      >
-                        불러오는 중…
-                      </div>
-                    ) : posts.length === 0 ? (
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: MUTED,
-                          textAlign: "center",
-                          padding: "1.5rem 0",
-                        }}
-                      >
-                        첫 방명록을 남겨주세요 ♥
-                      </div>
-                    ) : (
-                      posts.map((p) => (
-                        <GuestbookEntry
-                          key={p.id}
-                          name={p.nickname ?? "익명"}
-                          date={formatDate(p.created_at)}
-                          message={p.content}
-                        />
-                      ))
-                    )}
+                    첫 방명록을 남겨주세요 ♥
                   </div>
-                </div>
+                ) : (
+                  posts.map((p, i) => (
+                    <GuestbookEntry
+                      key={p.id}
+                      index={posts.length - i}
+                      name={p.nickname ?? "익명"}
+                      date={formatGuestbookDate(p.created_at)}
+                      message={p.content}
+                    />
+                  ))
+                )}
               </div>
             </div>
           </div>

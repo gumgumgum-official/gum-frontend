@@ -400,7 +400,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   pointerEvents: zoomedPoster ? "auto" : "none",
                   ...(zoomedPoster === "guestbook"
                     ? {
-                        backgroundColor: "#fff",
                         backgroundImage: `url(${NOTICE.guestbookFullscreenBg})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
