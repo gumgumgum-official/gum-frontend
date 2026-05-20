@@ -564,18 +564,22 @@ export function createStage3InteractionsController({
       if (isBenchIntObject(obj)) return;
       const suffix = obj.name.slice(STAGE3_INT_PREFIX.length);
       const intTarget = intSuffixToTarget(suffix);
+      if (intTarget == null) return;
       obj.updateMatrixWorld(true);
       _camAssistBox.setFromObject(obj);
       if (_camAssistBox.isEmpty()) return;
       _camAssistBox.getBoundingSphere(_camAssistSphere);
       const isWell = intTarget === "well";
+      const isVendingMachine = intTarget === "vendingMachine";
       const anchorWorld = new THREE.Vector3(
         isWell
           ? _camAssistBox.max.x + 0.5
           : (_camAssistBox.min.x + _camAssistBox.max.x) * 0.5,
         isWell
-          ? (_camAssistBox.min.y + _camAssistBox.max.y) * 0.5 + 0.25
-          : _camAssistBox.max.y + STAGE3_INT_CLICK_HINT_OFFSET_Y,
+          ? (_camAssistBox.min.y + _camAssistBox.max.y) * 0.5 + 0.6
+          : isVendingMachine
+            ? _camAssistBox.max.y - 0.7
+            : _camAssistBox.max.y + STAGE3_INT_CLICK_HINT_OFFSET_Y,
         (_camAssistBox.min.z + _camAssistBox.max.z) * 0.5,
       );
       intProximityTargets.push({

@@ -28,7 +28,7 @@ export const STAGE6_CONFIG = {
   /** initThreeApp 기본 노출 대비 Stage6에서만 밝게 (WebGLRenderer.toneMappingExposure 가산) */
   toneMappingExposureDelta: 0.18,
   model: {
-    path: "/models/stage6/airport5.glb",
+    path: "/models/stage6/airport6.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -62,7 +62,7 @@ export const STAGE6_CONFIG = {
       STAGE6_USER_GROUND_OFFSET_MIN,
     ),
     moveSpeed: STAGE6_MOVE_SPEED,
-    spawnOffset: { x: -2.5, z: -0.5 },
+    spawnOffset: { x: 0.5, z: -3.8 },
     /** 캐릭터 초기 바라보는 방향(도). 필요 시 음수/양수로 조정 */
     spawnRotationDeg: 0,
     escalatorFrontDistance: 1.15,
