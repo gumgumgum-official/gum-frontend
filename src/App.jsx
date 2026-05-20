@@ -285,7 +285,7 @@ function AppLayout() {
       >
         {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
           ? "전화 중 📞"
-          : "전화 왔어요 ☎️"}
+          : "☎️ 전화 왔어요"}
       </div>
       {showKioskCanvas && (
         <div

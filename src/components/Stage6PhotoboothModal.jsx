@@ -113,7 +113,9 @@ export function Stage6PhotoboothModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="stage6-photobooth-modal-header">
-          <span className="stage6-photobooth-modal-title">GUM WORLD PHOTO</span>
+          <span className="stage6-photobooth-modal-title">
+            ✦ GGUM WORLD PHOTO ✦
+          </span>
           <button
             type="button"
             className="stage6-photobooth-modal-close"
@@ -124,27 +126,40 @@ export function Stage6PhotoboothModal({
           </button>
         </div>
 
-        <div className="stage6-photobooth-video-wrapper">
-          <video
-            ref={videoRef}
-            className="stage6-photobooth-modal-video"
-            src={videoSrc}
-            playsInline
-            autoPlay
-            muted
-            controls={false}
-          />
+        <div className="stage6-photobooth-modal-body">
+          <div className="stage6-photobooth-video-wrapper">
+            <video
+              ref={videoRef}
+              className="stage6-photobooth-modal-video"
+              src={videoSrc}
+              playsInline
+              autoPlay
+              muted
+              controls={false}
+            />
+          </div>
 
           {showPhotos && (
-            <div className="stage6-photobooth-photo-cards">
+            <div className="stage6-photobooth-strip">
               {photos.map((src, i) => (
-                <div
-                  key={src}
-                  className={`stage6-photobooth-photo-card stage6-photobooth-photo-card--${i + 1}${revealed[i] ? " revealed" : ""}`}
-                >
-                  <img src={src} alt={`포토 ${i + 1}`} draggable={false} />
+                <div className="stage6-photobooth-frame" key={i}>
+                  <img
+                    src={src}
+                    alt={`포토 ${i + 1}`}
+                    className={revealed[i] ? "revealed" : ""}
+                    draggable={false}
+                  />
+                  <span className="stage6-photobooth-frame-num">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
                 </div>
               ))}
+              <img
+                src="/assets/photo_booth/photo_logo.png"
+                alt="GGUM WORLD PHOTO"
+                className="stage6-photobooth-strip-logo"
+                draggable={false}
+              />
             </div>
           )}
         </div>
