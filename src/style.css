@@ -319,6 +319,8 @@ body {
 /* Stage3 텐트(타로) 씬 자막 — split pill + 껌딱지 말풍선 폰트 */
 .subtitle-container--tent {
   --tent-subtitle-font-size: 22px;
+  --tent-subtitle-line-height: 1.32;
+  --tent-subtitle-padding-y: 6px;
   max-width: 680px;
   width: calc(100% - 48px);
 }
@@ -348,10 +350,11 @@ body {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 4px 0 0 4px;
-  padding: 10px 18px;
+  padding: var(--tent-subtitle-padding-y) 14px;
   white-space: nowrap;
   flex-shrink: 0;
   font-size: var(--tent-subtitle-font-size);
+  line-height: var(--tent-subtitle-line-height);
   font-weight: 400;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
@@ -376,14 +379,14 @@ body {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 0 4px 4px 0;
-  padding: 10px 22px;
+  padding: var(--tent-subtitle-padding-y) 18px;
   font-size: var(--tent-subtitle-font-size);
   font-weight: 400;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   color: rgba(255, 255, 255, 0.92);
   letter-spacing: 0.04em;
-  line-height: 1.55;
+  line-height: var(--tent-subtitle-line-height);
 }
 
 .subtitle-container--tent
