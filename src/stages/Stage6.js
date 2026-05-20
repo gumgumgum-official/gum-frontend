@@ -262,6 +262,7 @@ export function Stage6() {
   /** @type {Array<THREE.Material & { emissive?: THREE.Color, emissiveIntensity?: number, userData?: Record<string, any> }>} */
   const telEmissiveMaterials = [];
   let isSceneInteractionLocked = false;
+  let isAnnouncementActive = false;
   let isFinishFired = false;
   let isBoardingPassIssued = false;
   let isEscalatorRiding = false;
@@ -472,11 +473,11 @@ export function Stage6() {
     const runAnnounceFallback = () => {
       if (announceFallbackFired || !isStage6Active) return;
       announceFallbackFired = true;
-      isSceneInteractionLocked = false;
       const cues = STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES ?? [];
       let cueIdx = 0;
       const showNextCue = () => {
         if (!isStage6Active || cueIdx >= cues.length) {
+          isAnnouncementActive = false;
           dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
           telActivateTimeoutId = window.setTimeout(() => {
             telActivateTimeoutId = 0;
@@ -512,8 +513,8 @@ export function Stage6() {
     airportAnnounceIntroAudio.onended = () => {
       activeSubtitleCueIndex = -1;
       isAirportSubtitleVisible = false;
+      isAnnouncementActive = false;
       dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
-      isSceneInteractionLocked = false;
       telActivateTimeoutId = window.setTimeout(() => {
         telActivateTimeoutId = 0;
         activateTelRinging();
@@ -661,6 +662,7 @@ export function Stage6() {
   const handleKeyDown = (event) => {
     if (
       isSceneInteractionLocked ||
+      isAnnouncementActive ||
       isLoadingOverlayVisible() ||
       isFinishFired
     ) {
@@ -834,7 +836,7 @@ export function Stage6() {
       const action = charMixer.clipAction(escClip);
       action.setLoop(THREE.LoopRepeat, Infinity);
       action.clampWhenFinished = false;
-      action.timeScale = 0.25;
+      action.timeScale = 0.125;
       action.play();
     } else {
       console.warn("[Stage6] anim clip not found: Escalator_Steps");
@@ -1227,7 +1229,8 @@ export function Stage6() {
         scene,
         glbLoader,
         config,
-        getKeys: () => (isSceneInteractionLocked ? {} : keyboard.keys),
+        getKeys: () =>
+          isSceneInteractionLocked || isAnnouncementActive ? {} : keyboard.keys,
       });
       keyboard.mount();
 
@@ -1260,6 +1263,7 @@ export function Stage6() {
       telRootRef = null;
       telEmissiveMaterials.length = 0;
       isSceneInteractionLocked = false;
+      isAnnouncementActive = false;
       isFinishFired = false;
       isBoardingPassIssued = false;
       isEscalatorRiding = false;
@@ -1295,8 +1299,8 @@ export function Stage6() {
       onPointerDown = (event) => {
         const hit = getPointerHitTarget(event);
         if (!hit) return;
+        if (isSceneInteractionLocked || isAnnouncementActive) return;
         const isCharacterHit = CHAR_ROOT_NAMES.includes(hit.intName);
-        if (isSceneInteractionLocked && !isCharacterHit) return;
         if (hit.target === "photobooth") {
           playUiClickSound();
           hideTelBubble();
@@ -1357,7 +1361,7 @@ export function Stage6() {
       };
       canvas.addEventListener("pointerdown", onPointerDown, { capture: true });
       onPointerMove = (event) => {
-        if (isSceneInteractionLocked) {
+        if (isSceneInteractionLocked || isAnnouncementActive) {
           canvas.style.cursor = "default";
           hoveredCharacterName = null;
           hideCharBubble();
@@ -1380,7 +1384,7 @@ export function Stage6() {
       charBubbleEl = createCharBubbleEl();
       telBubbleEl = createTelBubbleEl();
 
-      isSceneInteractionLocked = true;
+      isAnnouncementActive = true;
 
       // 배경 GLB 로드: 템플릿 캐시 (animated 씬은 gltf.scene 직접 사용)
       void loadGltfTemplateCached(stage6ModelUrl)
@@ -1574,6 +1578,7 @@ export function Stage6() {
           const characterController = /** @type {any} */ (character);
           characterController?.setup(floorY, bounds, staticColliderBoxes, {
             worldSpawnXZ: { x: spawnX, z: spawnZ },
+            allowedBoundsXZ: bounds,
           });
 
           // GLB 씬이 실제로 준비된 뒤에 공항 안내 오디오/자막 시퀀스를 시작
@@ -1958,6 +1963,7 @@ export function Stage6() {
       telEmissiveTarget = 0;
       telCallIndex = 0;
       isSceneInteractionLocked = false;
+      isAnnouncementActive = false;
       intRaycastMeshes.length = 0;
 
       bagPhysics.cleanup();
