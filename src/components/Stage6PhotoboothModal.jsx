@@ -232,7 +232,7 @@ export function Stage6PhotoboothModal({
           {showPhotos && (
             <div className="stage6-photobooth-strip">
               {photos.map((src, i) => (
-                <div className="stage6-photobooth-frame" key={i}>
+                <div className="stage6-photobooth-frame" key={src}>
                   <img
                     src={src}
                     alt={`포토 ${i + 1}`}
