@@ -33,6 +33,7 @@ import {
   FRAGMENT_FADE_END,
   FLOWER_BLOOM_DURATION,
   FLOWER_SCALE,
+  FLOWER_SCALE_MIN_RATIO,
   FLOWER_Y_OFFSET,
   FRAGMENT_POOL_MAX,
   FLOWER_MIN_DISTANCE,
@@ -41,7 +42,6 @@ import {
   playRandomCrackSound,
   playCrackFinalSound,
   playFlowerMagicSound,
-  playDropSound,
 } from "../playCrackSound.js";
 import { supabase } from "../../../../lib/supabase/client.js";
 import { getSessionId } from "../../../../lib/session.js";
@@ -104,6 +104,7 @@ export function createStage3LetterController({
   const spawnedFlowerXZ = [];
 
   const _hitOriginScratch = new THREE.Vector3();
+  const _flowerBBoxSize = new THREE.Vector3();
 
   function addLetterColliderIfNeeded() {
     const collidersRef = getCollidersRef();
@@ -410,7 +411,6 @@ export function createStage3LetterController({
       s.velocity.rotationZ = 0;
       setReadableRotationTowardCamera(s.group, camera);
       s.landed = true;
-      playDropSound();
       addLetterColliderIfNeeded();
       return;
     }
@@ -536,6 +536,11 @@ export function createStage3LetterController({
     return resolvePublicAssetUrl(rel);
   }
 
+  function pickRandomFlowerScale() {
+    const min = FLOWER_SCALE * FLOWER_SCALE_MIN_RATIO;
+    return min + Math.random() * (FLOWER_SCALE - min);
+  }
+
   function disposeStandaloneFlowerGroup(g) {
     const scene = getScene();
     if (!g) return;
@@ -593,6 +598,17 @@ export function createStage3LetterController({
         flowerInner.updateMatrixWorld(true);
         const innerBox = new THREE.Box3().setFromObject(flowerInner);
         if (!innerBox.isEmpty()) {
+          innerBox.getSize(_flowerBBoxSize);
+          const maxDim = Math.max(
+            _flowerBBoxSize.x,
+            _flowerBBoxSize.y,
+            _flowerBBoxSize.z,
+          );
+          if (maxDim > 1e-6) {
+            flowerInner.scale.multiplyScalar(1 / maxDim);
+            flowerInner.updateMatrixWorld(true);
+            innerBox.setFromObject(flowerInner);
+          }
           flowerInner.position.y -= innerBox.min.y;
         }
         const container = new THREE.Group();
@@ -601,7 +617,11 @@ export function createStage3LetterController({
         container.rotation.y = Math.random() * Math.PI * 2;
         container.scale.setScalar(0);
         getScene()?.add(container);
-        standaloneFlowers.push({ group: container, age: 0 });
+        standaloneFlowers.push({
+          group: container,
+          age: 0,
+          targetScale: pickRandomFlowerScale(),
+        });
         if (!flowerMagicPlayed) {
           flowerMagicPlayed = true;
           playFlowerMagicSound();
@@ -614,14 +634,20 @@ export function createStage3LetterController({
   function updateStandaloneFlowers(delta) {
     for (let i = standaloneFlowers.length - 1; i >= 0; i--) {
       const s = standaloneFlowers[i];
-      if (s.age >= FLOWER_BLOOM_DURATION) continue;
+      const scale = s.targetScale ?? FLOWER_SCALE;
+      if (s.age >= FLOWER_BLOOM_DURATION) {
+        if (s.group.scale.x < scale * 0.999) {
+          s.group.scale.setScalar(scale);
+        }
+        continue;
+      }
       s.age += delta;
       if (s.age < FLOWER_BLOOM_DURATION) {
         const bt = s.age / FLOWER_BLOOM_DURATION;
         const bloomEase = 1 - (1 - bt) ** 3;
-        s.group.scale.setScalar(bloomEase * FLOWER_SCALE);
+        s.group.scale.setScalar(bloomEase * scale);
       } else {
-        s.group.scale.setScalar(FLOWER_SCALE);
+        s.group.scale.setScalar(scale);
       }
     }
   }

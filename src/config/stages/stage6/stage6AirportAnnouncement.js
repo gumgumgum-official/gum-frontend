@@ -3,6 +3,9 @@
 /** 공항 안내방송 자막 싱크 보정(초) */
 export const STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_LEAD_SEC = 0.75;
 
+/** 안내방송 종료 후 공중전화 벨 울림까지 대기(ms) */
+export const STAGE6_TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS = 8000;
+
 /** 공항 안내방송 자막 큐 */
 export const STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES = [
   {

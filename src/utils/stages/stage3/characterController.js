@@ -6,7 +6,6 @@ import {
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
-import { sampleStage3WalkableGroundY } from "./island/stage3IslandWalkable.js";
 
 const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
@@ -40,9 +39,7 @@ function findClip(clips, regex) {
  *     setupOptions?: {
  *       worldSpawnXZ?: { x: number, z: number },
  *       walkableMeshes?: import("three").Mesh[],
- *       walkableBounds?: import("three").Box3 | null,
- *       movementBoundsXZ?: import("three").Box3 | null,
- *       islandModel?: import("three").Object3D | null,
+ *       allowedBoundsXZ?: import("three").Box3 | null,
  *     },
  *   ) => void,
  *   update: (
@@ -60,6 +57,9 @@ function findClip(clips, regex) {
  *     options?: { reverse?: boolean },
  *   ) => void,
  *   isPunching: () => boolean,
+ *   applyIslandWalkableBounds: (
+ *     allowedBounds: import("three").Box3 | null,
+ *   ) => void,
  * }}
  */
 export function createCharacterController({
@@ -97,20 +97,14 @@ export function createCharacterController({
   let punchAction = null;
   let isPunchPlaying = false;
   let impactTimeoutId = null;
-  /** 스폰 시점의 캐릭터 yaw — 펀치 시 항상 이 방향을 바라보게 고정 */
-  let spawnFacingYaw = 0;
 
   // 경계 clamp 값 — setup()에서 1회 계산, update() 매 프레임 재사용
   let _minCx = 0,
     _maxCx = 0,
     _minCz = 0,
     _maxCz = 0;
-  /** walkable bbox 기준 최저 안전 지면 Y (물·절벽 레이 히트 거부용) */
-  let minSafeGroundY = null;
-  /** walkable 레이캐스트 시작 높이 */
-  let groundRayOriginY = 30;
-  /** @type {import("three").Object3D | null} */
-  let islandModelForRaycast = null;
+  /** @type {import("three").Box3 | null} */
+  let allowedBoundsXZ = null;
 
   const _moveVector = new THREE.Vector3();
   const _direction = new THREE.Vector3();
@@ -118,9 +112,14 @@ export function createCharacterController({
   const _targetPosition = new THREE.Vector3();
   const _lookAtPosition = new THREE.Vector3();
   const _worldUp = new THREE.Vector3(0, 1, 0);
+  const _groundRaycaster = new THREE.Raycaster();
+  const _groundRayOrigin = new THREE.Vector3();
+  const _groundDown = new THREE.Vector3(0, -1, 0);
+  const _groundHits = [];
   const _headAnchorBox = new THREE.Box3();
   const GROUND_MISS_TOLERANCE_FRAMES = 5;
   const GROUND_HEIGHT_EASE_SPEED = 16;
+  const MAX_SAFE_STEP_DOWN = 0.22;
   const MIN_SAFE_GROUND_OFFSET = 0.12;
 
   function getWalkSoundVolume() {
@@ -176,70 +175,52 @@ export function createCharacterController({
   }
 
   return {
+    /**
+     * walkable 수집이 끝난 뒤 이동 허용 XZ만 갱신한다(콜라이더 배열은 동일 참조로 push).
+     * @param {THREE.Box3 | null} allowedBounds
+     */
+    applyIslandWalkableBounds(allowedBounds) {
+      allowedBoundsXZ =
+        allowedBounds instanceof THREE.Box3 && !allowedBounds.isEmpty()
+          ? allowedBounds.clone()
+          : null;
+    },
+
     setup(backgroundMaxY, bounds, colliderBoxes = [], setupOptions = {}) {
       const {
         worldSpawnXZ,
         walkableMeshes,
-        walkableBounds,
-        movementBoundsXZ,
-        islandModel,
+        allowedBoundsXZ: allowedBounds,
       } = setupOptions;
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
-      islandModelForRaycast = islandModel ?? null;
       walkableGroundMeshes = Array.isArray(walkableMeshes)
         ? walkableMeshes
         : [];
+      allowedBoundsXZ =
+        allowedBounds instanceof THREE.Box3 && !allowedBounds.isEmpty()
+          ? allowedBounds.clone()
+          : null;
       baseGroundY = backgroundMaxY;
       resolvedGroundY = backgroundMaxY;
       groundMissFrames = 0;
-      if (walkableBounds instanceof THREE.Box3 && !walkableBounds.isEmpty()) {
-        groundRayOriginY = walkableBounds.max.y + 30;
-      } else {
-        groundRayOriginY = backgroundMaxY + 30;
-      }
-      minSafeGroundY = baseGroundY - MIN_SAFE_GROUND_OFFSET;
-
-      const raycastGroundAt = (x, z) => {
-        if (!walkableGroundMeshes.length) return null;
-        islandModelForRaycast?.updateMatrixWorld(true);
-        return sampleStage3WalkableGroundY(
-          x,
-          z,
-          walkableGroundMeshes,
-          groundRayOriginY,
-        );
-      };
-
-      const applyGroundCalibration = (x, z) => {
-        const sampled = raycastGroundAt(x, z);
-        if (sampled == null) return false;
-        baseGroundY = sampled;
-        resolvedGroundY = sampled;
-        minSafeGroundY = sampled - MIN_SAFE_GROUND_OFFSET * 4;
-        return true;
-      };
 
       const { boundsPadding } = config.character;
-      const clampBox =
-        movementBoundsXZ instanceof THREE.Box3 && !movementBoundsXZ.isEmpty()
-          ? movementBoundsXZ
-          : bounds;
       _minCx = Math.min(
-        clampBox.min.x + boundsPadding,
-        clampBox.max.x - boundsPadding,
+        bounds.min.x + boundsPadding,
+        bounds.max.x - boundsPadding,
       );
       _maxCx = Math.max(
-        clampBox.min.x + boundsPadding,
-        clampBox.max.x - boundsPadding,
+        bounds.min.x + boundsPadding,
+        bounds.max.x - boundsPadding,
       );
       _minCz = Math.min(
-        clampBox.min.z + boundsPadding,
-        clampBox.max.z - boundsPadding,
+        bounds.min.z + boundsPadding,
+        bounds.max.z - boundsPadding,
       );
       _maxCz = Math.max(
-        clampBox.min.z + boundsPadding,
-        clampBox.max.z - boundsPadding,
+        bounds.min.z + boundsPadding,
+        bounds.max.z - boundsPadding,
       );
 
       const characterUrl = resolvePublicAssetUrl(
@@ -285,15 +266,15 @@ export function createCharacterController({
             spawnZ = 0;
           if (worldSpawnXZ && Number.isFinite(worldSpawnXZ.x)) {
             spawnX = worldSpawnXZ.x;
-            spawnZ = worldSpawnXZ.z ?? 0;
+            spawnZ = worldSpawnXZ.z;
           } else if (!bounds.isEmpty()) {
             spawnX = (bounds.min.x + bounds.max.x) * 0.5;
             spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
-            const off = config.character?.spawnOffset;
-            if (off) {
-              spawnX += off.x ?? 0;
-              spawnZ += off.z ?? 0;
-            }
+          }
+          const off = config.character?.spawnOffset;
+          if (off) {
+            spawnX += off.x ?? 0;
+            spawnZ += off.z ?? 0;
           }
           const charCfg = /** @type {any} */ (config.character);
           const spawnRotationRadRaw = Number(charCfg?.spawnRotationRad);
@@ -304,15 +285,10 @@ export function createCharacterController({
               ? THREE.MathUtils.degToRad(spawnRotationDegRaw)
               : null;
 
-          if (applyGroundCalibration(spawnX, spawnZ)) {
-            characterYPosition = baseGroundY + characterGroundLift;
-          }
-
           characterModel.position.set(spawnX, characterYPosition, spawnZ);
           if (spawnYaw != null) {
             characterModel.rotation.y = spawnYaw;
           }
-          spawnFacingYaw = characterModel.rotation.y;
           if (idleCharacterModel) {
             idleCharacterModel.position.set(spawnX, characterYPosition, spawnZ);
             if (spawnYaw != null) {
@@ -421,22 +397,22 @@ export function createCharacterController({
 
       const sampleGroundY = (x, z) => {
         if (!walkableGroundMeshes.length) return baseGroundY;
-        islandModelForRaycast?.updateMatrixWorld(true);
-        return sampleStage3WalkableGroundY(
-          x,
-          z,
+        _groundRayOrigin.set(x, baseGroundY + 30, z);
+        _groundRaycaster.set(_groundRayOrigin, _groundDown);
+        _groundHits.length = 0;
+        _groundRaycaster.intersectObjects(
           walkableGroundMeshes,
-          groundRayOriginY,
+          false,
+          _groundHits,
         );
+        return _groundHits.length > 0 ? _groundHits[0].point.y : null;
       };
-
-      const getMinSafeGroundY = () =>
-        minSafeGroundY ?? baseGroundY - MIN_SAFE_GROUND_OFFSET;
 
       const resolveGroundY = (x, z) => {
         const sampledGroundY = sampleGroundY(x, z);
         const isSafeSample =
-          sampledGroundY != null && sampledGroundY >= getMinSafeGroundY();
+          sampledGroundY != null &&
+          sampledGroundY >= baseGroundY - MIN_SAFE_GROUND_OFFSET;
         if (isSafeSample) {
           groundMissFrames = 0;
           resolvedGroundY = sampledGroundY;
@@ -448,6 +424,17 @@ export function createCharacterController({
         }
         return resolvedGroundY;
       };
+      const isInsideAllowedBoundsXZ = (x, z) => {
+        // bounds 미적용 시 이동 불가(deferred walkable 대기·실패 시 안전)
+        if (!allowedBoundsXZ) return false;
+        return (
+          x >= allowedBoundsXZ.min.x &&
+          x <= allowedBoundsXZ.max.x &&
+          z >= allowedBoundsXZ.min.z &&
+          z <= allowedBoundsXZ.max.z
+        );
+      };
+
       if (isPunchPlaying) {
         if (punchMixer) punchMixer.update(delta);
         syncWalkSound(false);
@@ -484,7 +471,6 @@ export function createCharacterController({
           _minCz,
           _maxCz,
         );
-        const feetY = characterModel.position.y - characterGroundLift;
         const slid = slideMoveXZAgainstAABBs(
           oldX,
           oldZ,
@@ -492,25 +478,25 @@ export function createCharacterController({
           clampedZ,
           collisionRadius,
           staticColliderBoxes,
-          feetY,
         );
         const candidateX = slid.x;
         const candidateZ = slid.z;
-        const movedXZ =
-          Math.abs(candidateX - oldX) > 1e-6 ||
-          Math.abs(candidateZ - oldZ) > 1e-6;
-
-        // XZ 이동은 바운딩·정적 충돌만 적용. Y(지면)는 아래 resolveGroundY에서 처리.
-        // (walkable 레이 실패·Island bbox Y 오차로 XZ가 막히던 문제 방지)
-        const targetX = movedXZ ? candidateX : oldX;
-        const targetZ = movedXZ ? candidateZ : oldZ;
-
-        if (movedXZ) {
+        const sampledCandidateGroundY = sampleGroundY(candidateX, candidateZ);
+        const isAboveMinSafeGround =
+          sampledCandidateGroundY != null &&
+          sampledCandidateGroundY >= baseGroundY - MIN_SAFE_GROUND_OFFSET;
+        const wouldFallTooFar =
+          isAboveMinSafeGround &&
+          sampledCandidateGroundY < resolvedGroundY - MAX_SAFE_STEP_DOWN;
+        const canMoveToCandidate =
+          isInsideAllowedBoundsXZ(candidateX, candidateZ) &&
+          isAboveMinSafeGround &&
+          !wouldFallTooFar;
+        const targetX = canMoveToCandidate ? candidateX : oldX;
+        const targetZ = canMoveToCandidate ? candidateZ : oldZ;
+        if (isAboveMinSafeGround && canMoveToCandidate) {
           groundMissFrames = 0;
-          const sampledAtTarget = sampleGroundY(targetX, targetZ);
-          if (sampledAtTarget != null) {
-            resolvedGroundY = sampledAtTarget;
-          }
+          resolvedGroundY = sampledCandidateGroundY;
         }
         const nextGroundY = resolveGroundY(targetX, targetZ);
         const targetY = nextGroundY + characterGroundLift;
@@ -521,7 +507,8 @@ export function createCharacterController({
           easeAlpha,
         );
         characterModel.position.set(targetX, characterYPosition, targetZ);
-        moved = movedXZ;
+        moved =
+          Math.abs(targetX - oldX) > 1e-6 || Math.abs(targetZ - oldZ) > 1e-6;
         characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
       } else {
         const p = characterModel.position;
@@ -606,9 +593,7 @@ export function createCharacterController({
       isWalking = false;
       backgroundBounds = null;
       walkableGroundMeshes = [];
-      minSafeGroundY = null;
-      groundRayOriginY = 30;
-      islandModelForRaycast = null;
+      allowedBoundsXZ = null;
       resolvedGroundY = 0;
       groundMissFrames = 0;
       staticColliderBoxes = [];
@@ -670,7 +655,6 @@ export function createCharacterController({
       );
       punchCharacterModel.position.copy(src.position);
       punchCharacterModel.rotation.copy(src.rotation);
-      punchCharacterModel.rotation.y = spawnFacingYaw;
       characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
       punchCharacterModel.visible = true;

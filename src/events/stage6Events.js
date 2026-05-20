@@ -9,6 +9,11 @@ export const STAGE6_INT_CLICK_EVENT = "gum:stage6-int-click";
 export const STAGE6_POSTER_MODAL_SHOW_EVENT = "gum:stage6PosterModal:show";
 export const STAGE6_POSTER_MODAL_HIDE_EVENT = "gum:stage6PosterModal:hide";
 
+export const STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT =
+  "gum:stage6PhotoboothModal:show";
+export const STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT =
+  "gum:stage6PhotoboothModal:hide";
+
 export const STAGE6_SUBTITLE_SHOW_EVENT = "gum:stage6-subtitle:show";
 export const STAGE6_SUBTITLE_HIDE_EVENT = "gum:stage6-subtitle:hide";
 export const STAGE6_SUBTITLE_SEQUENCE_EVENT = "gum:stage6-subtitle:sequence";
@@ -33,3 +38,11 @@ export const AIRPORT_SUBTITLE_HIDE_EVENT =
 
 export const AIRPORT_CHIME_SHOW_EVENT = "gum:airportAnnouncementChime:show";
 export const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";
+
+export const STAGE6_PHONE_INDICATOR_SHOW_EVENT =
+  "gum:stage6-phone-indicator:show";
+export const STAGE6_PHONE_INDICATOR_HIDE_EVENT =
+  "gum:stage6-phone-indicator:hide";
+/** @typedef {'ringing' | 'in-call'} Stage6PhoneIndicatorMode */
+export const STAGE6_PHONE_INDICATOR_MODE_RINGING = "ringing";
+export const STAGE6_PHONE_INDICATOR_MODE_IN_CALL = "in-call";

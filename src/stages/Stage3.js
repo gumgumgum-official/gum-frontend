@@ -28,6 +28,7 @@ import { createStage3OverlayController } from "../utils/stages/stage3/overlay/st
 import { createStage3InputController } from "../utils/stages/stage3/input/stage3InputController.js";
 import { teardownStage3Scene } from "../utils/stages/stage3/lifecycle/stage3SceneTeardown.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3/stage3.js";
+import { STAGE3_ENTRY_SUBTITLE_START_DELAY_MS } from "../config/stages/stage3/stage3Stamp.js";
 import { STAGE3_MOVEMENT_KEY_CODES } from "../config/stages/stage3/stage3Keyboard.js";
 import {
   captureStage3Lighting,
@@ -51,7 +52,6 @@ import {
   stopStage3IntroAudio,
 } from "../utils/common/stage3IntroAudio.js";
 import { disposeNoticePaperAudio } from "../utils/stages/stage3/playNoticePaperSound.js";
-import { disposeStreetLightSound } from "../utils/common/playStreetLightSound.js";
 import { disposePortalTransitionSound } from "../utils/stages/stage3/playPortalTransitionSound.js";
 import { disposeStage3CrackSound } from "../utils/stages/stage3/playCrackSound.js";
 import { updateFountain } from "../utils/stages/stage3/fountainEffect.js";
@@ -111,6 +111,24 @@ export function Stage3() {
   const pendingGumStickCardNums = [];
   /** 껌딱지 init(GLB await) 도중 cleanup 시 scene.add 방지용 */
   let gumCancelled = false;
+  /** @type {number | null} */
+  let stage3EntrySubtitleTimerId = null;
+
+  function clearStage3EntrySubtitleTimer() {
+    if (stage3EntrySubtitleTimerId != null) {
+      window.clearTimeout(stage3EntrySubtitleTimerId);
+      stage3EntrySubtitleTimerId = null;
+    }
+  }
+
+  function scheduleStage3EntrySubtitles() {
+    clearStage3EntrySubtitleTimer();
+    stage3EntrySubtitleTimerId = window.setTimeout(() => {
+      stage3EntrySubtitleTimerId = null;
+      if (!isStage3Active) return;
+      stampController.runEntrySubtitlesAndIntro();
+    }, STAGE3_ENTRY_SUBTITLE_START_DELAY_MS);
+  }
 
   function handleGumCardsStickEvent(ev) {
     const cardNum = ev.detail?.cardNum;
@@ -153,9 +171,6 @@ export function Stage3() {
     getIsStageActive: () => isStage3Active,
     onIntroTopViewCommitted: () => {
       if (isStage3Active) playStage3IntroAudioTwice();
-    },
-    onIntroComplete: () => {
-      stampController.runEntrySubtitlesAndIntro();
     },
   });
 
@@ -362,11 +377,6 @@ export function Stage3() {
       ensureStage3UiMounted();
       stampController.updateStampMarksFilled();
     },
-    onIntroAudio: () => {
-      onceStage3Revealed(() => {
-        if (isStage3Active) playStage3IntroAudioTwice();
-      });
-    },
     onDebugOrbitTarget: (center) => {
       debugControls?.setOrbitTarget(center);
     },
@@ -375,7 +385,9 @@ export function Stage3() {
     },
     onCameraIntroStart: (center, bounds) => {
       onceStage3Revealed(() => {
-        if (isStage3Active) cameraIntroController.start(center, bounds);
+        if (!isStage3Active) return;
+        cameraIntroController.start(center, bounds);
+        scheduleStage3EntrySubtitles();
       });
     },
     scheduleDeferredSetup: (task) => deferredSetup.schedule(task),
@@ -401,6 +413,7 @@ export function Stage3() {
     setup(scene, renderer) {
       isStage3Active = true;
       gumCancelled = false;
+      clearStage3EntrySubtitleTimer();
       textDestroyed = false;
       stampController.resetForSetup();
       letterController.resetPlayState();
@@ -526,10 +539,13 @@ export function Stage3() {
         }
       }
       if (character) {
+        const cameraIntro = cameraIntroController.getState();
         if (
           overlayController.hasBlockingOverlayOpen() ||
           stampController.isStampIntroAnimating() ||
-          stampController.isInteractionLocked()
+          stampController.isInteractionLocked() ||
+          cameraIntro.active ||
+          !cameraIntro.completed
         ) {
           overlayController.clearMovementInputs();
         }
@@ -554,6 +570,7 @@ export function Stage3() {
     cleanup(scene) {
       isStage3Active = false;
       resetStage3RevealGate();
+      clearStage3EntrySubtitleTimer();
       stopStage3IntroAudio();
       gumCancelled = true;
       overlayController.resetForCleanup();
@@ -592,7 +609,6 @@ export function Stage3() {
       dispatchGumCardsModalClose();
       interactionsController.cleanup();
       disposeNoticePaperAudio();
-      disposeStreetLightSound();
       disposePortalTransitionSound();
       disposeStage3CrackSound();
 

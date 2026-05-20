@@ -11,6 +11,4 @@ export const STAGE3_AUDIO_CONFIG = {
   crackFinalVolume: 1.6,
   /** 꽃 피어나는 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
   flowerMagicVolume: 1.6,
-  /** 글자 착지 드롭 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
-  dropVolume: 1.6,
 };

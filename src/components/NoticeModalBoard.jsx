@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import { getOrCreateVoteClientId } from "../lib/voteApi.js";
+import { prefetchVoteBundle } from "../lib/voteBundleCache.js";
 import { playRandomNoticePaperSound } from "../utils/stages/stage3/playNoticePaperSound.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
@@ -34,6 +36,10 @@ const POSTER_BASE = {
 export function NoticeModalBoard({ isOpen, onClose }) {
   const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "guestbook" | null
   const [gbScale, setGbScale] = useState(1);
+  const voteClientId = useMemo(
+    () => (isOpen ? getOrCreateVoteClientId() : null),
+    [isOpen],
+  );
 
   useEffect(() => {
     if (zoomedPoster !== "guestbook") return;
@@ -46,7 +52,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
     window.addEventListener("resize", compute);
     return () => window.removeEventListener("resize", compute);
   }, [zoomedPoster]);
-
   const closeWithSound = useCallback(() => {
     playUiClickSound();
     onClose();
@@ -67,6 +72,11 @@ export function NoticeModalBoard({ isOpen, onClose }) {
   useEffect(() => {
     if (!isOpen) setZoomedPoster(null);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !voteClientId) return;
+    prefetchVoteBundle(voteClientId);
+  }, [isOpen, voteClientId]);
 
   return (
     <AnimatePresence>
@@ -257,6 +267,9 @@ export function NoticeModalBoard({ isOpen, onClose }) {
               <motion.div
                 role="button"
                 tabIndex={0}
+                onPointerEnter={() => {
+                  if (voteClientId) prefetchVoteBundle(voteClientId);
+                }}
                 onClick={() => {
                   playRandomNoticePaperSound(NOTICE.paperSoundPaths);
                   setZoomedPoster("vote");

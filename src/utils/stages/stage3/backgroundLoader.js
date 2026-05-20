@@ -103,45 +103,6 @@ export function loadStage3Background({
         backgroundMaxY = Math.max(lerpY, nearTopY);
       }
 
-      const isUnderIntInteractive = (mesh) => {
-        let p = mesh;
-        while (p) {
-          if (typeof p.name === "string" && p.name.startsWith("INT_")) {
-            return true;
-          }
-          p = p.parent;
-        }
-        return false;
-      };
-
-      model.traverse((child) => {
-        if (!(child instanceof THREE.Mesh)) return;
-        if (config.model.castShadow !== undefined) {
-          child.castShadow = config.model.castShadow;
-        }
-        if (config.model.receiveShadow !== undefined) {
-          child.receiveShadow = config.model.receiveShadow;
-        }
-        if (!isUnderIntInteractive(child)) {
-          child.raycast = () => {};
-        }
-      });
-
-      for (const name of config.model.frontRenderObjectNames ?? []) {
-        const obj = model.getObjectByName(name);
-        if (!obj) {
-          if (import.meta.env.DEV) {
-            console.warn(
-              `[Stage3] frontRenderObjectNames: 노드 없음 — '${name}'`,
-            );
-          }
-          continue;
-        }
-        obj.traverse((child) => {
-          if (child instanceof THREE.Mesh) child.renderOrder = 1;
-        });
-      }
-
       if (getIsActive && !getIsActive()) {
         return;
       }
@@ -163,4 +124,55 @@ export function loadStage3Background({
         err instanceof Error ? err : new Error(String(err)),
       ),
     );
+}
+
+/**
+ * 배경 메시 그림자·raycast 플래그 — onReady 직후가 아니라 idle 시점에 적용해 첫 프레임을 가볍게 한다.
+ * @param {import("three").Object3D} model
+ * @param {import("../../../types.js").Stage3Config} config
+ */
+export function applyStage3BackgroundMeshFlags(model, config) {
+  /** @type {Set<import("three").Object3D>} */
+  const intRoots = new Set();
+  model.traverse((node) => {
+    if (typeof node.name === "string" && node.name.startsWith("INT_")) {
+      intRoots.add(node);
+    }
+  });
+
+  const isUnderIntInteractive = (mesh) => {
+    let p = mesh;
+    while (p) {
+      if (intRoots.has(p)) return true;
+      p = p.parent;
+    }
+    return false;
+  };
+
+  model.traverse((child) => {
+    if (child.isMesh) {
+      if (config.model.castShadow !== undefined) {
+        child.castShadow = config.model.castShadow;
+      }
+      if (config.model.receiveShadow !== undefined) {
+        child.receiveShadow = config.model.receiveShadow;
+      }
+      if (!isUnderIntInteractive(child)) {
+        child.raycast = () => {};
+      }
+    }
+  });
+
+  for (const name of config.model.frontRenderObjectNames ?? []) {
+    const obj = model.getObjectByName(name);
+    if (!obj) {
+      if (import.meta.env.DEV) {
+        console.warn(`[Stage3] frontRenderObjectNames: 노드 없음 — '${name}'`);
+      }
+      continue;
+    }
+    obj.traverse((child) => {
+      if (child.isMesh) child.renderOrder = 1;
+    });
+  }
 }

@@ -17,6 +17,7 @@ import { StartPage } from "./pages/StartPage.jsx";
 import { NoticeModalBoard } from "./components/NoticeModalBoard.jsx";
 import { GumCardsModalOverlay } from "./components/GumCardsModalOverlay.jsx";
 import { Stage6PosterModal } from "./components/Stage6PosterModal.jsx";
+import { Stage6PhotoboothModal } from "./components/Stage6PhotoboothModal.jsx";
 import { Stage6BoardingOverlay } from "./components/Stage6BoardingOverlay.jsx";
 import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
@@ -30,9 +31,19 @@ import {
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
+  STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
+  STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+  STAGE6_PHONE_INDICATOR_HIDE_EVENT,
+  STAGE6_PHONE_INDICATOR_MODE_IN_CALL,
+  STAGE6_PHONE_INDICATOR_MODE_RINGING,
+  STAGE6_PHONE_INDICATOR_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
+import {
+  runStage6NotificationNowOrEnqueue,
+  unblockStage6Notifications,
+} from "./utils/stages/stage6/stage6NotificationGate.js";
 
 async function callEmergencyAssign(worryId, monitorId) {
   const base = getGumServerBaseUrl();
@@ -57,6 +68,7 @@ async function callEmergencyAssign(worryId, monitorId) {
 
 const KIOSK_ALLOWED_STAGES = Object.freeze([3]);
 
+/** @type {import("react").CSSProperties} */
 const kioskCanvasStyle = {
   position: "fixed",
   inset: 0,
@@ -79,7 +91,20 @@ function AppLayout() {
   const [stage6PosterImageSrc, setStage6PosterImageSrc] = useState(
     "/assets/poster/stamp_poster.png",
   );
+  const [showStage6PhotoboothModal, setShowStage6PhotoboothModal] =
+    useState(false);
+  const [stage6PhotoboothVideoSrc, setStage6PhotoboothVideoSrc] = useState(
+    "/assets/photo_booth/photobooth.mp4",
+  );
+  const [stage6PhotoboothPhotoSrcs, setStage6PhotoboothPhotoSrcs] = useState([
+    "/assets/photo_booth/photo1.png",
+    "/assets/photo_booth/photo2.png",
+    "/assets/photo_booth/photo3.png",
+  ]);
+  const [stage6PhotoboothPhotoRatios, setStage6PhotoboothPhotoRatios] =
+    useState([0.25, 0.55, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
+  const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
 
   const closeGameMachineModalShell = useCallback(() => {
     setShowGameMachineModalShell(false);
@@ -166,7 +191,10 @@ function AppLayout() {
       setStage6PosterImageSrc(imageSrc);
       setShowStage6PosterModal(true);
     };
-    const hideStage6Poster = () => setShowStage6PosterModal(false);
+    const hideStage6Poster = () => {
+      setShowStage6PosterModal(false);
+      unblockStage6Notifications("poster-modal");
+    };
     window.addEventListener(STAGE6_POSTER_MODAL_SHOW_EVENT, showStage6Poster);
     window.addEventListener(STAGE6_POSTER_MODAL_HIDE_EVENT, hideStage6Poster);
     return () => {
@@ -182,13 +210,74 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showChime = () => setShowAirportChime(true);
-    const hideChime = () => setShowAirportChime(false);
+    const showStage6Photobooth = (event) => {
+      const videoSrc =
+        typeof event?.detail?.videoSrc === "string" && event.detail.videoSrc
+          ? event.detail.videoSrc
+          : "/assets/photo_booth/photobooth.mp4";
+      const photoSrcs = Array.isArray(event?.detail?.photoSrcs)
+        ? event.detail.photoSrcs.filter((src) => typeof src === "string" && src)
+        : [];
+      const photoRatios = Array.isArray(event?.detail?.photoRatios)
+        ? event.detail.photoRatios.filter((r) => typeof r === "number")
+        : [0.25, 0.55, 0.82];
+      setStage6PhotoboothVideoSrc(videoSrc);
+      setStage6PhotoboothPhotoSrcs(photoSrcs);
+      setStage6PhotoboothPhotoRatios(photoRatios);
+      setShowStage6PhotoboothModal(true);
+    };
+    const hideStage6Photobooth = () => {
+      setShowStage6PhotoboothModal(false);
+      unblockStage6Notifications("photobooth-modal");
+    };
+    window.addEventListener(
+      STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+      showStage6Photobooth,
+    );
+    window.addEventListener(
+      STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
+      hideStage6Photobooth,
+    );
+    return () => {
+      window.removeEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+        showStage6Photobooth,
+      );
+      window.removeEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
+        hideStage6Photobooth,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    const showChime = () =>
+      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(true));
+    const hideChime = () =>
+      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(false));
     window.addEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
     window.addEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
     return () => {
       window.removeEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
       window.removeEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
+    };
+  }, []);
+
+  useEffect(() => {
+    const showPhone = (e) => {
+      const mode = e.detail?.mode;
+      setPhoneIndicatorMode(
+        mode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+          ? STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+          : STAGE6_PHONE_INDICATOR_MODE_RINGING,
+      );
+    };
+    const hidePhone = () => setPhoneIndicatorMode(null);
+    window.addEventListener(STAGE6_PHONE_INDICATOR_SHOW_EVENT, showPhone);
+    window.addEventListener(STAGE6_PHONE_INDICATOR_HIDE_EVENT, hidePhone);
+    return () => {
+      window.removeEventListener(STAGE6_PHONE_INDICATOR_SHOW_EVENT, showPhone);
+      window.removeEventListener(STAGE6_PHONE_INDICATOR_HIDE_EVENT, hidePhone);
     };
   }, []);
 
@@ -219,12 +308,26 @@ function AppLayout() {
         imageSrc={stage6PosterImageSrc}
         onClose={() => setShowStage6PosterModal(false)}
       />
+      <Stage6PhotoboothModal
+        isOpen={showStage6PhotoboothModal}
+        videoSrc={stage6PhotoboothVideoSrc}
+        photoSrcs={stage6PhotoboothPhotoSrcs}
+        photoRatios={stage6PhotoboothPhotoRatios}
+        onClose={() => setShowStage6PhotoboothModal(false)}
+      />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />
       <div
         className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
       >
         🔔 띵-동
+      </div>
+      <div
+        className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
+      >
+        {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+          ? "전화 중 📞"
+          : "전화 왔어요 ☎️"}
       </div>
       {showKioskCanvas && (
         <div

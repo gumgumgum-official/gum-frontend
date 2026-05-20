@@ -111,7 +111,12 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/tent/Quick_fabric_rustlin_4-1775835465322.mp3",
     ],
     /** 텐트 클릭 시 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
-    tentSoundVolume: 1.6,
+    tentSoundVolume: 1.1,
+    /** 껌 카드 모달이 열려 있는 동안 루프 재생 */
+    tentModalBgmPath: "/static/sounds/card/The_Waking_Meridian.mp3",
+    tentModalBgmVolume: 0.27,
+    /** 모달 BGM 0 → 목표 볼륨까지 올리는 시간(초) */
+    tentModalBgmFadeInSec: 3.7,
     /**
      * 텐트 씬 뷰어 초기 카메라. OrbitControls로 원하는 각도를 찾은 뒤
      * 콘솔 로그에 출력된 값을 여기에 붙여넣어 고정한다.
@@ -120,6 +125,18 @@ export const STAGE3_OBJECTS_CONFIG = {
       position: [-0.38, 6.169, 4.83],
       target: [0.03, 3.474, -1.068],
     },
+    /** 텐트 자막 이름 pill (흰 배경 + ✦) */
+    tentSceneSubtitleLabel: "타로껌",
+    /** 텐트 씬 진입 대사 — Stage6BoardingOverlay subtitle-box 시퀀스 */
+    tentSceneSubtitles: [
+      { text: "안녕, 만나서 반가워", holdMs: 2500 },
+      {
+        text: "이곳에서 너에게 필요한 껌딱지 카드를 고를 수 있어!",
+        holdMs: 3700,
+      },
+    ],
+    /** runSubtitleSequence: hold + fade(600) + gap(200) × 구간 */
+    tentSceneSubtitleTotalMs: 2500 + 600 + 200 + 3500 + 600,
   },
 
   /**
@@ -131,32 +148,6 @@ export const STAGE3_OBJECTS_CONFIG = {
       "/static/sounds/well/A_single_drip_sound__2.mp3",
     ],
     wellSoundVolume: 2.8,
-  },
-
-  /**
-   * GLB `INT_Clock` 클릭 시 `static/sounds/clock` 중 랜덤 1종 재생.
-   */
-  clock: {
-    clockSoundPaths: [
-      "/static/sounds/clock/Gentle_digital_beep-_1.mp3",
-      "/static/sounds/clock/Gentle_digital_beep-_2.mp3",
-      "/static/sounds/clock/Gentle_digital_beep-_3.mp3",
-      "/static/sounds/clock/Gentle_digital_beep-_4.mp3",
-    ],
-    clockSoundVolume: 2.8,
-  },
-
-  /**
-   * GLB `INT_StreetLight*` 클릭 시 랜덤 1종.
-   * 단일 HTMLAudioElement로 `src` 전환(매 클릭 `new Audio()`는 일부 환경에서 이전 트랙만 재생되는 경우가 있음).
-   */
-  streetLight: {
-    streetLightSoundPaths: [
-      "/static/sounds/light/the_sound_of_a_light_1.mp3",
-      "/static/sounds/light/the_sound_of_a_light_2.mp3",
-      "/static/sounds/light/the_sound_of_a_light_3.mp3",
-    ],
-    streetLightSoundVolume: 2.8,
   },
 
   /**

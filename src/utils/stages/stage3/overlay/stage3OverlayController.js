@@ -1,7 +1,10 @@
 /**
  * Stage3 모달 오버레이 상태·열기/닫기·이동 입력 잠금
  */
-import { pauseStage3BackgroundAmbientForOverlay } from "../../../common/stage3IntroAudio.js";
+import {
+  pauseStage3BackgroundAmbientForOverlay,
+  resumeStage3BackgroundAmbientFromOverlay,
+} from "../../../common/stage3IntroAudio.js";
 import { playRandomNoticePaperSound } from "../playNoticePaperSound.js";
 import { NOTICE_MODAL_USER_CLOSED_EVENT } from "../../../../config/stages/stage3/stage3Overlay.js";
 import { onGumCardsModalClose } from "../gumCardsModalLauncher.js";
@@ -70,6 +73,7 @@ export function createStage3OverlayController({
     clearMovementInputs();
     hideInteractionBubbles();
     syncStampPanelVisibilityByOverlay();
+    pauseStage3BackgroundAmbientForOverlay();
   }
 
   function onGameMachineModalClose() {
@@ -94,6 +98,7 @@ export function createStage3OverlayController({
       hideInteractionBubbles();
       flushQueuedStampStepOnModalClose("tent");
       syncStampPanelVisibilityByOverlay();
+      resumeStage3BackgroundAmbientFromOverlay();
       flushPendingEggDiscoverySubtitle();
     });
   }
