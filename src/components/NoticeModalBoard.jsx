@@ -437,7 +437,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                           width: "100%",
                           maxWidth: "min(1120px, 100%)",
                           margin: "auto",
-                          padding: "12px 20px 48px",
+                          padding: 0,
                           boxSizing: "border-box",
                         }
                       : {
