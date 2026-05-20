@@ -24,11 +24,36 @@ import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js
 import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
+  getGumServerBaseUrl,
+  getMonitorDeviceId,
+} from "./lib/monitorCurrentApi.js";
+import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
+
+async function callEmergencyAssign(worryId, monitorId) {
+  const base = getGumServerBaseUrl();
+  const secret = import.meta.env.VITE_EMERGENCY_SECRET;
+  if (!base || !secret) return;
+  const params = new URLSearchParams({ worryId, secret, monitorId });
+  const url = `${base}/api/emergency-assign?${params.toString()}`;
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.ok) {
+      console.info(
+        `[emergency] worryId=${worryId} → ${json.monitorId} 배정 완료`,
+      );
+    } else {
+      console.warn("[emergency] 배정 실패:", json);
+    }
+  } catch (e) {
+    console.warn("[emergency] 요청 오류:", e);
+  }
+}
 
 const KIOSK_ALLOWED_STAGES = Object.freeze([3]);
 
@@ -69,6 +94,24 @@ function AppLayout() {
     playUiClickSound();
     closeGameMachineModalShell();
   }, [closeGameMachineModalShell]);
+
+  // 긴급 배정: ?worryId=223 감지 → 서버 emergency-assign 호출 후 파라미터 제거
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const worryId = params.get("worryId");
+    if (!worryId) return;
+
+    const monitorId = getMonitorDeviceId();
+    void callEmergencyAssign(worryId, monitorId);
+
+    // URL에서 worryId 파라미터 제거 (재실행 방지)
+    params.delete("worryId");
+    const newSearch = params.toString();
+    navigate(
+      { pathname: location.pathname, search: newSearch ? `?${newSearch}` : "" },
+      { replace: true },
+    );
+  }, [location.search, location.pathname, navigate]);
 
   // /kiosk 진입 시 Stage3 reveal 게이트 열기
   useEffect(() => {

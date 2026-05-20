@@ -11,6 +11,7 @@ import {
   resolvePublicAssetUrl,
 } from "../utils/common/gltfTemplateCache.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
+import { startStage6LoadingTransition } from "../utils/stages/stage6/stage6LoadingTransition.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6/stage6.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
@@ -22,6 +23,7 @@ import {
   AIRPORT_SUBTITLE_HIDE_EVENT,
   AIRPORT_SUBTITLE_SHOW_EVENT,
   AIRPORT_SUBTITLE_UPDATE_EVENT,
+  STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
   STAGE6_FINISH_EVENT,
   STAGE6_INT_CLICK_EVENT,
@@ -36,6 +38,7 @@ import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import {
   createBagPhysics,
   BAG_OBJECT_NAME,
+  isInCameraView,
 } from "../utils/stages/stage6/bagPhysics.js";
 const INT_PREFIX = "INT_";
 const CHAR_ROOT_NAMES = [
@@ -164,12 +167,12 @@ function collectStage6StaticColliderBoxes(root) {
     let p = obj;
     let underColliderRoot = false;
     while (p) {
-      if (
-        typeof p.name === "string" &&
-        (p.name.startsWith("OBJ_") || p.name.startsWith("INT_"))
-      ) {
-        underColliderRoot = true;
-        break;
+      if (typeof p.name === "string") {
+        if (p.name.startsWith("INT_Escalator_anim2_step")) return;
+        if (p.name.startsWith("OBJ_") || p.name.startsWith("INT_")) {
+          underColliderRoot = true;
+          break;
+        }
       }
       p = p.parent;
     }
@@ -238,6 +241,26 @@ export function Stage6() {
   const telEmissiveMaterials = [];
   let isSceneInteractionLocked = false;
   let isFinishFired = false;
+  let isBoardingPassIssued = false;
+  let isEscalatorRiding = false;
+  let isEscalatorFading = false;
+  let escFadeProgress = 0;
+  /** @type {THREE.Object3D | null} */
+  let escRidingStep = null;
+  /** @type {THREE.Object3D[]} */
+  const escSteps = [];
+  /** step 충돌 안내 쿨다운 (초) */
+  let escNoBoardingCooldown = 0;
+  /** 에스컬레이터 진입 존 감지 반경 (m) */
+  const ESC_DETECT_RADIUS = 1.2;
+  /** step 위 캐릭터 Y 오프셋 */
+  const ESC_CHAR_Y_OFFSET = 0.05;
+  /** 탑승 직전 step으로 스냅하는 보간 속도 */
+  const ESC_SNAP_SPEED = 8;
+  let isEscalatorSnapping = false;
+  const _escStepBox = new THREE.Box3();
+  const _escStepWorldPos = new THREE.Vector3();
+  const _escFrontStepPos = new THREE.Vector3();
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -757,6 +780,30 @@ export function Stage6() {
         charActions[charName].push(action);
       }
     }
+
+    const escClip = findAnimationClipLoose(animations, "Escalator_Steps");
+    if (escClip) {
+      const animatedNames = new Set();
+      for (const track of escClip.tracks) {
+        try {
+          const parsed = THREE.PropertyBinding.parseTrackName(track.name);
+          if (parsed.nodeName) animatedNames.add(parsed.nodeName);
+        } catch {
+          animatedNames.add(track.name.split(".")[0]);
+        }
+      }
+      sceneRoot.traverse((obj) => {
+        if (animatedNames.has(obj.name)) obj.frustumCulled = false;
+      });
+
+      const action = charMixer.clipAction(escClip);
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.clampWhenFinished = false;
+      action.timeScale = 0.25;
+      action.play();
+    } else {
+      console.warn("[Stage6] anim clip not found: Escalator_Steps");
+    }
   }
 
   function normalizeIntNameToken(value) {
@@ -1032,11 +1079,6 @@ export function Stage6() {
     registerTelEmissiveMaterials();
     applyAtmEmissive(atmEmissiveProgress);
     applyTelEmissive(telEmissiveProgress);
-    if (import.meta.env.DEV) {
-      console.log(
-        `[Stage6] INT_ clickable mesh count: ${intRaycastMeshes.length}`,
-      );
-    }
   }
 
   function getPointerHitTarget(event) {
@@ -1090,6 +1132,13 @@ export function Stage6() {
         config.camera.position.y,
         config.camera.position.z,
       );
+      if (config.camera.up) {
+        this.camera.up.set(
+          config.camera.up.x,
+          config.camera.up.y,
+          config.camera.up.z,
+        );
+      }
       if (config.camera.lookAt) {
         this.camera.lookAt(
           config.camera.lookAt.x,
@@ -1106,7 +1155,7 @@ export function Stage6() {
         scene,
         glbLoader,
         config,
-        getKeys: () => keyboard.keys,
+        getKeys: () => (isSceneInteractionLocked ? {} : keyboard.keys),
       });
       keyboard.mount();
 
@@ -1140,7 +1189,22 @@ export function Stage6() {
       telEmissiveMaterials.length = 0;
       isSceneInteractionLocked = false;
       isFinishFired = false;
+      isBoardingPassIssued = false;
+      isEscalatorRiding = false;
+      isEscalatorSnapping = false;
+      isEscalatorFading = false;
+      escFadeProgress = 0;
+      escRidingStep = null;
+      escSteps.length = 0;
+      escNoBoardingCooldown = 0;
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
+      window.addEventListener(
+        STAGE6_BOARDING_PASS_ISSUED_EVENT,
+        () => {
+          isBoardingPassIssued = true;
+        },
+        { once: true },
+      );
       onInteractionLock = () => {
         isSceneInteractionLocked = true;
       };
@@ -1241,6 +1305,51 @@ export function Stage6() {
             }
           });
 
+          // transmission 유리(Mesh_1 등)가 opaque pass 이후 렌더되며 앞쪽 오브젝트
+          // 픽셀을 덮어쓰는 문제 수정:
+          //   1) 유리 → depthWrite=false: depth buffer 오염 차단
+          //   2) handle/Cart/Top → transparent pass(opacity=1,depthWrite=true):
+          //      transmission 이후에 렌더되어 유리 위에 올바르게 표시됨
+          //      에스컬레이터 등 opaque 오브젝트의 depth는 이미 기록돼 있으므로
+          //      depth test로 자연스럽게 가려짐
+          model.traverse((o) => {
+            const mesh = /** @type {any} */ (o);
+            if (!mesh.isMesh || !mesh.material) return;
+            const mats = Array.isArray(mesh.material)
+              ? mesh.material
+              : [mesh.material];
+            mats.forEach((m) => {
+              if (!m) return;
+              if (typeof m.transmission === "number" && m.transmission > 0) {
+                m.depthWrite = false;
+                m.needsUpdate = true;
+              }
+            });
+          });
+
+          const RENDER_AFTER_GLASS = [
+            "INT_Escalator_handle1",
+            "OBJ_Cart1",
+            "OBJ_Cart2",
+            "OBJ_Top",
+          ];
+          model.traverse((o) => {
+            const mesh = /** @type {any} */ (o);
+            if (!mesh.isMesh || !mesh.material) return;
+            if (!RENDER_AFTER_GLASS.some((n) => mesh.name?.startsWith(n)))
+              return;
+            const mats = Array.isArray(mesh.material)
+              ? mesh.material
+              : [mesh.material];
+            mats.forEach((m) => {
+              if (!m) return;
+              m.transparent = true;
+              m.opacity = 1.0;
+              m.depthWrite = true;
+              m.needsUpdate = true;
+            });
+          });
+
           // Electron 웹뷰에서만 transmission 소재 fallback
           if (isElectronLike && !model.userData.stage6ElectronPatched) {
             model.userData.stage6ElectronPatched = true;
@@ -1333,6 +1442,9 @@ export function Stage6() {
             spawnZ = _escWorld.z + _toCam.z * frontDist;
           }
 
+          spawnX += config.character?.spawnOffset?.x ?? 0;
+          spawnZ += config.character?.spawnOffset?.z ?? 0;
+
           let floorY = raycastFloorY(
             floorMeshes,
             spawnX,
@@ -1349,6 +1461,17 @@ export function Stage6() {
               floorY = bounds.min.y + 0.05;
             }
           }
+
+          // 에스컬레이터 step 오브젝트 수집
+          escSteps.length = 0;
+          model.traverse((obj) => {
+            if (
+              typeof obj.name === "string" &&
+              obj.name.startsWith("INT_Escalator_anim2_step")
+            ) {
+              escSteps.push(obj);
+            }
+          });
 
           const allStaticColliders = collectStage6StaticColliderBoxes(model);
           const staticColliderBoxes = bagPhysics.setup(
@@ -1480,7 +1603,31 @@ export function Stage6() {
       }
 
       if (character) {
+        const posRef = character.getPosition();
+        const preX = posRef?.x ?? 0;
+        const preZ = posRef?.z ?? 0;
+        // 이동 전 위치가 frustum 안에 있을 때만 제약 적용
+        // (스폰 위치가 frustum 밖이면 frustum 안으로 진입할 수 있도록 허용)
+        const wasInView = posRef
+          ? isInCameraView(preX, posRef.y, preZ, this.camera)
+          : false;
         character.update(delta, this.camera, { skipCameraFollow: true });
+        if (posRef && wasInView) {
+          const y = posRef.y;
+          const cam = this.camera;
+          if (!isInCameraView(posRef.x, y, posRef.z, cam)) {
+            const canX = isInCameraView(posRef.x, y, preZ, cam);
+            const canZ = isInCameraView(preX, y, posRef.z, cam);
+            if (canX) {
+              posRef.z = preZ;
+            } else if (canZ) {
+              posRef.x = preX;
+            } else {
+              posRef.x = preX;
+              posRef.z = preZ;
+            }
+          }
+        }
       }
 
       bagPhysics.update(
@@ -1489,6 +1636,115 @@ export function Stage6() {
         delta,
         this.camera,
       );
+
+      // 에스컬레이터 진입 감지 — step들 중 Y가 가장 낮은(바닥) step 기준으로 넓은 반경 체크
+      if (
+        !isEscalatorRiding &&
+        !isEscalatorSnapping &&
+        !isFinishFired &&
+        escSteps.length > 0 &&
+        character
+      ) {
+        escNoBoardingCooldown = Math.max(0, escNoBoardingCooldown - delta);
+        const charPos = character.getPosition();
+        if (charPos) {
+          // 현재 프레임에서 Y 최소(바닥) step 찾기
+          let frontStep = null;
+          let minY = Infinity;
+          for (const step of escSteps) {
+            step.updateMatrixWorld(true);
+            step.getWorldPosition(_escStepWorldPos);
+            if (_escStepWorldPos.y < minY) {
+              minY = _escStepWorldPos.y;
+              frontStep = step;
+              _escFrontStepPos.copy(_escStepWorldPos);
+            }
+          }
+          if (frontStep) {
+            const dx = charPos.x - _escFrontStepPos.x;
+            const dz = charPos.z - _escFrontStepPos.z;
+            if (dx * dx + dz * dz < ESC_DETECT_RADIUS * ESC_DETECT_RADIUS) {
+              if (!isBoardingPassIssued) {
+                if (escNoBoardingCooldown <= 0) {
+                  escNoBoardingCooldown = 4;
+                  dispatchStage6SubtitleSequence([
+                    {
+                      text: "탑승 수속을 먼저 완료해 주세요! 🎫",
+                      holdMs: 2500,
+                    },
+                  ]);
+                }
+              } else {
+                isEscalatorSnapping = true;
+                isSceneInteractionLocked = true;
+                escRidingStep = frontStep;
+                escFadeProgress = 0;
+                isEscalatorFading = false;
+              }
+            }
+          }
+        }
+      }
+
+      // 에스컬레이터 탑승 전 스냅 (자연스럽게 step 위로 이동)
+      if (isEscalatorSnapping && escRidingStep && character) {
+        escRidingStep.updateMatrixWorld(true);
+        escRidingStep.getWorldPosition(_escStepWorldPos);
+        const posRef = character.getPosition();
+        if (posRef) {
+          const targetY = _escStepWorldPos.y + ESC_CHAR_Y_OFFSET;
+          const snapAlpha = 1 - Math.exp(-ESC_SNAP_SPEED * delta);
+          posRef.x += (_escStepWorldPos.x - posRef.x) * snapAlpha;
+          posRef.z += (_escStepWorldPos.z - posRef.z) * snapAlpha;
+          posRef.y += (targetY - posRef.y) * snapAlpha;
+          const snapDist =
+            Math.abs(posRef.x - _escStepWorldPos.x) +
+            Math.abs(posRef.z - _escStepWorldPos.z);
+          if (snapDist < 0.05) {
+            isEscalatorSnapping = false;
+            isEscalatorRiding = true;
+          }
+        }
+      }
+
+      // 에스컬레이터 라이딩 — step 위치 추적 + fade out
+      if (isEscalatorRiding && escRidingStep && character) {
+        escRidingStep.updateMatrixWorld(true);
+        escRidingStep.getWorldPosition(_escStepWorldPos);
+        const posRef = character.getPosition();
+        if (posRef) {
+          posRef.x = _escStepWorldPos.x;
+          posRef.z = _escStepWorldPos.z;
+          posRef.y = _escStepWorldPos.y + ESC_CHAR_Y_OFFSET;
+        }
+
+        if (
+          !isEscalatorFading &&
+          !isInCameraView(
+            _escStepWorldPos.x,
+            _escStepWorldPos.y,
+            _escStepWorldPos.z,
+            this.camera,
+          )
+        ) {
+          isEscalatorFading = true;
+        }
+
+        if (isEscalatorFading) {
+          const ESC_FADE_DURATION = 0.6;
+          escFadeProgress = Math.min(
+            escFadeProgress + delta / ESC_FADE_DURATION,
+            1,
+          );
+          character.setOpacity(1 - escFadeProgress);
+          if (escFadeProgress >= 1 && !isFinishFired) {
+            isFinishFired = true;
+            startStage6LoadingTransition(() => {
+              window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
+            });
+          }
+        }
+      }
     },
 
     cleanup(scene) {

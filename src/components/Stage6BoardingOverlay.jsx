@@ -8,6 +8,7 @@ import {
   AIRPORT_SUBTITLE_HIDE_EVENT,
   AIRPORT_SUBTITLE_SHOW_EVENT,
   AIRPORT_SUBTITLE_UPDATE_EVENT,
+  STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
   STAGE6_FINISH_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
@@ -319,6 +320,7 @@ export function Stage6BoardingOverlay() {
     scheduleRef.current?.(() => {
       setIsOverlayOpen(true);
       window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
+      window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_PASS_ISSUED_EVENT));
     }, 2500);
   };
 

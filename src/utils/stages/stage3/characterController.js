@@ -697,5 +697,25 @@ export function createCharacterController({
     },
 
     isPunching: () => isPunchPlaying,
+
+    /** 캐릭터 모델 전체 메시 opacity 일괄 설정 (에스컬레이터 fade out 용) */
+    setOpacity(opacity) {
+      const targets = [characterModel, idleCharacterModel];
+      for (const root of targets) {
+        if (!root) continue;
+        root.traverse((obj) => {
+          const mesh = /** @type {any} */ (obj);
+          if (!mesh.isMesh || !mesh.material) return;
+          const mats = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
+          mats.forEach((m) => {
+            if (!m) return;
+            m.transparent = true;
+            m.opacity = opacity;
+          });
+        });
+      }
+    },
   };
 }
