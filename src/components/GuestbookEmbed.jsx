@@ -32,12 +32,13 @@ const PROFILE_INSET_SHADOW = "inset 0 -16px 11.4px 1px rgba(0, 0, 0, 0.13)";
 const PROFILE_OUTER_SHADOW = `${PROFILE_DROP_SHADOW}, ${PROFILE_INSET_SHADOW}`;
 
 // Figma 투데이 카드 (node 480:140)
-const TODAY_CARD_BG =
-  "linear-gradient(180deg, rgb(255, 255, 222) 12.987%, rgb(255, 255, 255) 100%)";
 const TODAY_OUTER_SHADOW =
   "0 12px 18.8px rgba(0, 0, 0, 0.25), inset 0 -15px 13px 0 rgba(0, 0, 0, 0.1)";
 
 // Figma 방명록 (480:135) — 배경 480:136, 헤더 486:6, 작성 480:149, 게시글 480:158
+/** 게시글 스크롤 영역 높이 */
+const GUESTBOOK_LIST_HEIGHT = 360;
+const GUESTBOOK_CARD_SHADOW_MARGIN = "0 12px 32px 12px";
 const GUESTBOOK_WRITE_BG = "#ffecf2";
 const GUESTBOOK_WRITE_BORDER = "#f9cfda";
 const GUESTBOOK_NAMEBAR_BG = "#ffecf2";
@@ -515,7 +516,7 @@ function TodayCard() {
         border: `3px solid ${PROFILE_BORDER}`,
         borderRadius: 23,
         boxShadow: TODAY_OUTER_SHADOW,
-        background: TODAY_CARD_BG,
+        background: PROFILE_CARD_BG,
         padding: "12px 14px 14px",
       }}
     >
@@ -874,7 +875,7 @@ function GuestbookEntry({ index, name, date, message }) {
             fontFamily: FONT,
             fontSize: "1.25rem",
             lineHeight: 1.35,
-            color: "#000",
+            color: PROFILE_STATUS_FG,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
           }}
@@ -900,7 +901,10 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
     const base = getGumServerBaseUrl();
     fetch(`${base}/api/posts`)
       .then((r) => r.json())
-      .then((d) => setPosts(sortPostsNewestFirst(d.posts ?? [])))
+      .then((d) => {
+        const raw = Array.isArray(d) ? d : (d.posts ?? []);
+        setPosts(sortPostsNewestFirst(raw));
+      })
       .catch(() => setPosts([]))
       .finally(() => setPostsLoading(false));
   }, []);
@@ -931,7 +935,7 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
           style={{
             display: "grid",
             gridTemplateColumns: "280px minmax(0, 1fr)",
-            gap: "1rem",
+            gap: "4em",
             width: "100%",
             boxSizing: "border-box",
             ...(isFullscreen && {
@@ -951,68 +955,76 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
             <TodayCard />
           </div>
 
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, overflow: "visible" }}>
             <div
               style={{
                 width: "100%",
                 boxSizing: "border-box",
-                border: `3px solid ${PROFILE_BORDER}`,
                 borderRadius: 23,
-                boxShadow: PROFILE_DROP_SHADOW,
-                background: PROFILE_CARD_BG,
-                padding: "12px 14px 14px",
-                overflow: "hidden",
+                boxShadow: PROFILE_OUTER_SHADOW,
+                margin: GUESTBOOK_CARD_SHADOW_MARGIN,
               }}
             >
-              <GuestbookHeader />
-              <GuestbookForm onSuccess={handlePostAdded} />
-
               <div
-                className="guestbookEmbed-hideScrollbar"
                 style={{
-                  maxHeight: isFullscreen
-                    ? "min(430px, calc(100dvh - 400px))"
-                    : "430px",
-                  overflowY: "auto",
-                  background: "#fff",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `3px solid ${PROFILE_BORDER}`,
+                  borderRadius: 23,
+                  background: PROFILE_CARD_BG,
+                  padding: "12px 14px 14px",
+                  overflow: "hidden",
                 }}
               >
-                {postsLoading ? (
-                  <div
-                    style={{
-                      fontFamily: FONT,
-                      fontSize: "0.875rem",
-                      color: GUESTBOOK_DATE_COLOR,
-                      textAlign: "center",
-                      padding: "1.5rem 0",
-                    }}
-                  >
-                    불러오는 중…
-                  </div>
-                ) : posts.length === 0 ? (
-                  <div
-                    style={{
-                      fontFamily: FONT,
-                      fontSize: "0.875rem",
-                      color: GUESTBOOK_DATE_COLOR,
-                      textAlign: "center",
-                      padding: "1.5rem 0",
-                      borderTop: `1px solid ${PROFILE_BORDER}`,
-                    }}
-                  >
-                    첫 방명록을 남겨주세요 ♥
-                  </div>
-                ) : (
-                  posts.map((p, i) => (
-                    <GuestbookEntry
-                      key={p.id}
-                      index={posts.length - i}
-                      name={p.nickname ?? "익명"}
-                      date={formatGuestbookDate(p.created_at)}
-                      message={p.content}
-                    />
-                  ))
-                )}
+                <GuestbookHeader />
+                <GuestbookForm onSuccess={handlePostAdded} />
+
+                <div
+                  className="guestbookEmbed-hideScrollbar"
+                  style={{
+                    height: GUESTBOOK_LIST_HEIGHT,
+                    overflowY: "auto",
+                    background: PROFILE_CARD_BG,
+                    borderTop: `1px solid ${PROFILE_BORDER}`,
+                  }}
+                >
+                  {postsLoading ? (
+                    <div
+                      style={{
+                        fontFamily: FONT,
+                        fontSize: "0.875rem",
+                        color: GUESTBOOK_DATE_COLOR,
+                        textAlign: "center",
+                        padding: "1.5rem 0",
+                      }}
+                    >
+                      불러오는 중…
+                    </div>
+                  ) : posts.length === 0 ? (
+                    <div
+                      style={{
+                        fontFamily: FONT,
+                        fontSize: "0.875rem",
+                        color: GUESTBOOK_DATE_COLOR,
+                        textAlign: "center",
+                        padding: "1.5rem 0",
+                        borderTop: `1px solid ${PROFILE_BORDER}`,
+                      }}
+                    >
+                      첫 방명록을 남겨주세요 ♥
+                    </div>
+                  ) : (
+                    posts.map((p, i) => (
+                      <GuestbookEntry
+                        key={p.id}
+                        index={posts.length - i}
+                        name={p.nickname ?? "익명"}
+                        date={formatGuestbookDate(p.created_at)}
+                        message={p.content}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>

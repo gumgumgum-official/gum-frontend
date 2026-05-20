@@ -435,8 +435,10 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     ...(zoomedPoster === "guestbook"
                       ? {
                           width: "100%",
-                          maxWidth: "min(960px, 100%)",
+                          maxWidth: "min(1120px, 100%)",
                           margin: "auto",
+                          padding: "12px 20px 48px",
+                          boxSizing: "border-box",
                         }
                       : {
                           maxWidth: "90vw",
