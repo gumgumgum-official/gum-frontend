@@ -267,14 +267,16 @@ export function createCharacterController({
           if (worldSpawnXZ && Number.isFinite(worldSpawnXZ.x)) {
             spawnX = worldSpawnXZ.x;
             spawnZ = worldSpawnXZ.z;
-          } else if (!bounds.isEmpty()) {
-            spawnX = (bounds.min.x + bounds.max.x) * 0.5;
-            spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
-          }
-          const off = config.character?.spawnOffset;
-          if (off) {
-            spawnX += off.x ?? 0;
-            spawnZ += off.z ?? 0;
+          } else {
+            if (!bounds.isEmpty()) {
+              spawnX = (bounds.min.x + bounds.max.x) * 0.5;
+              spawnZ = (bounds.min.z + bounds.max.z) * 0.5;
+            }
+            const off = config.character?.spawnOffset;
+            if (off) {
+              spawnX += off.x ?? 0;
+              spawnZ += off.z ?? 0;
+            }
           }
           const charCfg = /** @type {any} */ (config.character);
           const spawnRotationRadRaw = Number(charCfg?.spawnRotationRad);
@@ -512,15 +514,20 @@ export function createCharacterController({
         characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
       } else {
         const p = characterModel.position;
-        const nextGroundY = resolveGroundY(p.x, p.z);
-        const targetY = nextGroundY + characterGroundLift;
-        const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
-        characterYPosition = THREE.MathUtils.lerp(
-          characterYPosition,
-          targetY,
-          easeAlpha,
-        );
-        characterModel.position.y = characterYPosition;
+        if (options.overrideY != null) {
+          characterYPosition = options.overrideY;
+          characterModel.position.y = options.overrideY;
+        } else {
+          const nextGroundY = resolveGroundY(p.x, p.z);
+          const targetY = nextGroundY + characterGroundLift;
+          const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
+          characterYPosition = THREE.MathUtils.lerp(
+            characterYPosition,
+            targetY,
+            easeAlpha,
+          );
+          characterModel.position.y = characterYPosition;
+        }
       }
 
       isMoving = moved;
@@ -681,5 +688,30 @@ export function createCharacterController({
     },
 
     isPunching: () => isPunchPlaying,
+
+    setFacingYaw(yRad) {
+      if (characterModel) characterModel.rotation.y = yRad;
+      if (idleCharacterModel) idleCharacterModel.rotation.y = yRad;
+    },
+
+    /** 캐릭터 모델 전체 메시 opacity 일괄 설정 (에스컬레이터 fade out 용) */
+    setOpacity(opacity) {
+      const targets = [characterModel, idleCharacterModel];
+      for (const root of targets) {
+        if (!root) continue;
+        root.traverse((obj) => {
+          const mesh = /** @type {any} */ (obj);
+          if (!mesh.isMesh || !mesh.material) return;
+          const mats = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
+          mats.forEach((m) => {
+            if (!m) return;
+            m.transparent = true;
+            m.opacity = opacity;
+          });
+        });
+      }
+    },
   };
 }

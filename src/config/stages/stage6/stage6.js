@@ -15,11 +15,12 @@ const STAGE6_MOVE_SPEED = 1.85;
 /** @type {import("../../../types.js").Stage6Config} */
 export const STAGE6_CONFIG = {
   camera: {
-    fov: 60,
-    near: 0.1,
+    fov: 26.633,
+    near: 0.01,
     far: 1000,
-    position: { x: -3.02, y: 3.89, z: 4.19 },
-    lookAt: { x: -5.81, y: -1.01, z: -10.53 },
+    position: { x: 2.7814, y: 6.5789, z: 11.3866 },
+    up: { x: -0.0589, y: 0.9871, z: -0.1487 },
+    lookAt: { x: -4.7128, y: 1.2273, z: -6.2315 },
   },
   background: {
     color: 0x042d5b, // 어두운 남색 (밖/하늘 영역)
@@ -27,7 +28,7 @@ export const STAGE6_CONFIG = {
   /** initThreeApp 기본 노출 대비 Stage6에서만 밝게 (WebGLRenderer.toneMappingExposure 가산) */
   toneMappingExposureDelta: 0.18,
   model: {
-    path: "/models/stage6/airport3_with_characters.glb",
+    path: "/models/stage6/airport5.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,
@@ -61,9 +62,9 @@ export const STAGE6_CONFIG = {
       STAGE6_USER_GROUND_OFFSET_MIN,
     ),
     moveSpeed: STAGE6_MOVE_SPEED,
-    spawnOffset: { x: -4.5, z: -4 },
+    spawnOffset: { x: -2.5, z: -0.5 },
     /** 캐릭터 초기 바라보는 방향(도). 필요 시 음수/양수로 조정 */
-    spawnRotationDeg: 180,
+    spawnRotationDeg: 0,
     escalatorFrontDistance: 1.15,
   },
 };

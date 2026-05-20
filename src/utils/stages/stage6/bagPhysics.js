@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { slideMoveXZAgainstAABBs } from "../stage3/islandStaticColliders.js";
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
 
-export const BAG_OBJECT_NAME = "OBJ_Bag1";
+export const BAG_OBJECT_NAME = "INT_Bag1";
 
 const _frustumVec = new THREE.Vector3();
 
@@ -13,7 +13,7 @@ const _frustumVec = new THREE.Vector3();
  * @param {number} z
  * @param {THREE.Camera} camera
  */
-function isInCameraView(x, y, z, camera) {
+export function isInCameraView(x, y, z, camera) {
   _frustumVec.set(x, y, z).project(camera);
   return (
     _frustumVec.x >= -1 &&
@@ -264,7 +264,6 @@ export function createBagPhysics() {
       if (Math.abs(slid.x - targetCX) > 1e-6) bagVelocityX *= -0.15;
       if (Math.abs(slid.z - targetCZ) > 1e-6) bagVelocityZ *= -0.15;
 
-      // 카메라 프러스텀 경계 제약 — 화면 밖으로 나가는 이동을 차단한다
       bagObject.getWorldPosition(_bagWorldPos);
       const bagY = _bagWorldPos.y;
       if (camera && !isInCameraView(slid.x, bagY, slid.z, camera)) {
@@ -284,8 +283,6 @@ export function createBagPhysics() {
         }
       }
 
-      // slid = 새 AABB 센터 → origin = 센터 - offset → 월드→로컬 변환 후 적용
-      // (bagY 취득을 위해 위에서 이미 getWorldPosition 호출함)
       _bagWorldPos.x = slid.x - bagAabbOffsetX;
       _bagWorldPos.z = slid.z - bagAabbOffsetZ;
       if (bagObject.parent) bagObject.parent.worldToLocal(_bagWorldPos);
