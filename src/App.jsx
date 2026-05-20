@@ -78,7 +78,7 @@ function AppLayout() {
     "/assets/photo_booth/photo3.png",
   ]);
   const [stage6PhotoboothPhotoRatios, setStage6PhotoboothPhotoRatios] =
-    useState([0.25, 0.55, 0.82]);
+    useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
 
@@ -285,7 +285,7 @@ function AppLayout() {
       >
         {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
           ? "전화 중 📞"
-          : "전화 왔어요 ☎️"}
+          : "☎️ 전화 왔어요"}
       </div>
       {showKioskCanvas && (
         <div

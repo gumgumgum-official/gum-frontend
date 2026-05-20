@@ -13,6 +13,8 @@ import {
   EVENT_CLOSE,
 } from "../utils/stages/stage3/gumCardsModalLauncher.js";
 import { dispatchGumCardsStick } from "../events/gumCardsEvents.js";
+import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
+import { preloadTentSceneSubtitleFonts } from "../utils/common/preloadGangwonEduFont.js";
 
 export function GumCardsModalOverlay() {
   // "closed" | "tent" | "cards"
@@ -40,6 +42,10 @@ export function GumCardsModalOverlay() {
       }
       hasSeenTentIntroRef.current = true;
       setSkipTentBubbleSequence(false);
+      void preloadTentSceneSubtitleFonts({
+        label: STAGE3_OBJECTS_CONFIG.tent?.tentSceneSubtitleLabel,
+        messages: STAGE3_OBJECTS_CONFIG.tent?.tentSceneSubtitles,
+      });
       setPhase("tent");
     };
     window.addEventListener(EVENT_OPEN, onOpen);

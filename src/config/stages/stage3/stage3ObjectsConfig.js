@@ -127,6 +127,8 @@ export const STAGE3_OBJECTS_CONFIG = {
     },
     /** 텐트 자막 이름 pill (흰 배경 + ✦) */
     tentSceneSubtitleLabel: "타로껌",
+    /** 씬 페이드인 종료 후 자막 시퀀스 시작까지 대기(ms) — GLB/HDRI 로드·렌더 안정화 */
+    tentSceneSubtitleStartDelayMs: 900,
     /** 텐트 씬 진입 대사 — Stage6BoardingOverlay subtitle-box 시퀀스 */
     tentSceneSubtitles: [
       { text: "안녕, 만나서 반가워", holdMs: 2500 },

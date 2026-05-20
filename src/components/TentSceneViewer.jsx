@@ -8,6 +8,7 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { preloadTentSceneSubtitleFonts } from "../utils/common/preloadGangwonEduFont.js";
 import "./TentSceneViewer.css";
 
 function getCamCfg() {
@@ -25,6 +26,7 @@ function getTentSubtitleCfg() {
     messages: tent?.tentSceneSubtitles ?? [],
     label: tent?.tentSceneSubtitleLabel ?? "타로껌",
     totalMs: tent?.tentSceneSubtitleTotalMs ?? 7400,
+    startDelayMs: tent?.tentSceneSubtitleStartDelayMs ?? 900,
   };
 }
 
@@ -37,7 +39,7 @@ export function TentSceneViewer({
   onCardOpen,
   skipBubbleSequence = false,
 }) {
-  const FADE_IN_MS = 600;
+  const FADE_IN_MS = 2000;
   const canvasRef = useRef(null);
   const rootRef = useRef(null);
   const onCardOpenRef = useRef(onCardOpen);
@@ -46,6 +48,7 @@ export function TentSceneViewer({
   }, [onCardOpen]);
 
   const [isVisible, setIsVisible] = useState(false);
+  const isVisibleRef = useRef(false);
 
   const handleClose = useCallback(() => {
     dispatchTentSubtitleHide();
@@ -53,10 +56,17 @@ export function TentSceneViewer({
   }, [onClose]);
 
   useEffect(() => {
-    const rafId = requestAnimationFrame(() => {
-      setIsVisible(true);
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        isVisibleRef.current = true;
+        setIsVisible(true);
+      });
     });
-    return () => cancelAnimationFrame(rafId);
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
   }, []);
 
   useEffect(() => {
@@ -68,8 +78,11 @@ export function TentSceneViewer({
   useEffect(() => {
     if (skipBubbleSequence) return;
 
-    const { messages, label, totalMs } = getTentSubtitleCfg();
+    const { messages, label, totalMs, startDelayMs } = getTentSubtitleCfg();
     if (messages.length === 0) return;
+
+    let aborted = false;
+    const fontPreload = preloadTentSceneSubtitleFonts({ label, messages });
 
     const runSubtitleSequence = () => {
       window.dispatchEvent(
@@ -80,38 +93,57 @@ export function TentSceneViewer({
       return [setTimeout(() => onCardOpenRef.current?.(), totalMs)];
     };
 
+    /** @type {number[]} */
+    let timers = [];
+    let subtitleDelayId = 0;
+
+    const beginSubtitleSequence = async () => {
+      await fontPreload;
+      if (aborted) return;
+      await new Promise((resolve) => {
+        subtitleDelayId = window.setTimeout(() => {
+          subtitleDelayId = 0;
+          resolve();
+        }, startDelayMs);
+      });
+      if (aborted) return;
+      timers.push(...runSubtitleSequence());
+    };
+
     const rootEl = rootRef.current;
     if (!rootEl) {
-      const timers = runSubtitleSequence();
+      void beginSubtitleSequence();
       return () => {
+        aborted = true;
+        if (subtitleDelayId) window.clearTimeout(subtitleDelayId);
         dispatchTentSubtitleHide();
-        timers.forEach(clearTimeout);
+        timers.forEach((id) => window.clearTimeout(id));
       };
     }
 
-    /** @type {number[]} */
-    let timers = [];
     let started = false;
-    const start = () => {
+    const startAfterFadeIn = () => {
       if (started) return;
       started = true;
-      timers = runSubtitleSequence();
+      void beginSubtitleSequence();
     };
 
     const onFadeInEnd = (event) => {
       if (event.target !== rootEl) return;
       if (event.propertyName !== "opacity") return;
-      start();
+      startAfterFadeIn();
     };
     rootEl.addEventListener("transitionend", onFadeInEnd);
 
-    const fallbackId = setTimeout(start, FADE_IN_MS + 100);
+    const fallbackId = setTimeout(startAfterFadeIn, FADE_IN_MS + 100);
 
     return () => {
+      aborted = true;
       rootEl.removeEventListener("transitionend", onFadeInEnd);
       clearTimeout(fallbackId);
+      if (subtitleDelayId) window.clearTimeout(subtitleDelayId);
       dispatchTentSubtitleHide();
-      timers.forEach(clearTimeout);
+      timers.forEach((id) => window.clearTimeout(id));
     };
   }, [FADE_IN_MS, skipBubbleSequence]);
 
@@ -166,6 +198,7 @@ export function TentSceneViewer({
     let animId;
     const tick = () => {
       animId = requestAnimationFrame(tick);
+      if (!isVisibleRef.current) return;
       controls.update();
       renderer.render(scene, camera);
     };
@@ -201,14 +234,16 @@ export function TentSceneViewer({
   }, []);
 
   return (
-    <div
-      ref={rootRef}
-      className={`tent-scene-viewer${isVisible ? " is-visible" : ""}`}
-    >
-      <canvas ref={canvasRef} className="tent-scene-canvas" />
-      <button className="tent-btn tent-btn--close" onClick={handleClose}>
-        ✕
-      </button>
+    <div className="tent-scene-viewer">
+      <div
+        ref={rootRef}
+        className={`tent-scene-viewer__content${isVisible ? " is-visible" : ""}`}
+      >
+        <canvas ref={canvasRef} className="tent-scene-canvas" />
+        <button className="tent-btn tent-btn--close" onClick={handleClose}>
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
