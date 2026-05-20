@@ -157,6 +157,35 @@ export function createStage3CameraIntroController({
     }
   }
 
+  /**
+   * 카메라 오비트·줌인 인트로 생략(개발 `/dev` 등). `character.setup` 이후 실행할 것.
+   */
+  function skipToGameplayCamera() {
+    state.active = false;
+    state.transitioning = false;
+    state.introTopViewCommitted = true;
+
+    const camera = getCamera();
+    if (camera && getCharacterFollowPose(_introTargetPos, _introTargetLookAt)) {
+      camera.position.copy(_introTargetPos);
+      camera.lookAt(_introTargetLookAt);
+    } else if (camera) {
+      const camCfg = getConfig().camera ?? {};
+      const p = camCfg.position ?? { x: 0, y: 10, z: 20 };
+      camera.position.set(p.x, p.y, p.z);
+      if (camCfg.lookAt) {
+        camera.lookAt(camCfg.lookAt.x, camCfg.lookAt.y, camCfg.lookAt.z);
+      } else {
+        camera.lookAt(0, 0, 0);
+      }
+    }
+
+    state.completed = true;
+    if (getIsStageActive()) {
+      onIntroComplete();
+    }
+  }
+
   function reset() {
     state.active = false;
     state.transitioning = false;
@@ -169,6 +198,7 @@ export function createStage3CameraIntroController({
   return {
     start,
     update,
+    skipToGameplayCamera,
     reset,
     getState: () => state,
     shouldSkipCameraFollow: () => state.active || !state.completed,

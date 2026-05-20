@@ -8,12 +8,14 @@ import { initThreeApp } from "../three/initThreeApp.js";
  * @param {number[]} props.allowedStages - 허용 Stage 목록 (예: [2], [3, 6])
  * @param {number} props.initialStage - 시작 Stage
  * @param {boolean} [props.enableKeyboardSwitch] - 키보드 2~6 전환 (개발용)
+ * @param {boolean} [props.skipStage3Intro] - true면 `/dev` 등에서 Stage3 카메라·인트로 사운드 생략
  * @param {function(string, Error?): void} [props.onError] - 에러 시 호출 (미전달 시 화면에 메시지 표시)
  */
 export function ThreeCanvas({
   allowedStages,
   initialStage,
   enableKeyboardSwitch = false,
+  skipStage3Intro = false,
   onError: onErrorProp,
 }) {
   const canvasRef = useRef(null);
@@ -34,6 +36,7 @@ export function ThreeCanvas({
       allowedStages: stages,
       initialStage,
       enableKeyboardSwitch,
+      skipStage3Intro,
       onError: (msg, err) => onErrorRef.current(msg, err),
     });
     disposeRef.current = app.dispose;
@@ -44,7 +47,7 @@ export function ThreeCanvas({
         disposeRef.current = null;
       }
     };
-  }, [allowedStages, initialStage, enableKeyboardSwitch]);
+  }, [allowedStages, initialStage, enableKeyboardSwitch, skipStage3Intro]);
 
   if (errorMessage) {
     return (

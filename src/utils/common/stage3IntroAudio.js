@@ -193,6 +193,11 @@ export function resumeStage3BackgroundAmbientFromOverlay() {
   stage3BackgroundPausedByOverlay = false;
 }
 
+/** 인트로 효과음 없이 배경 루프만 즉시 시작 (`/dev` 등). */
+export function startStage3BackgroundAmbientImmediately() {
+  startStage3BackgroundFadeIn();
+}
+
 /**
  * 섬 GLB가 씬에 추가된 뒤(onReady) 호출. 최초 1회만 재생(기존 StageManager 동작 유지).
  */

@@ -42,6 +42,7 @@ export function initThreeApp(canvasElement, options = {}) {
     allowedStages = [],
     initialStage,
     enableKeyboardSwitch = false,
+    skipStage3Intro = false,
     onError,
   } = options;
   const safeAllowedStages = Array.isArray(allowedStages) ? allowedStages : [];
@@ -182,7 +183,9 @@ export function initThreeApp(canvasElement, options = {}) {
     const factory = STAGE_FACTORIES[stageNum];
     if (factory) {
       try {
-        stageManager.registerStage(stageNum, factory());
+        const stageInstance =
+          stageNum === 3 ? factory({ skipStage3Intro }) : factory();
+        stageManager.registerStage(stageNum, stageInstance);
       } catch (err) {
         reportError(`Stage ${stageNum}을 불러오는 데 실패했습니다.`, err);
       }

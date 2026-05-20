@@ -3,8 +3,6 @@
  *
  * 도메인 로직은 utils/stages/stage3·config/stages/stage3 아래 컨트롤러·설정으로 분리.
  * - letter / monitor / island / interactions / stamp / cameraIntro / portal / bubbles / overlay / input
- *
- * @returns {import("../types.js").StageInstance}
  */
 import * as THREE from "three";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
@@ -49,6 +47,7 @@ import {
 import { GUM_CARDS_STICK_EVENT } from "../events/gumCardsEvents.js";
 import {
   playStage3IntroAudioTwice,
+  startStage3BackgroundAmbientImmediately,
   stopStage3IntroAudio,
 } from "../utils/common/stage3IntroAudio.js";
 import { disposeNoticePaperAudio } from "../utils/stages/stage3/playNoticePaperSound.js";
@@ -62,7 +61,14 @@ import {
   resetStage3RevealGate,
 } from "../utils/stages/stage3/stage3RevealGate.js";
 
-export function Stage3() {
+/**
+ * `skipStage3Intro`가 true면 `/dev` 등에서 상공 카메라·인트로 사운드를 생략한다.
+ * @param {{ skipStage3Intro?: boolean }} [options]
+ * @returns {import("../types.js").StageInstance}
+ */
+export function Stage3(options = {}) {
+  const skipStage3Intro = options.skipStage3Intro === true;
+
   /** @type {import("../types.js").Stage3Config} */
   const config = STAGE3_CONFIG;
   const glbLoader = getGLBLoader();
@@ -386,6 +392,15 @@ export function Stage3() {
     onCameraIntroStart: (center, bounds) => {
       onceStage3Revealed(() => {
         if (!isStage3Active) return;
+        if (skipStage3Intro) {
+          Promise.resolve().then(() => {
+            if (!isStage3Active) return;
+            cameraIntroController.skipToGameplayCamera();
+            startStage3BackgroundAmbientImmediately();
+            stampController.skipStampEntryPresentationForDev();
+          });
+          return;
+        }
         cameraIntroController.start(center, bounds);
         scheduleStage3EntrySubtitles();
       });
