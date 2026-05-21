@@ -1,5 +1,5 @@
 /**
- * guestbook PNG → WebP, DungGeunMo.woff → woff2 (재생성용)
+ * guestbook PNG/SVG(래스터) → WebP, DungGeunMo.woff → woff2 (재생성용)
  * Run: node scripts/convert-guestbook-assets.mjs
  * Requires: npm install sharp && pip install fonttools brotli
  */
@@ -16,7 +16,14 @@ const PNG_TARGETS = [
   "assets/guestbook/guestbook_bg.png",
   "assets/guestbook/profile_photo_bg.png",
   "assets/guestbook/profile_character.png",
+  "assets/guestbook/guestbook_ribbon.png",
+  "assets/guestbook/profile_card_icons.png",
 ];
+
+/** Figma base64 PNG 래퍼 SVG — 31×31 표시용 2x WebP */
+const CLOVER_SVG = "assets/guestbook/clover.svg";
+const CLOVER_WEBP = "assets/guestbook/clover.webp";
+const CLOVER_DISPLAY_PX = 31;
 
 const WEBP_OPTS = { quality: 85, effort: 6 };
 
@@ -38,6 +45,23 @@ async function pngToWebp(rel) {
   console.log(`${rel} → ${path.basename(dest)}: ${fmtKb(before)} → ${fmtKb(after)} (-${pct}%)`);
 }
 
+async function cloverSvgToWebp() {
+  const src = path.join(publicDir, CLOVER_SVG);
+  const dest = path.join(publicDir, CLOVER_WEBP);
+  if (!fs.existsSync(src)) {
+    console.warn(`skip (missing): ${CLOVER_SVG}`);
+    return;
+  }
+  const size = CLOVER_DISPLAY_PX * 2;
+  const before = fs.statSync(src).size;
+  await sharp(src).resize(size, size).webp({ quality: 90, effort: 6 }).toFile(dest);
+  const after = fs.statSync(dest).size;
+  const pct = (((before - after) / before) * 100).toFixed(1);
+  console.log(
+    `${CLOVER_SVG} → ${path.basename(dest)} (${size}×${size}): ${fmtKb(before)} → ${fmtKb(after)} (-${pct}%)`,
+  );
+}
+
 function woffToWoff2() {
   const src = path.join(publicDir, "fonts/DungGeunMo.woff");
   const dest = path.join(publicDir, "fonts/DungGeunMo.woff2");
@@ -57,4 +81,5 @@ function woffToWoff2() {
 for (const rel of PNG_TARGETS) {
   await pngToWebp(rel);
 }
+await cloverSvgToWebp();
 woffToWoff2();

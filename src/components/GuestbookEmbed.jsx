@@ -254,7 +254,7 @@ function ProfileCardIconCloud() {
     >
       <img
         alt=""
-        src="/assets/guestbook/profile_card_icons.png"
+        src="/assets/guestbook/profile_card_icons.webp"
         style={{
           position: "absolute",
           height: "342.47%",
@@ -268,12 +268,12 @@ function ProfileCardIconCloud() {
   );
 }
 
-/** Figma 480:178 — 클로버 아이콘 */
+/** Figma 480:178 — 클로버 아이콘 (31×31, 2x WebP) */
 function ProfileCardIconClover() {
   return (
     <img
       alt=""
-      src="/assets/guestbook/clover.svg"
+      src="/assets/guestbook/clover.webp"
       width={31}
       height={31}
       draggable={false}
@@ -594,7 +594,7 @@ function GuestbookRibbonIcon() {
     >
       <img
         alt=""
-        src="/assets/guestbook/guestbook_ribbon.png"
+        src="/assets/guestbook/guestbook_ribbon.webp"
         style={{
           position: "absolute",
           height: "308.64%",
