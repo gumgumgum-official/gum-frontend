@@ -25,31 +25,54 @@ export const PORTAL_PASS_TRIGGER_RADIUS_MAX = 3.2;
 export const GAME_MACHINE_CLICK_SOUND_PATH =
   "/static/sounds/minigame/start_click_sfx.mp3";
 
-export const GUMTOONGJI_CLIP_NAMES = [
-  "ANIM_GumtoongjiAction",
-  "Eye_default_LAction",
-  "Eye_default_RAction",
-  "modelAction",
-  "Mouth_smileAction",
-  "Paw_LAction.001",
-  "Paw_RAction.001",
+export const GUMTOONGJI_CLIP_NAMES = ["ANIM_Gumtoongji", "Paw_L", "Paw_R"];
+
+/** 씬 로드 즉시 무한 루프로 재생할 island ambient 애니메이션 클립 이름 목록 */
+export const LOOP_CLIP_NAMES = [
+  "SwingPivotAction",
+  "Lollipop_ArmShake_Rig",
+  "Sea_Wave_Loop",
+  "CampFire_Fire_Loop",
+  "Balloon_Sun_Sway",
+  "Balloon_Heart_Sway",
+  "Balloon_Star_Sway",
 ];
 
 /**
  * 클릭 시 1회 재생할 오브젝트별 애니메이션 설정.
  * GLB 변경으로 애니메이션이 추가될 경우 이 배열에만 항목을 추가하면 된다.
  *
- * trigger   — runInteractionForTarget의 target 값
- * objectName — GLB 내 AnimationMixer 루트 오브젝트 이름
- * clipNames  — 재생할 AnimationClip 이름 목록 (없으면 DEV 경고)
+ * trigger          — runInteractionForTarget의 target 값
+ * objectName       — GLB 내 AnimationMixer 루트 오브젝트 이름 (null = island model root)
+ * clipNames        — 재생할 AnimationClip 이름 목록 (없으면 DEV 경고)
+ * clampWhenFinished — true: 마지막 프레임 자세 유지 (기본 false)
+ * blockReplay      — true: 재생 중 재클릭 차단 (기본 false)
  *
- * @type {{ trigger: string; objectName: string; clipNames: string[] }[]}
+ * @type {{ trigger: string; objectName: string | null; clipNames: string[]; clampWhenFinished?: boolean; blockReplay?: boolean }[]}
  */
 export const STAGE3_CLICK_ONCE_ANIM_SETS = [
   {
     trigger: "well",
     objectName: "INT_Well",
-    clipNames: ["INT_WellAction"],
+    clipNames: ["INT_Well"],
+  },
+  {
+    trigger: "clock",
+    objectName: null,
+    clipNames: [
+      "ClockControllerAction.003",
+      "CharacterRig_Bench",
+      "ExclamationMarksAction.001",
+      "Sleep_Z_1Action.001",
+      "Sleep_Z_2Action.001",
+      "Sleep_Z_3Action.001",
+      "Eye_sleep_L_BenchAction",
+      "Eye_sleep_R_BenchAction",
+      "Eye_chevron_L_BenchAction",
+      "Eye_chevron_R_BenchAction",
+      "Eye_spiral_L_BenchAction",
+      "Eye_spiral_R_BenchAction",
+    ],
   },
 ];
 

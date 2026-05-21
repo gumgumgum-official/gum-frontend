@@ -13,6 +13,7 @@ import {
   PORTAL_PASS_TRIGGER_RADIUS_MAX,
   GAME_MACHINE_CLICK_SOUND_PATH,
   GUMTOONGJI_CLIP_NAMES,
+  LOOP_CLIP_NAMES,
   STAGE3_CLICK_ONCE_ANIM_SETS,
 } from "../../../../config/stages/stage3/stage3Interactions.js";
 import { playRandomWellClickSound } from "../playWellClickSound.js";
@@ -105,6 +106,12 @@ export function createStage3InteractionsController({
   let gumtoongjiMixer = null;
   /** @type {import("three").AnimationAction[]} */
   let gumtoongjiActions = [];
+  /** @type {HTMLAudioElement | null} */
+  let gumtoongjiClickAudio = null;
+
+  /** island ambient 루프 전용 mixer (그네·파도·모닥불·풍선 등) */
+  /** @type {import("three").AnimationMixer | null} */
+  let islandLoopMixer = null;
 
   /** @type {Map<string, { mixer: import("three").AnimationMixer, actions: import("three").AnimationAction[] }>} */
   const clickOnceSets = new Map();
@@ -189,13 +196,20 @@ export function createStage3InteractionsController({
   }
 
   function playGumtoongjiAnimation() {
-    for (const action of gumtoongjiActions) action.reset().play();
+    if (gumtoongjiClickAudio) {
+      gumtoongjiClickAudio.currentTime = 0;
+      const p = gumtoongjiClickAudio.play();
+      if (p) p.catch(() => {});
+    }
+    for (const action of gumtoongjiActions) action.stop().play();
   }
 
   /** @param {string} trigger */
   function playClickOnceSet(trigger) {
     const set = clickOnceSets.get(trigger);
     if (!set) return;
+    if (set.blockReplay && set._playingCount > 0) return;
+    if (set.blockReplay) set._playingCount = set.actions.length;
     for (const a of set.actions) a.reset().play();
   }
 
@@ -423,6 +437,11 @@ export function createStage3InteractionsController({
     }
     gumtoongjiActions = [];
 
+    if (islandLoopMixer) {
+      islandLoopMixer.stopAllAction();
+      islandLoopMixer = null;
+    }
+
     for (const set of clickOnceSets.values()) set.mixer.stopAllAction();
     clickOnceSets.clear();
 
@@ -431,15 +450,6 @@ export function createStage3InteractionsController({
     islandModel.traverse((obj) => {
       if (obj.name === "ANIM_Gumtoongji") gumtoongjiRoot = obj;
     });
-
-    if (import.meta.env.DEV) {
-      console.log("[Gumtoongji] root 탐색 결과:", gumtoongjiRoot);
-      console.log(
-        "[Gumtoongji] animations 수:",
-        animations.length,
-        animations.map((a) => a.name),
-      );
-    }
 
     if (gumtoongjiRoot && animations.length > 0) {
       gumtoongjiRoot.traverse((obj) => {
@@ -472,9 +482,16 @@ export function createStage3InteractionsController({
         }
         const action = gumtoongjiMixer.clipAction(clip);
         action.setLoop(THREE.LoopOnce, 1);
-        action.clampWhenFinished = true;
+        action.clampWhenFinished = false;
         gumtoongjiActions.push(action);
       }
+
+      // 클릭 효과음 미리 로드 (첫 클릭 딜레이 방지)
+      gumtoongjiClickAudio = new window.Audio(
+        resolvePublicAssetUrl("/static/sounds/text_crack/flower_magic.mp3"),
+      );
+      gumtoongjiClickAudio.preload = "auto";
+      gumtoongjiClickAudio.volume = 1;
     } else if (import.meta.env.DEV) {
       console.warn(
         "[Gumtoongji] 초기화 실패 — root:",
@@ -482,6 +499,22 @@ export function createStage3InteractionsController({
         "/ animations:",
         animations.length,
       );
+    }
+
+    // island ambient 루프 애니메이션 (그네·파도·모닥불·풍선 등) — 씬 로드 즉시 무한 재생
+    if (animations.length > 0) {
+      islandLoopMixer = new THREE.AnimationMixer(islandModel);
+      for (const name of LOOP_CLIP_NAMES) {
+        const clip = THREE.AnimationClip.findByName(animations, name);
+        if (!clip) {
+          if (import.meta.env.DEV) console.warn(`[Loop] clip 없음: ${name}`);
+          continue;
+        }
+        const action = islandLoopMixer.clipAction(clip);
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.clampWhenFinished = false;
+        action.play();
+      }
     }
 
     if (unlistenMinigameClose) {
@@ -560,10 +593,10 @@ export function createStage3InteractionsController({
       ) {
         return;
       }
-      if (hasGgumCharacterDescendant(obj)) return;
-      if (isBenchIntObject(obj)) return;
       const suffix = obj.name.slice(STAGE3_INT_PREFIX.length);
       const intTarget = intSuffixToTarget(suffix);
+      if (hasGgumCharacterDescendant(obj)) return;
+      if (intTarget !== "clock" && isBenchIntObject(obj)) return;
       if (intTarget == null) return;
       obj.updateMatrixWorld(true);
       _camAssistBox.setFromObject(obj);
@@ -594,8 +627,17 @@ export function createStage3InteractionsController({
     intRaycastMeshes.push(...meshSet);
 
     if (animations.length > 0) {
+      if (import.meta.env.DEV) {
+        console.log(
+          "[Stage3 ClickOnce] 전체 클립:",
+          animations.map((c) => c.name),
+        );
+      }
       for (const def of STAGE3_CLICK_ONCE_ANIM_SETS) {
-        const root = islandModel.getObjectByName(def.objectName);
+        const root =
+          def.objectName == null
+            ? islandModel
+            : islandModel.getObjectByName(def.objectName);
         if (!root) {
           if (import.meta.env.DEV) {
             console.warn(`[Stage3 ClickOnce] 오브젝트 없음: ${def.objectName}`);
@@ -603,24 +645,37 @@ export function createStage3InteractionsController({
           continue;
         }
         const mixer = new THREE.AnimationMixer(root);
+        const clampWhenFinished = def.clampWhenFinished ?? false;
         const actions = [];
         for (const clipName of def.clipNames) {
           const clip = THREE.AnimationClip.findByName(animations, clipName);
           if (!clip) {
             if (import.meta.env.DEV) {
               console.warn(
-                `[Stage3 ClickOnce] clip 없음: ${clipName} (${def.objectName})`,
+                `[Stage3 ClickOnce] clip 없음: ${clipName} (${def.objectName ?? "root"})`,
               );
             }
             continue;
           }
           const action = mixer.clipAction(clip);
           action.setLoop(THREE.LoopOnce, 1);
-          action.clampWhenFinished = true;
+          action.clampWhenFinished = clampWhenFinished;
           actions.push(action);
         }
         if (actions.length > 0) {
-          clickOnceSets.set(def.trigger, { mixer, actions });
+          /** @type {{ mixer: import("three").AnimationMixer; actions: import("three").AnimationAction[]; blockReplay: boolean; _playingCount: number }} */
+          const setEntry = {
+            mixer,
+            actions,
+            blockReplay: def.blockReplay ?? false,
+            _playingCount: 0,
+          };
+          if (def.blockReplay) {
+            mixer.addEventListener("finished", () => {
+              setEntry._playingCount = Math.max(0, setEntry._playingCount - 1);
+            });
+          }
+          clickOnceSets.set(def.trigger, setEntry);
         }
       }
     }
@@ -898,6 +953,11 @@ export function createStage3InteractionsController({
       gameMachineClickAudio.src = "";
       gameMachineClickAudio = null;
     }
+    if (gumtoongjiClickAudio) {
+      gumtoongjiClickAudio.pause();
+      gumtoongjiClickAudio.src = "";
+      gumtoongjiClickAudio = null;
+    }
     if (gumtoongjiMixer) {
       gumtoongjiMixer.stopAllAction();
       gumtoongjiMixer = null;
@@ -917,6 +977,7 @@ export function createStage3InteractionsController({
     detachIntClickHintBubble,
     update(delta) {
       if (gumtoongjiMixer) gumtoongjiMixer.update(delta);
+      if (islandLoopMixer) islandLoopMixer.update(delta);
       for (const set of clickOnceSets.values()) set.mixer.update(delta);
       updateIntClickHintBubble();
       updatePortalPassTrigger();
