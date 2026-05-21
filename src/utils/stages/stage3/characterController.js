@@ -140,6 +140,7 @@ export function createCharacterController({
   /** 이동 방향 전방(m) walkable 없음/절벽이면 섬 밖 시도로 간주 (계단·그네 등 AABB 밖 가장자리) */
   const ISLAND_EXIT_PROBE_DISTANCE = 3;
   let islandExitBlockedToastCooldown = 0;
+  let suppressIslandExitToast = false;
 
   function getWalkSoundVolume() {
     const v = config.character?.walkSoundVolume;
@@ -210,7 +211,9 @@ export function createCharacterController({
         worldSpawnXZ,
         walkableMeshes,
         allowedBoundsXZ: allowedBounds,
+        suppressIslandExitToast: suppressToast = false,
       } = setupOptions;
+      suppressIslandExitToast = suppressToast;
       backgroundBounds = bounds;
       staticColliderBoxes = colliderBoxes;
       walkableGroundMeshes = Array.isArray(walkableMeshes)
@@ -761,7 +764,7 @@ export function createCharacterController({
               stairAscentTowardExit) &&
             islandExitBlockedToastCooldown <= 0
           ) {
-            dispatchStage3IslandExitBlocked();
+            if (!suppressIslandExitToast) dispatchStage3IslandExitBlocked();
             islandExitBlockedToastCooldown = ISLAND_EXIT_TOAST_COOLDOWN_SEC;
           }
         }

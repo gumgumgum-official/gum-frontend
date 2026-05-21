@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { cancelStage6LoadingTransition } from "../utils/stages/stage6/stage6LoadingTransition.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import {
   AIRPORT_SUBTITLE_HIDE_EVENT,
@@ -241,7 +240,6 @@ export function Stage6BoardingOverlay() {
     };
 
     const onBoardingReset = () => {
-      cancelStage6LoadingTransition();
       cancelSequence();
       setShowSubtitle(false);
       setFadeOutSubtitle(false);
@@ -388,16 +386,6 @@ export function Stage6BoardingOverlay() {
         className={`esc-screen-fade${isScreenFading ? " active" : ""}`}
         aria-hidden="true"
       />
-      <div id="loading-overlay" aria-hidden="true">
-        <div id="loading-bg" />
-        <canvas id="airplane-canvas" />
-        <div id="loading-text">
-          일상으로 복귀하는 중
-          <br />
-          <span>GGUM Airlines GUM 2026</span>
-        </div>
-      </div>
-
       <div
         className={`subtitle-container${
           subtitleVariant === "tent" ? " subtitle-container--tent" : ""
