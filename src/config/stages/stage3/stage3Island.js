@@ -2,7 +2,7 @@
 
 export const STAGE3_WALKABLE_NAME_PATTERNS = [
   /^DECO_BRICK/i,
-  /^DECO_Grass/i,
+  /^DECO_Leaf/i,
   /^Ground\d/i, // island15.glb: Ground1~5
   /^Path\d/i, // island15.glb: Path1~5
   /^OBJ_Stair/i,
