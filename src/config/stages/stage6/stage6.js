@@ -18,9 +18,8 @@ export const STAGE6_CONFIG = {
     fov: 26.633,
     near: 0.01,
     far: 1000,
-    position: { x: 2.7814, y: 6.5789, z: 11.3866 },
-    up: { x: -0.0589, y: 0.9871, z: -0.1487 },
-    lookAt: { x: -4.7128, y: 1.2273, z: -6.2315 },
+    position: { x: 1.2571, y: 4.9219, z: 11.708 },
+    lookAt: { x: -3.8718, y: 0.1931, z: -6.2047 },
   },
   background: {
     color: 0x042d5b, // 어두운 남색 (밖/하늘 영역)

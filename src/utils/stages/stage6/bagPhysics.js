@@ -26,7 +26,7 @@ export function isInCameraView(x, y, z, camera) {
 const BAG_IMPULSE_STRENGTH = 5.5;
 const BAG_FRICTION = 3.5;
 const BAG_NUDGE_COOLDOWN_SEC = 0.22;
-const BAG_MAX_DRIFT = 3.5;
+const BAG_MAX_DRIFT = 14;
 const BAG_MAX_SPEED = 7.0;
 const BAG_TOUCH_SOUNDS = [
   "/static/sounds/airport/bag_touch1.mp3",
