@@ -202,6 +202,7 @@ export function createStage3IslandController({
         spawnOffset: config.character?.spawnOffset,
       });
       setGroundY(characterGroundY);
+      character.applyBaseGroundY(characterGroundY);
 
       const walkableAllowedBoundsXZ = buildStage3AllowedBoundsXZ(
         walkableBounds,

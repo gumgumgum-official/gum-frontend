@@ -955,6 +955,18 @@ export function createCharacterController({
       if (idleCharacterModel) idleCharacterModel.rotation.y = yRad;
     },
 
+    /**
+     * walkable 레이캐스트로 확정된 실제 지면 Y를 반영한다.
+     * backgroundMaxY 추정값이 실제 지면보다 높을 때 isAboveMinSafeGround 체크를 바로잡는다.
+     * @param {number} y
+     */
+    applyBaseGroundY(y) {
+      if (!Number.isFinite(y)) return;
+      baseGroundY = y;
+      resolvedGroundY = y;
+      groundMissFrames = 0;
+    },
+
     /** 캐릭터 모델 전체 메시 opacity 일괄 설정 (에스컬레이터 fade out 용) */
     setOpacity(opacity) {
       const targets = [characterModel, idleCharacterModel];
