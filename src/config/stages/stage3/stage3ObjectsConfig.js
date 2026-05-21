@@ -15,7 +15,7 @@ export const STAGE3_STANDALONE_FLOWER_GLB_PATHS = [
 
 export const STAGE3_OBJECTS_CONFIG = {
   model: {
-    path: "/models/stage3/island17.glb",
+    path: "/models/stage3/island18.glb",
     useStaticObstacleColliders: true,
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
