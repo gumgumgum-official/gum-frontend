@@ -307,6 +307,7 @@ export function Stage6() {
   const _escTopStepPos = new THREE.Vector3();
   let airplaneCallSignTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
+  let announceWatchdogId = 0;
   /** @type {HTMLAudioElement | null} */
   let airplaneCallSignAudio = null;
   /** @type {HTMLAudioElement | null} */
@@ -442,6 +443,10 @@ export function Stage6() {
       window.clearTimeout(telActivateTimeoutId);
       telActivateTimeoutId = 0;
     }
+    if (announceWatchdogId) {
+      window.clearTimeout(announceWatchdogId);
+      announceWatchdogId = 0;
+    }
     if (airplaneCallSignAudio) {
       airplaneCallSignAudio.onplay = null;
       airplaneCallSignAudio.ontimeupdate = null;
@@ -470,6 +475,11 @@ export function Stage6() {
   }
 
   function playAirportAnnounceIntro() {
+    // Cancel any previous watchdog from an earlier (possibly double-triggered) call
+    if (announceWatchdogId) {
+      window.clearTimeout(announceWatchdogId);
+      announceWatchdogId = 0;
+    }
     if (!airportAnnounceIntroAudio) {
       airportAnnounceIntroAudio = new window.Audio();
       airportAnnounceIntroAudio.preload = "auto";
@@ -514,6 +524,10 @@ export function Stage6() {
 
     airportAnnounceIntroAudio.onplay = () => {
       announceFallbackFired = true; // audio is actually playing, suppress watchdog
+      if (announceWatchdogId) {
+        window.clearTimeout(announceWatchdogId);
+        announceWatchdogId = 0;
+      }
       activeSubtitleCueIndex = -1;
       isAirportSubtitleVisible = false;
       dispatchAirportSubtitleTextByTime(0);
@@ -541,7 +555,7 @@ export function Stage6() {
       announcePlayPromise.catch(runAnnounceFallback);
     }
     // Watchdog: covers the case where play() returns a pending-forever Promise
-    window.setTimeout(runAnnounceFallback, 2500);
+    announceWatchdogId = window.setTimeout(runAnnounceFallback, 2500);
   }
 
   function playAtmClickSound() {
@@ -643,6 +657,10 @@ export function Stage6() {
       airplaneCallSignAudio.onplay = null;
       airplaneCallSignAudio.ontimeupdate = () => {
         chimeFallbackFired = true; // audio is playing, suppress watchdog
+        if (airplaneCallSignTimeoutId) {
+          window.clearTimeout(airplaneCallSignTimeoutId);
+          airplaneCallSignTimeoutId = 0;
+        }
         if (isAirportChimeVisible) return;
         if (
           Number(airplaneCallSignAudio?.currentTime ?? 0) <
@@ -668,7 +686,7 @@ export function Stage6() {
         chimePlayPromise.catch(runChimeFallback);
       }
       // Watchdog: covers pending-forever Promise (AudioContext suspended on SPA nav)
-      window.setTimeout(runChimeFallback, 2500);
+      airplaneCallSignTimeoutId = window.setTimeout(runChimeFallback, 2500);
     }, AIRPLANE_CALL_SIGN_DELAY_MS);
   }
 
@@ -1071,7 +1089,7 @@ export function Stage6() {
   }
 
   function activateTelRinging() {
-    if (!isStage6Active) return;
+    if (!isStage6Active || isTelActivated) return;
     isTelActivated = true;
     telEmissiveTarget = 1;
     showPhoneIndicator(STAGE6_PHONE_INDICATOR_MODE_RINGING);
@@ -2005,6 +2023,10 @@ export function Stage6() {
       if (telRingAgainTimeoutId) {
         window.clearTimeout(telRingAgainTimeoutId);
         telRingAgainTimeoutId = 0;
+      }
+      if (announceWatchdogId) {
+        window.clearTimeout(announceWatchdogId);
+        announceWatchdogId = 0;
       }
       phoneRingCyclesRemaining = 0;
       if (phoneRingAudio) {
