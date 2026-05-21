@@ -11,7 +11,6 @@ import {
 } from "../utils/common/gltfTemplateCache.js";
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
-import { startStage6LoadingTransition } from "../utils/stages/stage6/stage6LoadingTransition.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6/stage6.js";
 import { preloadStage6AirportGlb } from "../utils/stages/stage6/stage6AirportPreload.js";
 import {
@@ -331,13 +330,6 @@ export function Stage6() {
 
   const bagPhysics = createBagPhysics();
   let cameraDebugOverlay = null;
-
-  function isLoadingOverlayVisible() {
-    const loadingOverlay = document.getElementById("loading-overlay");
-    if (!loadingOverlay) return false;
-    const style = window.getComputedStyle(loadingOverlay);
-    return style.display !== "none" && style.visibility !== "hidden";
-  }
 
   function applyStage6SceneBackground(scene) {
     scene.background = new THREE.Color(config.background.color);
@@ -681,12 +673,7 @@ export function Stage6() {
   }
 
   const handleKeyDown = (event) => {
-    if (
-      isSceneInteractionLocked ||
-      isAnnouncementActive ||
-      isLoadingOverlayVisible() ||
-      isFinishFired
-    ) {
+    if (isSceneInteractionLocked || isAnnouncementActive || isFinishFired) {
       return;
     }
     if (event.key === "Enter") {
@@ -1642,6 +1629,7 @@ export function Stage6() {
           characterController?.setup(floorY, bounds, staticColliderBoxes, {
             worldSpawnXZ: { x: spawnX, z: spawnZ },
             allowedBoundsXZ: bounds,
+            suppressIslandExitToast: true,
           });
 
           // GLB 씬이 실제로 준비된 뒤에 공항 안내 오디오/자막 시퀀스를 시작
@@ -1932,9 +1920,7 @@ export function Stage6() {
           );
           if (escFadeProgress >= 1 && !isFinishFired) {
             isFinishFired = true;
-            startStage6LoadingTransition(() => {
-              window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
-            });
+            window.dispatchEvent(new CustomEvent(STAGE6_FINISH_EVENT));
           }
         }
       }
