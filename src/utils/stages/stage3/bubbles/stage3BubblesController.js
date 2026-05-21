@@ -6,6 +6,7 @@ import {
   WORRY_ENTER_HINT_DIST,
   STAGE3_USER_ENTER_BUBBLE_SHOW_SEC,
   STAGE3_USER_ENTER_BUBBLE_GAP_SEC,
+  STAGE3_WORRY_ENTER_BUBBLE_MESSAGES,
 } from "../../../../config/stages/stage3/stage3Bubbles.js";
 
 /**
@@ -47,14 +48,34 @@ export function createStage3BubblesController({
   /** @type {'off' | 'show' | 'gap'} */
   let userWorryEnterBubblePhase = "off";
   let userWorryEnterBubbleT = 0;
+  let lastWorryEnterBubbleMessageIndex = -1;
   const _projWorry = new THREE.Vector3();
+
+  function pickWorryEnterBubbleMessage() {
+    const messages = STAGE3_WORRY_ENTER_BUBBLE_MESSAGES;
+    if (messages.length === 0) return "";
+    if (messages.length === 1) return messages[0];
+    let index = Math.floor(Math.random() * messages.length);
+    if (index === lastWorryEnterBubbleMessageIndex) {
+      index = (index + 1) % messages.length;
+    }
+    lastWorryEnterBubbleMessageIndex = index;
+    return messages[index];
+  }
+
+  function beginWorryEnterBubbleShow() {
+    userWorryEnterBubblePhase = "show";
+    userWorryEnterBubbleT = STAGE3_USER_ENTER_BUBBLE_SHOW_SEC;
+    if (userWorryEnterBubbleEl) {
+      userWorryEnterBubbleEl.textContent = pickWorryEnterBubbleMessage();
+    }
+  }
 
   function mount() {
     if (!userWorryEnterBubbleEl) {
       userWorryEnterBubbleEl = document.createElement("div");
       userWorryEnterBubbleEl.className =
-        "speech-bubble-stage2 speech-bubble-stage3-user";
-      userWorryEnterBubbleEl.textContent = "🔨 [ ENTER ]";
+        "speech-bubble-stage2 speech-bubble-stage3-user speech-bubble-stage3-worry-enter";
       userWorryEnterBubbleEl.setAttribute("aria-hidden", "true");
       document.body.appendChild(userWorryEnterBubbleEl);
     }
@@ -109,8 +130,7 @@ export function createStage3BubblesController({
 
     if (nearLetter && gumBubbleAnchorOk) {
       if (userWorryEnterBubblePhase === "off") {
-        userWorryEnterBubblePhase = "show";
-        userWorryEnterBubbleT = STAGE3_USER_ENTER_BUBBLE_SHOW_SEC;
+        beginWorryEnterBubbleShow();
       }
       userWorryEnterBubbleT -= delta;
       if (userWorryEnterBubbleT <= 0) {
@@ -118,8 +138,7 @@ export function createStage3BubblesController({
           userWorryEnterBubblePhase = "gap";
           userWorryEnterBubbleT = STAGE3_USER_ENTER_BUBBLE_GAP_SEC;
         } else {
-          userWorryEnterBubblePhase = "show";
-          userWorryEnterBubbleT = STAGE3_USER_ENTER_BUBBLE_SHOW_SEC;
+          beginWorryEnterBubbleShow();
         }
       }
       const bubbleVisible = userWorryEnterBubblePhase === "show";
@@ -150,6 +169,7 @@ export function createStage3BubblesController({
     intClickHintBubbleEl = null;
     userWorryEnterBubblePhase = "off";
     userWorryEnterBubbleT = 0;
+    lastWorryEnterBubbleMessageIndex = -1;
   }
 
   return {
