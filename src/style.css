@@ -196,6 +196,14 @@ body {
   border-top-color: #ffffff;
 }
 
+/* Stage3 ENTER 쿠션 힌트 — 동일 형태, 약간 큰 크기 */
+.speech-bubble-stage2.speech-bubble-stage3-user.speech-bubble-stage3-worry-enter {
+  padding: 7px 18px;
+  max-width: min(94vw, 780px);
+  font-size: 20px;
+  line-height: 1.45;
+}
+
 /* Stage3 INT Click 힌트 말풍선: 반투명 배경 */
 .speech-bubble-stage2.speech-bubble-stage3-user.speech-bubble-stage3-int-click {
   background: #fff7bf;
@@ -246,16 +254,18 @@ body {
 
 .airport-chime-indicator {
   position: fixed;
-  top: 34px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  padding: 8px 20px;
-  border-radius: 20px;
+  padding: 12px 28px;
+  border-radius: 26px;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.35;
   opacity: 0;
   transition: opacity 0.4s ease;
   z-index: 2200;
@@ -270,7 +280,7 @@ body {
 .airport-chime-indicator.stage3-island-exit-toast {
   background: rgba(255, 255, 255, 0.27);
   color: #422442;
-  font-size: 13px;
+  font-size: 17px;
   box-shadow: 0 4px 16px rgba(66, 36, 66, 0.18);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -327,10 +337,11 @@ body {
 
 /* Stage3 텐트(타로) 씬 자막 — split pill + 껌딱지 말풍선 폰트 */
 .subtitle-container--tent {
-  --tent-subtitle-font-size: 22px;
+  --tent-subtitle-font-size: 36px;
   --tent-subtitle-line-height: 1.32;
-  --tent-subtitle-padding-y: 6px;
-  max-width: 680px;
+  --tent-subtitle-padding-y: 12px;
+  bottom: 120px;
+  max-width: 860px;
   width: calc(100% - 48px);
 }
 
@@ -359,7 +370,7 @@ body {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 4px 0 0 4px;
-  padding: var(--tent-subtitle-padding-y) 14px;
+  padding: var(--tent-subtitle-padding-y) 20px;
   white-space: nowrap;
   flex-shrink: 0;
   font-size: var(--tent-subtitle-font-size);
@@ -388,7 +399,7 @@ body {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 0 4px 4px 0;
-  padding: var(--tent-subtitle-padding-y) 18px;
+  padding: var(--tent-subtitle-padding-y) 28px;
   font-size: var(--tent-subtitle-font-size);
   font-weight: 400;
   font-synthesis: none;
@@ -416,7 +427,7 @@ body {
 }
 
 .stage3-stamp-panel {
-  --stage3-stamp-scale: 0.52;
+  --stage3-stamp-scale: 0.68;
   --stage3-stamp-intro-scale: 1.68;
   border-radius: 10px;
   overflow: hidden;
@@ -438,12 +449,29 @@ body {
 
 .stage3-stamp-poster-wrap {
   position: relative;
-  width: min(24vw, 190px);
-  max-width: 190px;
+  width: min(30vw, 260px);
+  max-width: 260px;
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--pop {
   animation: stage3-stamp-panel-pop 2s ease-in-out;
+}
+
+.stage3-stamp-panel.stage3-stamp-panel--intro-center,
+.stage3-stamp-panel.stage3-stamp-panel--intro-fly {
+  transition: none;
+}
+
+@keyframes stage3-stamp-intro-center-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 28px))
+      scale(calc(var(--stage3-stamp-intro-scale) * 0.78));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(var(--stage3-stamp-intro-scale));
+  }
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--intro-center {
@@ -455,17 +483,26 @@ body {
   transform-origin: center center;
   transform: translate(-50%, -50%) scale(var(--stage3-stamp-intro-scale));
   z-index: 2260;
+  animation: stage3-stamp-intro-center-in 0.72s cubic-bezier(0.22, 1, 0.36, 1)
+    both;
 }
 
-.stage3-stamp-panel.stage3-stamp-panel--intro-center .stage3-stamp-poster-wrap {
+.stage3-stamp-panel.stage3-stamp-panel--intro-center .stage3-stamp-poster-wrap,
+.stage3-stamp-panel.stage3-stamp-panel--intro-fly .stage3-stamp-poster-wrap {
   width: 100%;
   max-width: none;
 }
 
-.stage3-stamp-panel.stage3-stamp-panel--intro-center.stage3-stamp-panel--intro-fly {
-  transition: transform 0.78s cubic-bezier(0.2, 0.8, 0.15, 1);
-  transform: translate(calc(-50vw + 30px), calc(-50vh + 30px))
-    scale(var(--stage3-stamp-scale));
+/* WAAPI 종료 지점: 좌상단 고정 위치·크기는 일반 패널과 동일 */
+.stage3-stamp-panel.stage3-stamp-panel--intro-fly {
+  position: fixed;
+  left: 30px;
+  top: 30px;
+  width: min(30vw, 260px);
+  max-width: 260px;
+  transform-origin: top left;
+  transform: scale(var(--stage3-stamp-scale));
+  z-index: 2260;
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--settling {

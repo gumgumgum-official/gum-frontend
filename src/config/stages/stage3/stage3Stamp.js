@@ -2,6 +2,8 @@
 
 export const STAMP_POSTER_IMAGE_PATH = "/assets/poster/stamp_poster.png";
 
+/** 화면 중앙 포스터 페이드·스케일 인 */
+export const STAGE3_STAMP_INTRO_CENTER_IN_MS = 720;
 export const STAGE3_STAMP_INTRO_HOLD_MS = 2000;
 export const STAGE3_STAMP_INTRO_FLY_MS = 780;
 

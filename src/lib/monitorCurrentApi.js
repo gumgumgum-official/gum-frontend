@@ -41,7 +41,7 @@ export function getMonitorArrivalMessage(worry) {
   if (!worry) return null;
   const seq = worry.displaySeq ?? worry.seq;
   if (typeof seq === "number" && Number.isInteger(seq) && seq >= 1) {
-    return `${seq}번째 고민이 도착했습니다📪`;
+    return `${seq}번째 고민이 도착했습니다 📪`;
   }
   return "고민이 도착했습니다!";
 }

@@ -261,6 +261,8 @@ export function Stage6() {
   let atmRootRef = null;
   let isTelActivated = false;
   let isTelRinging = false;
+  /** 통화 음성 재생 중 — 포인터 클릭·모달 차단 */
+  let isPhoneInCall = false;
   let telEmissiveProgress = 0;
   let telEmissiveTarget = 0;
   let telCallIndex = 0;
@@ -1088,6 +1090,10 @@ export function Stage6() {
     window.dispatchEvent(new CustomEvent(STAGE6_PHONE_INDICATOR_HIDE_EVENT));
   }
 
+  function isStage6PointerBlocked() {
+    return isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall;
+  }
+
   function activateTelRinging() {
     if (!isStage6Active || isTelActivated) return;
     isTelActivated = true;
@@ -1111,6 +1117,7 @@ export function Stage6() {
     phoneCallAudio.src = callSrc;
     phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
     phoneCallAudio.onended = () => {
+      isPhoneInCall = false;
       hidePhoneIndicator();
       telEmissiveTarget = 0;
       telRingAgainTimeoutId = window.setTimeout(() => {
@@ -1133,6 +1140,9 @@ export function Stage6() {
     if (telCallIndex >= PHONE_CALL_SOUNDS.length) return;
     stopPhoneRing();
     hideTelBubble();
+    hideCharBubble();
+    isPhoneInCall = true;
+    telEmissiveTarget = 0;
     showPhoneIndicator(STAGE6_PHONE_INDICATOR_MODE_IN_CALL);
     isTelActivated = false;
     const callIdx = telCallIndex;
@@ -1326,6 +1336,7 @@ export function Stage6() {
       }
       isTelActivated = false;
       isTelRinging = false;
+      isPhoneInCall = false;
       telEmissiveTarget = 0;
       telEmissiveProgress = 0;
       telCallIndex = 0;
@@ -1349,6 +1360,7 @@ export function Stage6() {
         STAGE6_BOARDING_PASS_ISSUED_EVENT,
         () => {
           isBoardingPassIssued = true;
+          atmEmissiveTarget = 0;
         },
         { once: true },
       );
@@ -1368,7 +1380,7 @@ export function Stage6() {
       onPointerDown = (event) => {
         const hit = getPointerHitTarget(event);
         if (!hit) return;
-        if (isSceneInteractionLocked || isAnnouncementActive) return;
+        if (isStage6PointerBlocked()) return;
         if (hit.target === "photobooth") {
           playUiClickSound();
           hideTelBubble();
@@ -1429,7 +1441,7 @@ export function Stage6() {
       };
       canvas.addEventListener("pointerdown", onPointerDown, { capture: true });
       onPointerMove = (event) => {
-        if (isSceneInteractionLocked || isAnnouncementActive) {
+        if (isStage6PointerBlocked()) {
           canvas.style.cursor = "default";
           hoveredCharacterName = null;
           hideCharBubble();
@@ -2049,6 +2061,7 @@ export function Stage6() {
       }
       isTelActivated = false;
       isTelRinging = false;
+      isPhoneInCall = false;
       telRootRef = null;
       telEmissiveMaterials.length = 0;
       telEmissiveProgress = 0;

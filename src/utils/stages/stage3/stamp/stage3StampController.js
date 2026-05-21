@@ -4,6 +4,7 @@
 import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../../../../events/stage6Events.js";
 import {
   STAMP_POSTER_IMAGE_PATH,
+  STAGE3_STAMP_INTRO_CENTER_IN_MS,
   STAGE3_STAMP_INTRO_HOLD_MS,
   STAGE3_STAMP_INTRO_FLY_MS,
   STAGE3_ENTRY_SUBTITLE_TOTAL_MS,
@@ -173,6 +174,93 @@ export function createStage3StampController({
     syncStampPanelVisibilityByOverlay();
   }
 
+  /** @param {HTMLElement} panel */
+  function clearStampIntroInlineStyles(panel) {
+    panel.style.removeProperty("transform");
+    panel.style.removeProperty("transform-origin");
+  }
+
+  /** @param {HTMLElement} panel */
+  function settleStampPanelAfterIntroFly(panel) {
+    panel.getAnimations().forEach((anim) => anim.cancel());
+    panel.classList.add("stage3-stamp-panel--settling");
+    panel.classList.remove("stage3-stamp-panel--intro-center");
+    panel.classList.remove("stage3-stamp-panel--intro-fly");
+    clearStampIntroInlineStyles(panel);
+    requestAnimationFrame(() => {
+      panel.classList.remove("stage3-stamp-panel--settling");
+      stage3StampIntroAnimating = false;
+      stage3InteractionLocked = false;
+    });
+  }
+
+  /** @param {HTMLElement} panel */
+  function startStampPanelFlyToCorner(panel) {
+    const firstRect = panel.getBoundingClientRect();
+
+    panel.classList.add("stage3-stamp-panel--settling");
+    panel.classList.remove("stage3-stamp-panel--intro-center");
+    panel.classList.add("stage3-stamp-panel--intro-fly");
+    void panel.offsetWidth;
+
+    const lastRect = panel.getBoundingClientRect();
+    const dx = firstRect.left - lastRect.left;
+    const dy = firstRect.top - lastRect.top;
+    const sx = firstRect.width / Math.max(lastRect.width, 1);
+    const sy = firstRect.height / Math.max(lastRect.height, 1);
+
+    panel.classList.remove("stage3-stamp-panel--settling");
+    clearStampIntroInlineStyles(panel);
+
+    const cornerScale = window
+      .getComputedStyle(panel)
+      .getPropertyValue("--stage3-stamp-scale")
+      .trim();
+
+    const flyAnimation = panel.animate(
+      [
+        {
+          transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+          transformOrigin: "top left",
+        },
+        {
+          transform: `scale(${cornerScale || 0.68})`,
+          transformOrigin: "top left",
+        },
+      ],
+      {
+        duration: STAGE3_STAMP_INTRO_FLY_MS,
+        easing: "cubic-bezier(0.2, 0.8, 0.15, 1)",
+        fill: "forwards",
+      },
+    );
+
+    let flyFinished = false;
+    const finishFly = () => {
+      if (flyFinished) return;
+      flyFinished = true;
+      if (stage3StampIntroFlyTimerId != null) {
+        window.clearTimeout(stage3StampIntroFlyTimerId);
+        stage3StampIntroFlyTimerId = null;
+      }
+      if (flyAnimation.playState !== "finished") {
+        flyAnimation.cancel();
+      }
+      if (!getIsStageActive() || !stampUiRoot) {
+        stage3StampIntroAnimating = false;
+        return;
+      }
+      settleStampPanelAfterIntroFly(panel);
+    };
+
+    flyAnimation.addEventListener("finish", finishFly, { once: true });
+
+    stage3StampIntroFlyTimerId = window.setTimeout(() => {
+      stage3StampIntroFlyTimerId = null;
+      finishFly();
+    }, STAGE3_STAMP_INTRO_FLY_MS + 120);
+  }
+
   function clearStampIntroTimers() {
     if (stage3StampIntroHoldTimerId != null) {
       window.clearTimeout(stage3StampIntroHoldTimerId);
@@ -181,6 +269,16 @@ export function createStage3StampController({
     if (stage3StampIntroFlyTimerId != null) {
       window.clearTimeout(stage3StampIntroFlyTimerId);
       stage3StampIntroFlyTimerId = null;
+    }
+    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    if (panel) {
+      clearStampIntroInlineStyles(/** @type {HTMLElement} */ (panel));
+      panel.getAnimations().forEach((anim) => anim.cancel());
+      panel.classList.remove(
+        "stage3-stamp-panel--intro-center",
+        "stage3-stamp-panel--intro-fly",
+        "stage3-stamp-panel--settling",
+      );
     }
     stage3StampIntroAnimating = false;
   }
@@ -191,32 +289,20 @@ export function createStage3StampController({
     if (!panel) return;
     clearStampIntroTimers();
     stage3StampIntroAnimating = true;
-    panel.classList.remove("stage3-stamp-panel--hidden");
     panel.classList.remove("stage3-stamp-panel--intro-fly");
+    panel.getAnimations().forEach((anim) => anim.cancel());
+    clearStampIntroInlineStyles(panel);
     panel.classList.add("stage3-stamp-panel--intro-center");
+    void panel.offsetWidth;
+    panel.classList.remove("stage3-stamp-panel--hidden");
     stage3StampIntroHoldTimerId = window.setTimeout(() => {
       stage3StampIntroHoldTimerId = null;
       if (!getIsStageActive() || !stampUiRoot) {
         stage3StampIntroAnimating = false;
         return;
       }
-      panel.classList.add("stage3-stamp-panel--intro-fly");
-      stage3StampIntroFlyTimerId = window.setTimeout(() => {
-        stage3StampIntroFlyTimerId = null;
-        if (!getIsStageActive() || !stampUiRoot) {
-          stage3StampIntroAnimating = false;
-          return;
-        }
-        panel.classList.add("stage3-stamp-panel--settling");
-        panel.classList.remove("stage3-stamp-panel--intro-center");
-        panel.classList.remove("stage3-stamp-panel--intro-fly");
-        requestAnimationFrame(() => {
-          panel.classList.remove("stage3-stamp-panel--settling");
-          stage3StampIntroAnimating = false;
-          stage3InteractionLocked = false;
-        });
-      }, STAGE3_STAMP_INTRO_FLY_MS);
-    }, STAGE3_STAMP_INTRO_HOLD_MS);
+      startStampPanelFlyToCorner(panel);
+    }, STAGE3_STAMP_INTRO_CENTER_IN_MS + STAGE3_STAMP_INTRO_HOLD_MS);
   }
 
   function revealStampPanelAfterEntrySubtitles() {
@@ -295,6 +381,7 @@ export function createStage3StampController({
 
     const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
     if (panel) {
+      clearStampIntroInlineStyles(/** @type {HTMLElement} */ (panel));
       panel.classList.remove(
         "stage3-stamp-panel--hidden",
         "stage3-stamp-panel--intro-center",

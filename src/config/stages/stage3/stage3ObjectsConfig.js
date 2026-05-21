@@ -89,7 +89,7 @@ export const STAGE3_OBJECTS_CONFIG = {
       party: "/assets/poster/festival_poster.png",
       bestGum: "/assets/poster/vote_poster.png",
       icecream: "/assets/poster/icecream_poster.png",
-      guestbook: "/assets/poster/minihome_poster.svg",
+      guestbook: "/assets/poster/minihome_poster.png",
     },
     /** `NoticeModalBoard` 방명록 전체 화면 배경 */
     guestbookFullscreenBg: "/assets/guestbook/guestbook_bg.webp",
