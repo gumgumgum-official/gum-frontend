@@ -409,7 +409,6 @@ export function createStage3LetterController({
       s.velocity.rotationX = 0;
       s.velocity.rotationY = 0;
       s.velocity.rotationZ = 0;
-      setReadableRotationTowardCamera(s.group, camera);
       s.landed = true;
       addLetterColliderIfNeeded();
       return;
