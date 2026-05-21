@@ -5,6 +5,9 @@ export const STAGE3_WALKABLE_NAME_PATTERNS = [
   /^DECO_Leaf/i,
   /^Ground\d/i, // island15.glb: Ground1~5
   /^Path\d/i, // island15.glb: Path1~5
+  /^OBJ_Stair/i,
+  /Stair/i,
+  /^OBJ_Step/i,
 ];
 export const STAGE3_WALKABLE_MATERIAL_PATTERNS = [/island_grass/i, /^grassM$/i];
 

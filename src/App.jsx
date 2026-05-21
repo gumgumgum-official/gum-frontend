@@ -40,6 +40,7 @@ import {
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
+import { STAGE3_ISLAND_EXIT_BLOCKED_EVENT } from "./events/stage3Events.js";
 import {
   runStage6NotificationNowOrEnqueue,
   unblockStage6Notifications,
@@ -105,6 +106,9 @@ function AppLayout() {
     useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
+  const [showStage3IslandExitToast, setShowStage3IslandExitToast] =
+    useState(false);
+  const stage3IslandExitToastTimerRef = useRef(null);
 
   const closeGameMachineModalShell = useCallback(() => {
     setShowGameMachineModalShell(false);
@@ -264,6 +268,33 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
+    const showIslandExitToast = () => {
+      setShowStage3IslandExitToast(true);
+      if (stage3IslandExitToastTimerRef.current) {
+        clearTimeout(stage3IslandExitToastTimerRef.current);
+      }
+      stage3IslandExitToastTimerRef.current = window.setTimeout(() => {
+        setShowStage3IslandExitToast(false);
+        stage3IslandExitToastTimerRef.current = null;
+      }, 2000);
+    };
+    window.addEventListener(
+      STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+      showIslandExitToast,
+    );
+    return () => {
+      window.removeEventListener(
+        STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+        showIslandExitToast,
+      );
+      if (stage3IslandExitToastTimerRef.current) {
+        clearTimeout(stage3IslandExitToastTimerRef.current);
+        stage3IslandExitToastTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const showPhone = (e) => {
       const mode = e.detail?.mode;
       setPhoneIndicatorMode(
@@ -317,6 +348,11 @@ function AppLayout() {
       />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />
+      <div
+        className={`airport-chime-indicator stage3-island-exit-toast ${showStage3IslandExitToast ? "visible" : ""}`}
+      >
+        하핳.. 거기로는 못 가요😅
+      </div>
       <div
         className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
       >

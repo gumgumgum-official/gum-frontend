@@ -279,6 +279,32 @@ export function createStage3StampController({
     }, STAGE3_ENTRY_SUBTITLE_TOTAL_MS);
   }
 
+  /** `/dev`(skipStage3Intro): 진입 자막·포스터(중앙 연출) 없이 패널을 바로 활성 상태로 둠 */
+  function skipStampEntryPresentationForDev() {
+    if (!getIsStageActive()) return;
+    if (stage3EntryStampRevealTimerId != null) {
+      window.clearTimeout(stage3EntryStampRevealTimerId);
+      stage3EntryStampRevealTimerId = null;
+    }
+    clearStampIntroTimers();
+    stage3IntroFlowStarted = true;
+    stampPanelRevealPending = false;
+    stampPanelRevealReady = true;
+    stage3InteractionLocked = false;
+    stage3StampIntroAnimating = false;
+
+    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    if (panel) {
+      panel.classList.remove(
+        "stage3-stamp-panel--hidden",
+        "stage3-stamp-panel--intro-center",
+        "stage3-stamp-panel--intro-fly",
+        "stage3-stamp-panel--settling",
+      );
+    }
+    syncStampPanelVisibilityByOverlay();
+  }
+
   /**
    * @param {"notice"|"gameMachine"|"icecream"|"tent"} target
    * @returns {{ didDiscover: boolean, stampSubtitle: string | null }}
@@ -464,6 +490,7 @@ export function createStage3StampController({
     flushPendingEggDiscoverySubtitle,
     setPendingEggDiscoverySubtitle,
     runEntrySubtitlesAndIntro,
+    skipStampEntryPresentationForDev,
     tryDispatchWorryCompletionCelebration,
     handlePortalBlockedFeedback,
     handleStampKeyToggle,

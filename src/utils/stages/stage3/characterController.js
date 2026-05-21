@@ -5,6 +5,7 @@ import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../../common/gltfTemplateCache.js";
+import { dispatchStage3IslandExitBlocked } from "../../../events/stage3Events.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 
 const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
@@ -45,7 +46,11 @@ function findClip(clips, regex) {
  *   update: (
  *     delta: number,
  *     camera: import("three").Camera,
- *     options?: { skipCameraFollow?: boolean; cameraYawAssistRad?: number },
+ *     options?: {
+ *       skipCameraFollow?: boolean;
+ *       cameraYawAssistRad?: number;
+ *       overrideY?: number;
+ *     },
  *   ) => void,
  *   cleanup: () => void,
  *   getPosition: () => import("three").Vector3 | null,
@@ -60,6 +65,8 @@ function findClip(clips, regex) {
  *   applyIslandWalkableBounds: (
  *     allowedBounds: import("three").Box3 | null,
  *   ) => void,
+ *   setFacingYaw: (yRad: number) => void,
+ *   setOpacity: (opacity: number) => void,
  * }}
  */
 export function createCharacterController({
@@ -119,8 +126,20 @@ export function createCharacterController({
   const _headAnchorBox = new THREE.Box3();
   const GROUND_MISS_TOLERANCE_FRAMES = 5;
   const GROUND_HEIGHT_EASE_SPEED = 16;
-  const MAX_SAFE_STEP_DOWN = 0.22;
+  /** 계단·경사 한 칸 오르내리기 허용 높이(m) — 상·하 동일 */
+  const MAX_SAFE_STEP_VERT = 0.8;
   const MIN_SAFE_GROUND_OFFSET = 0.12;
+  /** 섬 밖 이동 토스트 재표시 간격(초) — App 표시 시간과 동일 */
+  const ISLAND_EXIT_TOAST_COOLDOWN_SEC = 2;
+  /** allowed/배경 clamp 경계에서 이 거리(m) 안이면 「가장자리」로 간주 */
+  const ISLAND_EXIT_EDGE_PROXIMITY = 7;
+  /** 계단·단차 위에 있을 때 가장자리 판정을 넓힘 (clamp 박스 안쪽 계단) */
+  const ISLAND_EXIT_EDGE_PROXIMITY_ON_STAIRS = 12;
+  /** baseGroundY 대비 이 높이(m) 이상이면 계단 위로 간주 */
+  const STAIR_LEVEL_MIN_ABOVE_BASE = 0.18;
+  /** 이동 방향 전방(m) walkable 없음/절벽이면 섬 밖 시도로 간주 (계단·그네 등 AABB 밖 가장자리) */
+  const ISLAND_EXIT_PROBE_DISTANCE = 3;
+  let islandExitBlockedToastCooldown = 0;
 
   function getWalkSoundVolume() {
     const v = config.character?.walkSoundVolume;
@@ -397,9 +416,26 @@ export function createCharacterController({
     update(delta, camera, options = {}) {
       if (!characterModel || !backgroundBounds) return;
 
-      const sampleGroundY = (x, z) => {
+      /**
+       * (x,z) walkable 지면 Y
+       * @param {number} x
+       * @param {number} z
+       * @param {number} [refY] - 현재 발 기준 높이(미지정 시 resolvedGroundY)
+       * @param {'nearest'|'highest'|'lowest'} [prefer]
+       */
+      const sampleGroundY = (
+        x,
+        z,
+        refY = resolvedGroundY,
+        prefer = "nearest",
+      ) => {
         if (!walkableGroundMeshes.length) return baseGroundY;
-        _groundRayOrigin.set(x, baseGroundY + 30, z);
+        const rayOriginY = Math.max(
+          refY + 4,
+          characterYPosition + 4,
+          baseGroundY + 30,
+        );
+        _groundRayOrigin.set(x, rayOriginY, z);
         _groundRaycaster.set(_groundRayOrigin, _groundDown);
         _groundHits.length = 0;
         _groundRaycaster.intersectObjects(
@@ -407,7 +443,60 @@ export function createCharacterController({
           false,
           _groundHits,
         );
-        return _groundHits.length > 0 ? _groundHits[0].point.y : null;
+        if (_groundHits.length === 0) return null;
+
+        const minReachY = refY - MAX_SAFE_STEP_VERT;
+        const maxReachY = refY + MAX_SAFE_STEP_VERT;
+        /** @type {number[]} */
+        const reachable = [];
+        for (let i = 0; i < _groundHits.length; i++) {
+          const y = _groundHits[i].point.y;
+          if (y < baseGroundY - MIN_SAFE_GROUND_OFFSET) continue;
+          if (y < minReachY || y > maxReachY) continue;
+          reachable.push(y);
+        }
+        if (reachable.length === 0) return null;
+        if (prefer === "highest") return Math.max(...reachable);
+        if (prefer === "lowest") return Math.min(...reachable);
+        let bestY = reachable[0];
+        let bestDist = Math.abs(bestY - refY);
+        for (let i = 1; i < reachable.length; i++) {
+          const y = reachable[i];
+          const dist = Math.abs(y - refY);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestY = y;
+          }
+        }
+        return bestY;
+      };
+
+      /**
+       * 이동 목표 지점 지면 — 계단 오를 때 윗면, 내릴 때 아랫면 우선
+       * @param {number} x
+       * @param {number} z
+       * @param {number} refY
+       */
+      const sampleGroundYForStep = (x, z, refY) => {
+        const high = sampleGroundY(x, z, refY, "highest");
+        const low = sampleGroundY(x, z, refY, "lowest");
+        const stepUpEps = 0.04;
+        const stepDownEps = 0.04;
+        if (
+          high != null &&
+          high > refY + stepUpEps &&
+          high - refY <= MAX_SAFE_STEP_VERT
+        ) {
+          return high;
+        }
+        if (
+          low != null &&
+          low < refY - stepDownEps &&
+          refY - low <= MAX_SAFE_STEP_VERT
+        ) {
+          return low;
+        }
+        return sampleGroundY(x, z, refY, "nearest") ?? high ?? low;
       };
 
       const resolveGroundY = (x, z) => {
@@ -435,6 +524,102 @@ export function createCharacterController({
           z >= allowedBoundsXZ.min.z &&
           z <= allowedBoundsXZ.max.z
         );
+      };
+
+      /** @param {number} y */
+      const isOnStairLevelY = (y) =>
+        y > baseGroundY + STAIR_LEVEL_MIN_ABOVE_BASE;
+      /** @param {number} y */
+      const getIslandExitEdgeMargin = (y) =>
+        isOnStairLevelY(y)
+          ? ISLAND_EXIT_EDGE_PROXIMITY_ON_STAIRS
+          : ISLAND_EXIT_EDGE_PROXIMITY;
+
+      /**
+       * walkable 허용 영역·섬 GLB clamp 경계 안쪽에서 바깥 방향으로 밀 때 true
+       * @param {number} x
+       * @param {number} z
+       * @param {number} dirX
+       * @param {number} dirZ
+       */
+      const isPressingTowardExitBoundary = (x, z, dirX, dirZ) => {
+        const margin = getIslandExitEdgeMargin(resolvedGroundY);
+        const dirEps = 0.05;
+        if (allowedBoundsXZ) {
+          const b = allowedBoundsXZ;
+          if (x - b.min.x < margin && dirX < -dirEps) return true;
+          if (b.max.x - x < margin && dirX > dirEps) return true;
+          if (z - b.min.z < margin && dirZ < -dirEps) return true;
+          if (b.max.z - z < margin && dirZ > dirEps) return true;
+        }
+        if (x - _minCx < margin && dirX < -dirEps) return true;
+        if (_maxCx - x < margin && dirX > dirEps) return true;
+        if (z - _minCz < margin && dirZ < -dirEps) return true;
+        if (_maxCz - z < margin && dirZ > dirEps) return true;
+        return false;
+      };
+
+      /** 섬 이동 clamp 박스(_minCx 등) 가장자리까지 거리(m) */
+      const getMinDistToMovementEdgeXZ = (x, z) =>
+        Math.min(x - _minCx, _maxCx - x, z - _minCz, _maxCz - z);
+
+      /**
+       * 이동 방향 앞에 바다/절벽·허용 영역 밖이면 true (계단 위 외곽 포함)
+       * @param {number} x
+       * @param {number} z
+       * @param {number} dirX
+       * @param {number} dirZ
+       */
+      const isLeavingPlayableAhead = (x, z, dirX, dirZ) => {
+        const len = Math.hypot(dirX, dirZ);
+        if (len < 1e-6) return false;
+        const nx = dirX / len;
+        const nz = dirZ / len;
+        const hereY = resolvedGroundY;
+        const isOnStairLevel = isOnStairLevelY(hereY);
+        const edgeMargin = getIslandExitEdgeMargin(hereY);
+        const nearIslandEdge = getMinDistToMovementEdgeXZ(x, z) < edgeMargin;
+        const shoreDropEps = 0.12;
+
+        const probeDistances = [
+          ISLAND_EXIT_PROBE_DISTANCE,
+          ISLAND_EXIT_PROBE_DISTANCE * 1.5,
+        ];
+        for (let d = 0; d < probeDistances.length; d++) {
+          const dist = probeDistances[d];
+          const probeX = x + nx * dist;
+          const probeZ = z + nz * dist;
+
+          if (allowedBoundsXZ && !isInsideAllowedBoundsXZ(probeX, probeZ)) {
+            return true;
+          }
+
+          if (!walkableGroundMeshes.length) continue;
+
+          const probeLow = sampleGroundY(probeX, probeZ, hereY, "lowest");
+          const probeHigh = sampleGroundY(probeX, probeZ, hereY, "highest");
+          if (probeLow == null && probeHigh == null) return true;
+
+          const probeY = probeLow ?? probeHigh;
+          if (probeY == null) return true;
+          if (probeY < baseGroundY - MIN_SAFE_GROUND_OFFSET) return true;
+
+          if (probeHigh != null && probeHigh > hereY + 0.08) {
+            if (nearIslandEdge || isOnStairLevel) {
+              if (allowedBoundsXZ && !isInsideAllowedBoundsXZ(probeX, probeZ)) {
+                return true;
+              }
+              if (probeLow == null) return true;
+            } else {
+              continue;
+            }
+          }
+
+          if (probeY < hereY - MAX_SAFE_STEP_VERT) return true;
+          if (nearIslandEdge && probeY < hereY - shoreDropEps) return true;
+        }
+
+        return false;
       };
 
       if (isPunchPlaying) {
@@ -483,24 +668,38 @@ export function createCharacterController({
         );
         const candidateX = slid.x;
         const candidateZ = slid.z;
-        const sampledCandidateGroundY = sampleGroundY(candidateX, candidateZ);
+        const footAhead = 0.35;
+        const sampleX = candidateX + _direction.x * footAhead;
+        const sampleZ = candidateZ + _direction.z * footAhead;
+        const sampledCandidateGroundY = sampleGroundYForStep(
+          sampleX,
+          sampleZ,
+          resolvedGroundY,
+        );
         const isAboveMinSafeGround =
           sampledCandidateGroundY != null &&
           sampledCandidateGroundY >= baseGroundY - MIN_SAFE_GROUND_OFFSET;
-        const wouldFallTooFar =
-          isAboveMinSafeGround &&
-          sampledCandidateGroundY < resolvedGroundY - MAX_SAFE_STEP_DOWN;
+        const stepDelta =
+          isAboveMinSafeGround && sampledCandidateGroundY != null
+            ? sampledCandidateGroundY - resolvedGroundY
+            : 0;
+        const wouldFallTooFar = stepDelta < -MAX_SAFE_STEP_VERT;
+        const wouldClimbTooHigh = stepDelta > MAX_SAFE_STEP_VERT;
         const canMoveToCandidate =
           isInsideAllowedBoundsXZ(candidateX, candidateZ) &&
           isAboveMinSafeGround &&
-          !wouldFallTooFar;
+          !wouldFallTooFar &&
+          !wouldClimbTooHigh;
         const targetX = canMoveToCandidate ? candidateX : oldX;
         const targetZ = canMoveToCandidate ? candidateZ : oldZ;
+        let nextGroundY;
         if (isAboveMinSafeGround && canMoveToCandidate) {
           groundMissFrames = 0;
           resolvedGroundY = sampledCandidateGroundY;
+          nextGroundY = sampledCandidateGroundY;
+        } else {
+          nextGroundY = resolveGroundY(targetX, targetZ);
         }
-        const nextGroundY = resolveGroundY(targetX, targetZ);
         const targetY = nextGroundY + characterGroundLift;
         const easeAlpha = 1 - Math.exp(-GROUND_HEIGHT_EASE_SPEED * delta);
         characterYPosition = THREE.MathUtils.lerp(
@@ -512,6 +711,60 @@ export function createCharacterController({
         moved =
           Math.abs(targetX - oldX) > 1e-6 || Math.abs(targetZ - oldZ) > 1e-6;
         characterModel.rotation.y = Math.atan2(_direction.x, _direction.z);
+
+        if (allowedBoundsXZ) {
+          const pressingExit = isPressingTowardExitBoundary(
+            oldX,
+            oldZ,
+            _direction.x,
+            _direction.z,
+          );
+          const leavingAhead = isLeavingPlayableAhead(
+            oldX,
+            oldZ,
+            _direction.x,
+            _direction.z,
+          );
+          const blockedAtShore =
+            !canMoveToCandidate &&
+            (!isInsideAllowedBoundsXZ(candidateX, candidateZ) ||
+              !isAboveMinSafeGround ||
+              wouldFallTooFar ||
+              wouldClimbTooHigh);
+          const nearIslandEdge =
+            getMinDistToMovementEdgeXZ(oldX, oldZ) <
+            getIslandExitEdgeMargin(resolvedGroundY);
+          const tryingToStepUp =
+            (sampledCandidateGroundY != null &&
+              sampledCandidateGroundY > resolvedGroundY + 0.04) ||
+            stepDelta > 0.04;
+          const climbBlockedAtEdge =
+            nearIslandEdge &&
+            tryingToStepUp &&
+            (!canMoveToCandidate || wouldClimbTooHigh || !moved);
+          const nearEdgePressingOut =
+            nearIslandEdge &&
+            isPressingTowardExitBoundary(
+              oldX,
+              oldZ,
+              _direction.x,
+              _direction.z,
+            );
+          const stairAscentTowardExit =
+            tryingToStepUp && nearIslandEdge && (pressingExit || leavingAhead);
+          if (
+            (pressingExit ||
+              leavingAhead ||
+              blockedAtShore ||
+              climbBlockedAtEdge ||
+              nearEdgePressingOut ||
+              stairAscentTowardExit) &&
+            islandExitBlockedToastCooldown <= 0
+          ) {
+            dispatchStage3IslandExitBlocked();
+            islandExitBlockedToastCooldown = ISLAND_EXIT_TOAST_COOLDOWN_SEC;
+          }
+        }
       } else {
         const p = characterModel.position;
         if (options.overrideY != null) {
@@ -549,6 +802,13 @@ export function createCharacterController({
       if (idleCharacterMixer && !isWalking) idleCharacterMixer.update(delta);
 
       syncWalkSound(moved);
+
+      if (islandExitBlockedToastCooldown > 0) {
+        islandExitBlockedToastCooldown = Math.max(
+          0,
+          islandExitBlockedToastCooldown - delta,
+        );
+      }
 
       if (!options.skipCameraFollow)
         updateCameraFollow(camera, characterModel.position, options);
@@ -599,6 +859,7 @@ export function createCharacterController({
       resolvedGroundY = 0;
       groundMissFrames = 0;
       staticColliderBoxes = [];
+      islandExitBlockedToastCooldown = 0;
     },
 
     getPosition: () => characterModel?.position ?? null,
