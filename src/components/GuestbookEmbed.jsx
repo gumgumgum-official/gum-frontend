@@ -205,6 +205,7 @@ const GUESTBOOK_INPUT_CSS = `
 const GUESTBOOK_SUBMIT_BTN_CSS = `
 .guestbookEmbed-submitBtn{
   box-sizing:border-box;
+  
   font-family:"DOSGothic","Galmuri11","Galmuri9",monospace;
   font-size:1rem;
   font-weight:700;
