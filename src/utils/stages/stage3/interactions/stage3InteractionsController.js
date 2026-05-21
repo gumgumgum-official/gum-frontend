@@ -12,11 +12,16 @@ import {
   PORTAL_PASS_TRIGGER_RADIUS_MIN,
   PORTAL_PASS_TRIGGER_RADIUS_MAX,
   GAME_MACHINE_CLICK_SOUND_PATH,
-  GUMTOONGJI_CLIP_NAMES,
   LOOP_CLIP_NAMES,
   STAGE3_CLICK_ONCE_ANIM_SETS,
+  CLOCK_ALARM_START_FRAME,
+  CLOCK_ALARM_END_FRAME,
+  CLOCK_ALARM_SOUND_PATH,
 } from "../../../../config/stages/stage3/stage3Interactions.js";
-import { playRandomWellClickSound } from "../playWellClickSound.js";
+import {
+  playRandomWellClickSound,
+  playWellBubblePopSound,
+} from "../playWellClickSound.js";
 import { onMinigameClose, closeMinigame } from "../minigameLauncher.js";
 import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3IntroAudio.js";
 
@@ -102,16 +107,16 @@ export function createStage3InteractionsController({
   let hasPortalPassTriggerSphere = false;
   let wasInsidePortalPassTrigger = false;
 
-  /** @type {import("three").AnimationMixer | null} */
-  let gumtoongjiMixer = null;
-  /** @type {import("three").AnimationAction[]} */
-  let gumtoongjiActions = [];
-  /** @type {HTMLAudioElement | null} */
-  let gumtoongjiClickAudio = null;
-
   /** island ambient 루프 전용 mixer (그네·파도·모닥불·풍선 등) */
   /** @type {import("three").AnimationMixer | null} */
   let islandLoopMixer = null;
+
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let _clockAlarmStartTimeoutId = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let _clockAlarmStopTimeoutId = null;
+  /** @type {HTMLAudioElement | null} */
+  let _clockAlarmAudio = null;
 
   /** @type {Map<string, { mixer: import("three").AnimationMixer, actions: import("three").AnimationAction[] }>} */
   const clickOnceSets = new Map();
@@ -195,15 +200,6 @@ export function createStage3InteractionsController({
     return null;
   }
 
-  function playGumtoongjiAnimation() {
-    if (gumtoongjiClickAudio) {
-      gumtoongjiClickAudio.currentTime = 0;
-      const p = gumtoongjiClickAudio.play();
-      if (p) p.catch(() => {});
-    }
-    for (const action of gumtoongjiActions) action.stop().play();
-  }
-
   /** @param {string} trigger */
   function playClickOnceSet(trigger) {
     const set = clickOnceSets.get(trigger);
@@ -255,13 +251,8 @@ export function createStage3InteractionsController({
     playClickOnceSet(target);
 
     if (target === "gumtoongji") {
-      if (import.meta.env.DEV) {
-        console.log(
-          "[Gumtoongji] 클릭 → 애니메이션 재생, 액션 수:",
-          gumtoongjiActions.length,
-        );
-      }
-      playGumtoongjiAnimation();
+      playClickOnceSet("well");
+      playWellBubblePopSound();
       tryAdvanceStampSequence("gumtoongji");
       return true;
     }
@@ -330,10 +321,43 @@ export function createStage3InteractionsController({
     }
     if (target === "well") {
       playRandomWellClickSound();
+      playWellBubblePopSound();
       window.dispatchEvent(new CustomEvent("gum:wellClick"));
       return true;
     }
     if (target === "clock") {
+      if (_clockAlarmStartTimeoutId !== null)
+        clearTimeout(_clockAlarmStartTimeoutId);
+      if (_clockAlarmStopTimeoutId !== null)
+        clearTimeout(_clockAlarmStopTimeoutId);
+      if (_clockAlarmAudio) {
+        _clockAlarmAudio.pause();
+        _clockAlarmAudio = null;
+      }
+
+      _clockAlarmStartTimeoutId = setTimeout(
+        () => {
+          _clockAlarmStartTimeoutId = null;
+          _clockAlarmAudio = new window.Audio(
+            resolvePublicAssetUrl(CLOCK_ALARM_SOUND_PATH),
+          );
+          _clockAlarmAudio.play().catch(() => {});
+          _clockAlarmStopTimeoutId = setTimeout(
+            () => {
+              _clockAlarmStopTimeoutId = null;
+              if (_clockAlarmAudio) {
+                _clockAlarmAudio.pause();
+                _clockAlarmAudio = null;
+              }
+            },
+            Math.round(
+              ((CLOCK_ALARM_END_FRAME - CLOCK_ALARM_START_FRAME) / 24) * 1000,
+            ),
+          );
+        },
+        Math.round((CLOCK_ALARM_START_FRAME / 24) * 1000),
+      );
+
       tryAdvanceStampSequence("clock");
       return true;
     }
@@ -431,12 +455,6 @@ export function createStage3InteractionsController({
     hasPortalPassTriggerSphere = false;
     wasInsidePortalPassTrigger = false;
 
-    if (gumtoongjiMixer) {
-      gumtoongjiMixer.stopAllAction();
-      gumtoongjiMixer = null;
-    }
-    gumtoongjiActions = [];
-
     if (islandLoopMixer) {
       islandLoopMixer.stopAllAction();
       islandLoopMixer = null;
@@ -451,7 +469,7 @@ export function createStage3InteractionsController({
       if (obj.name === "ANIM_Gumtoongji") gumtoongjiRoot = obj;
     });
 
-    if (gumtoongjiRoot && animations.length > 0) {
+    if (gumtoongjiRoot) {
       gumtoongjiRoot.traverse((obj) => {
         const meshLike = /** @type {any} */ (obj);
         if (meshLike.isSkinnedMesh) {
@@ -471,33 +489,9 @@ export function createStage3InteractionsController({
           gumtoongjiRaycastMeshes.length,
         );
       }
-      gumtoongjiMixer = new THREE.AnimationMixer(gumtoongjiRoot);
-      for (const name of GUMTOONGJI_CLIP_NAMES) {
-        const clip = THREE.AnimationClip.findByName(animations, name);
-        if (!clip) {
-          if (import.meta.env.DEV) {
-            console.warn(`[Gumtoongji] clip 없음: ${name}`);
-          }
-          continue;
-        }
-        const action = gumtoongjiMixer.clipAction(clip);
-        action.setLoop(THREE.LoopOnce, 1);
-        action.clampWhenFinished = false;
-        gumtoongjiActions.push(action);
-      }
-
-      // 클릭 효과음 미리 로드 (첫 클릭 딜레이 방지)
-      gumtoongjiClickAudio = new window.Audio(
-        resolvePublicAssetUrl("/static/sounds/text_crack/flower_magic.mp3"),
-      );
-      gumtoongjiClickAudio.preload = "auto";
-      gumtoongjiClickAudio.volume = 1;
     } else if (import.meta.env.DEV) {
       console.warn(
-        "[Gumtoongji] 초기화 실패 — root:",
-        gumtoongjiRoot,
-        "/ animations:",
-        animations.length,
+        "[Gumtoongji] root(ANIM_Gumtoongji) 없음 — 레이캐스트 비활성",
       );
     }
 
@@ -953,16 +947,18 @@ export function createStage3InteractionsController({
       gameMachineClickAudio.src = "";
       gameMachineClickAudio = null;
     }
-    if (gumtoongjiClickAudio) {
-      gumtoongjiClickAudio.pause();
-      gumtoongjiClickAudio.src = "";
-      gumtoongjiClickAudio = null;
+    if (_clockAlarmStartTimeoutId !== null) {
+      clearTimeout(_clockAlarmStartTimeoutId);
+      _clockAlarmStartTimeoutId = null;
     }
-    if (gumtoongjiMixer) {
-      gumtoongjiMixer.stopAllAction();
-      gumtoongjiMixer = null;
+    if (_clockAlarmStopTimeoutId !== null) {
+      clearTimeout(_clockAlarmStopTimeoutId);
+      _clockAlarmStopTimeoutId = null;
     }
-    gumtoongjiActions = [];
+    if (_clockAlarmAudio) {
+      _clockAlarmAudio.pause();
+      _clockAlarmAudio = null;
+    }
     gumtoongjiRaycastMeshes.length = 0;
     for (const set of clickOnceSets.values()) set.mixer.stopAllAction();
     clickOnceSets.clear();
@@ -976,7 +972,6 @@ export function createStage3InteractionsController({
     attachIntClickHintBubble,
     detachIntClickHintBubble,
     update(delta) {
-      if (gumtoongjiMixer) gumtoongjiMixer.update(delta);
       if (islandLoopMixer) islandLoopMixer.update(delta);
       for (const set of clickOnceSets.values()) set.mixer.update(delta);
       updateIntClickHintBubble();

@@ -25,17 +25,24 @@ export const PORTAL_PASS_TRIGGER_RADIUS_MAX = 3.2;
 export const GAME_MACHINE_CLICK_SOUND_PATH =
   "/static/sounds/minigame/start_click_sfx.mp3";
 
+/** 시계(INT_Clock) 알람 구간 (24fps 기준) */
+export const CLOCK_ALARM_START_FRAME = 55;
+export const CLOCK_ALARM_END_FRAME = 95;
+export const CLOCK_ALARM_SOUND_PATH = "/static/sounds/clock/alarm.mp3";
+
 export const GUMTOONGJI_CLIP_NAMES = ["ANIM_Gumtoongji", "Paw_L", "Paw_R"];
 
 /** 씬 로드 즉시 무한 루프로 재생할 island ambient 애니메이션 클립 이름 목록 */
 export const LOOP_CLIP_NAMES = [
   "SwingPivotAction",
-  "Lollipop_ArmShake_Rig",
   "Sea_Wave_Loop",
   "CampFire_Fire_Loop",
-  "Balloon_Sun_Sway",
   "Balloon_Heart_Sway",
   "Balloon_Star_Sway",
+  "Balloon_Sun_Sway",
+  "Gum_Breathing_Loop",
+  "Gum_Breathing_Loop_7",
+  "Gum_HandWave_Loop",
 ];
 
 /**
@@ -53,8 +60,8 @@ export const LOOP_CLIP_NAMES = [
 export const STAGE3_CLICK_ONCE_ANIM_SETS = [
   {
     trigger: "well",
-    objectName: "INT_Well",
-    clipNames: ["INT_Well"],
+    objectName: null,
+    clipNames: ["INT_Well", "ANIM_Gumtoongji", "Paw_L", "Paw_R"],
   },
   {
     trigger: "clock",
