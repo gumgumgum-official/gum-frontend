@@ -246,16 +246,18 @@ body {
 
 .airport-chime-indicator {
   position: fixed;
-  top: 34px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  padding: 8px 20px;
-  border-radius: 20px;
+  padding: 12px 28px;
+  border-radius: 26px;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.35;
   opacity: 0;
   transition: opacity 0.4s ease;
   z-index: 2200;
@@ -270,7 +272,7 @@ body {
 .airport-chime-indicator.stage3-island-exit-toast {
   background: rgba(255, 255, 255, 0.27);
   color: #422442;
-  font-size: 13px;
+  font-size: 17px;
   box-shadow: 0 4px 16px rgba(66, 36, 66, 0.18);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
