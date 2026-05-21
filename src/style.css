@@ -273,7 +273,7 @@ body {
   font-size: 13px;
   box-shadow: 0 4px 16px rgba(66, 36, 66, 0.18);
   backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .subtitle-container {

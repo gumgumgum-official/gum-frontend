@@ -9,7 +9,7 @@ const FG = "oklch(0.32 0.13 350)";
 const MUTED = "oklch(0.55 0.1 340)";
 /** 피그마 DOS Gothic 계열 — CDN: fonts-archive/DOSGothic (MIT), 미지원 글리프는 Galmuri 폴백 */
 const FONT = '"DOSGothic","Galmuri11","Galmuri9",monospace';
-/** ♡ 전용 — 로컬 `public/fonts/DungGeunMo.woff` */
+/** ♡ 전용 — 로컬 `public/fonts/DungGeunMo.woff2` */
 const FONT_HEART = '"DungGeunMo",monospace';
 /** Figma 480:143 — TODAY is ... (DOSIyagiBoldface) */
 const FONT_TODAY_TITLE = '"DOSIyagiBoldface","DOSGothic","Galmuri11",monospace';
@@ -152,19 +152,19 @@ function sortPostsNewestFirst(posts) {
   );
 }
 
-// DOS Gothic (피그마 DOSGothic) + DungGeunMo(♡, 로컬 woff) + Galmuri 폴백 — CDN 외 폰트는 public
+// DOS Gothic (피그마 DOSGothic) + DungGeunMo(♡, 로컬 woff2) + Galmuri 폴백 — CDN 외 폰트는 public
 const DOS_GOTHIC_WOFF2 =
   "https://cdn.jsdelivr.net/gh/fonts-archive/DOSGothic@master/DOSGothic.woff2";
 const DOS_IYAGI_BOLDFACE_TTF =
   "https://cdn.jsdelivr.net/gh/hurss/fonts@master/ttf/DOSIyagiBoldface.ttf";
 const FONT_CSS = `
-@font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}")format("woff2");font-weight:400;font-style:normal;font-display:swap}
-@font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}")format("woff2");font-weight:700;font-style:normal;font-display:swap}
-@font-face{font-family:"DOSIyagiBoldface";src:url("${DOS_IYAGI_BOLDFACE_TTF}")format("truetype");font-weight:400;font-style:normal;font-display:swap}
-@font-face{font-family:"DungGeunMo";src:url("/fonts/DungGeunMo.woff")format("woff");font-weight:400;font-style:normal;font-display:swap}
-@font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11.woff2")format("woff2");font-weight:400;font-display:swap}
-@font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11-Bold.woff2")format("woff2");font-weight:700;font-display:swap}
-@font-face{font-family:"Galmuri9";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri9.woff2")format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"DOSGothic";src:url("${DOS_GOTHIC_WOFF2}") format("woff2");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"DOSIyagiBoldface";src:url("${DOS_IYAGI_BOLDFACE_TTF}") format("truetype");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"DungGeunMo";src:url("/fonts/DungGeunMo.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11.woff2") format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Galmuri11";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11-Bold.woff2") format("woff2");font-weight:700;font-display:swap}
+@font-face{font-family:"Galmuri9";src:url("https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri9.woff2") format("woff2");font-weight:400;font-display:swap}
 `;
 
 const GUESTBOOK_HIDE_SCROLLBAR_CSS = `
@@ -228,7 +228,7 @@ function GuestbookTitle() {
   return (
     <img
       alt="껌's 미니홈피"
-      src="/assets/guestbook/title.svg"
+      src="/assets/guestbook/title.png"
       style={{
         display: "block",
         width: "100%",
@@ -305,7 +305,7 @@ function ProfileCardPhoto() {
     >
       <img
         alt=""
-        src="/assets/guestbook/profile_photo_bg.png"
+        src="/assets/guestbook/profile_photo_bg.webp"
         style={{
           position: "absolute",
           inset: 0,
@@ -329,7 +329,7 @@ function ProfileCardPhoto() {
       >
         <img
           alt="삐삐 프로필"
-          src="/assets/guestbook/profile_character.png"
+          src="/assets/guestbook/profile_character.webp"
           style={{
             position: "absolute",
             height: "200.81%",
