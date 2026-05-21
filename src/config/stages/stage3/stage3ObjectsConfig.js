@@ -89,8 +89,10 @@ export const STAGE3_OBJECTS_CONFIG = {
       party: "/assets/poster/festival_poster.png",
       bestGum: "/assets/poster/vote_poster.png",
       icecream: "/assets/poster/icecream_poster.png",
-      guestbook: "/assets/poster/guestbook_poster.svg",
+      guestbook: "/assets/poster/minihome_poster.svg",
     },
+    /** `NoticeModalBoard` 방명록 전체 화면 배경 */
+    guestbookFullscreenBg: "/assets/guestbook/guestbook_bg.webp",
     /** `GgumddiVoteSection` 후보 카드 이미지 (순서 = 1·2·3번) */
     voteCandidateImages: [
       "/assets/poster/vote_1.png",

@@ -42,7 +42,6 @@ video,
 svg,
 canvas {
   -webkit-user-drag: none;
-  user-drag: none;
 }
 
 input,
@@ -267,6 +266,16 @@ body {
   opacity: 1;
 }
 
+/* Stage3 섬 경계 알림 — 배경·글자 가독성 (6단계 공항 알림과 분리) */
+.airport-chime-indicator.stage3-island-exit-toast {
+  background: rgba(255, 255, 255, 0.27);
+  color: #422442;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(66, 36, 66, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 .subtitle-container {
   position: fixed;
   bottom: 55px;
@@ -407,10 +416,12 @@ body {
 }
 
 .stage3-stamp-panel {
+  --stage3-stamp-scale: 0.52;
+  --stage3-stamp-intro-scale: 1.68;
   border-radius: 10px;
   overflow: hidden;
   transform-origin: top left;
-  transform: scale(0.52);
+  transform: scale(var(--stage3-stamp-scale));
   transition:
     box-shadow 0.35s ease,
     opacity 0.5s ease,
@@ -421,7 +432,7 @@ body {
 .stage3-stamp-panel.stage3-stamp-panel--hidden {
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-10px) scale(0.52);
+  transform: translateY(-10px) scale(var(--stage3-stamp-scale));
   pointer-events: none;
 }
 
@@ -437,15 +448,24 @@ body {
 
 .stage3-stamp-panel.stage3-stamp-panel--intro-center {
   position: fixed;
-  left: 50vw;
-  top: 44vh;
-  transform: translate(-50%, -50%) scale(1.35);
+  left: 50%;
+  top: 50%;
+  width: min(34vw, 280px);
+  max-width: 280px;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) scale(var(--stage3-stamp-intro-scale));
   z-index: 2260;
+}
+
+.stage3-stamp-panel.stage3-stamp-panel--intro-center .stage3-stamp-poster-wrap {
+  width: 100%;
+  max-width: none;
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--intro-center.stage3-stamp-panel--intro-fly {
   transition: transform 0.78s cubic-bezier(0.2, 0.8, 0.15, 1);
-  transform: translate(calc(-50vw + 30px), calc(-44vh + 30px)) scale(0.52);
+  transform: translate(calc(-50vw + 30px), calc(-50vh + 30px))
+    scale(var(--stage3-stamp-scale));
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--settling {
@@ -584,13 +604,13 @@ body {
 
 @keyframes stage3-stamp-panel-pop {
   0% {
-    transform: scale(0.52);
+    transform: scale(var(--stage3-stamp-scale));
   }
   45% {
-    transform: scale(0.62);
+    transform: scale(calc(var(--stage3-stamp-scale) + 0.1));
   }
   100% {
-    transform: scale(0.52);
+    transform: scale(var(--stage3-stamp-scale));
   }
 }
 

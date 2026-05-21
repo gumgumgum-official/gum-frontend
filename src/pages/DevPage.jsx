@@ -15,6 +15,7 @@ export function DevPage() {
         allowedStages={allowedStages}
         initialStage={APP_CONFIG.initialStage}
         enableKeyboardSwitch
+        skipStage3Intro
       />
     </div>
   );
