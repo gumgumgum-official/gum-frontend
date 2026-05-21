@@ -448,6 +448,23 @@ body {
   animation: stage3-stamp-panel-pop 2s ease-in-out;
 }
 
+.stage3-stamp-panel.stage3-stamp-panel--intro-center,
+.stage3-stamp-panel.stage3-stamp-panel--intro-fly {
+  transition: none;
+}
+
+@keyframes stage3-stamp-intro-center-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 28px))
+      scale(calc(var(--stage3-stamp-intro-scale) * 0.78));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(var(--stage3-stamp-intro-scale));
+  }
+}
+
 .stage3-stamp-panel.stage3-stamp-panel--intro-center {
   position: fixed;
   left: 50%;
@@ -457,17 +474,26 @@ body {
   transform-origin: center center;
   transform: translate(-50%, -50%) scale(var(--stage3-stamp-intro-scale));
   z-index: 2260;
+  animation: stage3-stamp-intro-center-in 0.72s cubic-bezier(0.22, 1, 0.36, 1)
+    both;
 }
 
-.stage3-stamp-panel.stage3-stamp-panel--intro-center .stage3-stamp-poster-wrap {
+.stage3-stamp-panel.stage3-stamp-panel--intro-center .stage3-stamp-poster-wrap,
+.stage3-stamp-panel.stage3-stamp-panel--intro-fly .stage3-stamp-poster-wrap {
   width: 100%;
   max-width: none;
 }
 
-.stage3-stamp-panel.stage3-stamp-panel--intro-center.stage3-stamp-panel--intro-fly {
-  transition: transform 0.78s cubic-bezier(0.2, 0.8, 0.15, 1);
-  transform: translate(calc(-50vw + 30px), calc(-50vh + 30px))
-    scale(var(--stage3-stamp-scale));
+/* WAAPI 종료 지점: 좌상단 고정 위치·크기는 일반 패널과 동일 */
+.stage3-stamp-panel.stage3-stamp-panel--intro-fly {
+  position: fixed;
+  left: 30px;
+  top: 30px;
+  width: min(30vw, 260px);
+  max-width: 260px;
+  transform-origin: top left;
+  transform: scale(var(--stage3-stamp-scale));
+  z-index: 2260;
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--settling {
