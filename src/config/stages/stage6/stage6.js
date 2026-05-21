@@ -27,7 +27,7 @@ export const STAGE6_CONFIG = {
   /** initThreeApp 기본 노출 대비 Stage6에서만 밝게 (WebGLRenderer.toneMappingExposure 가산) */
   toneMappingExposureDelta: 0.18,
   model: {
-    path: "/models/stage6/airport6.glb",
+    path: "/models/stage6/airport7.glb",
     position: { x: 0, y: 0, z: 0 },
     envMapIntensity: 1,
     castShadow: true,

@@ -3,8 +3,17 @@ import { getSessionId } from "./session.js";
 /** 게시판 껌딱지 투표 UX용 — `:${getSessionId()}` 접미로 localStorage 에 저장됨 */
 export const GGUMDDI_MY_VOTE_STORAGE_PREFIX = "gum-ggumddi-my-vote";
 
-/** clientId 저장 키 — prefix 아래에 두어 kiosk 리셋 시 자동 삭제됨 */
-export const VOTE_CLIENT_ID_STORAGE_KEY = `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:clientId`;
+/** ?monitor=N 파라미터를 읽어 모니터별 스토리지 키 접미사를 반환 */
+function getMonitorSuffix() {
+  if (typeof window === "undefined") return "";
+  const m = new URLSearchParams(window.location.search).get("monitor");
+  return m ? `:m${m}` : "";
+}
+
+/** clientId 저장 키 — prefix 아래에 두어 kiosk 리셋 시 자동 삭제됨. 모니터별로 분리됨 */
+export function getVoteClientIdStorageKey() {
+  return `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:clientId${getMonitorSuffix()}`;
+}
 
 /** 다음 이용자에게 '이미 투표함' 상태가 새지 않도록 해당 키만 제거 */
 export function clearGgumddiMyVotesFromLocalStorage() {
@@ -20,11 +29,12 @@ export function clearGgumddiMyVotesFromLocalStorage() {
 
 /** 기존 clientId를 반환하거나 새 UUID를 생성·저장해 반환 */
 export function getOrCreateVoteClientId() {
+  const key = getVoteClientIdStorageKey();
   try {
-    const stored = localStorage.getItem(VOTE_CLIENT_ID_STORAGE_KEY);
+    const stored = localStorage.getItem(key);
     if (stored && stored.trim()) return stored.trim();
     const id = window.crypto.randomUUID();
-    localStorage.setItem(VOTE_CLIENT_ID_STORAGE_KEY, id);
+    localStorage.setItem(key, id);
     return id;
   } catch {
     return window.crypto.randomUUID();
@@ -34,7 +44,7 @@ export function getOrCreateVoteClientId() {
 /** 서버 응답 clientId를 localStorage에 저장 */
 export function saveVoteClientId(clientId) {
   try {
-    localStorage.setItem(VOTE_CLIENT_ID_STORAGE_KEY, clientId);
+    localStorage.setItem(getVoteClientIdStorageKey(), clientId);
   } catch {
     /* ignore */
   }

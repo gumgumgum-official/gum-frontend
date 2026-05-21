@@ -739,36 +739,30 @@ export function createStage3LetterController({
   }
 
   function addCrackSegment(state, start, end) {
-    const segs = 4;
     const dir = end.clone().sub(start);
-    const dirLen = Math.max(dir.length(), 1e-6);
-    const perp = new THREE.Vector3(-dir.y, dir.x, 0)
-      .normalize()
-      .multiplyScalar(dirLen * 0.22);
-    const positions = [];
-    for (let i = 0; i <= segs; i++) {
-      const t = i / segs;
-      const base = start.clone().lerp(end, t);
-      if (i !== 0 && i !== segs) {
-        base.add(perp.clone().multiplyScalar((Math.random() - 0.5) * 2));
-      }
-      positions.push(base.x, base.y, base.z + 0.03);
-    }
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(positions, 3),
-    );
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xffffff,
+    const length = dir.length();
+    if (length < 1e-6) return;
+    const angle = Math.atan2(dir.y, dir.x);
+    // 얇은 사각형 메시 — 두께 조절 가능, 1px 한계 없음
+    const thickness = 0.016 + Math.random() * 0.008;
+    const geom = new THREE.PlaneGeometry(length, thickness);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x1a1a1a,
       transparent: true,
       opacity: 0,
       depthTest: true,
       depthWrite: false,
+      side: THREE.DoubleSide,
     });
-    const line = new THREE.Line(geom, mat);
-    line.renderOrder = 10;
-    state.group.add(line);
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(
+      (start.x + end.x) / 2,
+      (start.y + end.y) / 2,
+      start.z + 0.03,
+    );
+    mesh.rotation.z = angle;
+    mesh.renderOrder = 10;
+    state.group.add(mesh);
     gsap.to(mat, {
       opacity: 1,
       duration: 0.12,
@@ -779,20 +773,29 @@ export function createStage3LetterController({
       },
     });
     if (!state.crackMeshes) state.crackMeshes = [];
-    state.crackMeshes.push(line);
+    state.crackMeshes.push(mesh);
   }
 
-  function addCrackCluster(state, anchor) {
-    const branchCount = 1 + Math.floor(Math.random() * 2);
+  // bounds: SVG 앞면 정점 bbox (inset 포함) — 끝점이 글자 밖으로 나가지 않도록 클램프
+  function addCrackCluster(state, anchor, bounds) {
+    // 중심 방향 하나를 정하고 거기서 ±60° 안으로 가지를 뻗어 방사형보다 균열처럼 보임
+    const baseAngle = Math.random() * Math.PI * 2;
+    const branchCount = 2 + Math.floor(Math.random() * 2); // 2~3개
     for (let b = 0; b < branchCount; b++) {
-      const angle = Math.random() * Math.PI * 2;
-      // 금 길이: 0.05 ~ 0.13
-      const len = 0.052 + Math.random() * 0.078;
+      const spread = (b / (branchCount - 1) - 0.5) * ((Math.PI * 2) / 3);
+      const angle = baseAngle + spread;
+      // 길이: 0.10 ~ 0.22
+      const len = 0.1 + Math.random() * 0.12;
       const end = new THREE.Vector3(
         anchor.x + Math.cos(angle) * len,
         anchor.y + Math.sin(angle) * len,
         anchor.z,
       );
+      // SVG 경계 안으로 클램프
+      if (bounds) {
+        end.x = THREE.MathUtils.clamp(end.x, bounds.xMin, bounds.xMax);
+        end.y = THREE.MathUtils.clamp(end.y, bounds.yMin, bounds.yMax);
+      }
       addCrackSegment(state, anchor, end);
     }
   }
@@ -818,6 +821,15 @@ export function createStage3LetterController({
     const cols = Math.ceil(Math.sqrt(clusterCount));
     const rows = Math.ceil(clusterCount / cols);
 
+    // 끝점 클램프용 bounds — 크랙 길이(0.20) 만큼 안쪽으로 inset
+    const inset = 0.2;
+    const bounds = {
+      xMin: box.min.x + inset,
+      xMax: box.max.x - inset,
+      yMin: box.min.y + inset,
+      yMax: box.max.y - inset,
+    };
+
     for (let ci = 0; ci < clusterCount; ci++) {
       const col = ci % cols;
       const row = Math.floor(ci / cols);
@@ -832,7 +844,7 @@ export function createStage3LetterController({
         cellVerts.length > 0
           ? cellVerts[Math.floor(Math.random() * cellVerts.length)]
           : verts[Math.floor(Math.random() * verts.length)];
-      addCrackCluster(state, anchor);
+      addCrackCluster(state, anchor, bounds);
     }
   }
 

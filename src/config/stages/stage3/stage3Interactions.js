@@ -45,6 +45,20 @@ export const LOOP_CLIP_NAMES = [
   "Gum_HandWave_Loop",
 ];
 
+/** 2배속 재생할 풍선 루프 클립 이름 집합 */
+export const BALLOON_CLIP_NAMES = new Set([
+  "Balloon_Heart_Sway",
+  "Balloon_Star_Sway",
+  "Balloon_Sun_Sway",
+]);
+
+/** 풍선 근접 클릭 힌트: 클립 이름 → 말풍선 텍스트 (OBJ_ 이름 대신 클립 트랙에서 노드명 추출) */
+export const BALLOON_CLIP_HINT_MAP = {
+  Balloon_Heart_Sway: "❤️풍선 click",
+  Balloon_Star_Sway: "⭐풍선 click",
+  Balloon_Sun_Sway: "☀️풍선 click",
+};
+
 /**
  * 클릭 시 1회 재생할 오브젝트별 애니메이션 설정.
  * GLB 변경으로 애니메이션이 추가될 경우 이 배열에만 항목을 추가하면 된다.

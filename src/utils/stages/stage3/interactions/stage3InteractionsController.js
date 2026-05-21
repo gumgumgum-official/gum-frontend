@@ -13,6 +13,8 @@ import {
   PORTAL_PASS_TRIGGER_RADIUS_MAX,
   GAME_MACHINE_CLICK_SOUND_PATH,
   LOOP_CLIP_NAMES,
+  BALLOON_CLIP_NAMES,
+  BALLOON_CLIP_HINT_MAP,
   STAGE3_CLICK_ONCE_ANIM_SETS,
   CLOCK_ALARM_START_FRAME,
   CLOCK_ALARM_END_FRAME,
@@ -56,6 +58,7 @@ import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3
  *   setPendingEggDiscoverySubtitle: (text: string) => void,
  *   onGameMachineModalClose: () => void,
  *   onOpenTentModal: () => void,
+ *   getScene: () => import("three").Scene | null,
  *   getDebugControls: () => { getOrbitControls?: () => unknown } | null,
  * }} params
  */
@@ -64,6 +67,7 @@ export function createStage3InteractionsController({
   getCanvas,
   getConfig,
   getCharacter,
+  getScene,
   getVendingMachineController,
   getCameraIntroState,
   isInteractionBlocked,
@@ -124,12 +128,30 @@ export function createStage3InteractionsController({
   const _camAssistBox = new THREE.Box3();
   const _camAssistSphere = new THREE.Sphere();
   const _intHintWorld = new THREE.Vector3();
+  const _balloonHoverWorld = new THREE.Vector3();
   const _portalTriggerCenter = new THREE.Vector3();
   const _camProjView = new THREE.Matrix4();
   const _camFrustum = new THREE.Frustum();
 
   /** @type {HTMLDivElement | null} */
   let intClickHintBubbleEl = null;
+  /** @type {HTMLDivElement | null} */
+  let balloonHoverBubbleEl = null;
+
+  /** @type {{ meshes: import("three").Mesh[]; hintText: string; anchorWorld: import("three").Vector3; node: import("three").Object3D }[]} */
+  const balloonHoverTargets = [];
+
+  /**
+   * @type {{
+   *   clone: import("three").Object3D,
+   *   node: import("three").Object3D,
+   *   stringLine: import("three").Line,
+   *   stringPositions: Float32Array,
+   * } | null}
+   */
+  let heldBalloon = null;
+  const _heldStringBottom = new THREE.Vector3();
+  const _heldBalloonTop = new THREE.Vector3();
 
   let _pointerMoveRafId = 0;
   /** @type {PointerEvent | null} */
@@ -395,6 +417,41 @@ export function createStage3InteractionsController({
     return null;
   }
 
+  function updateBalloonHover(clientX, clientY) {
+    const camera = getCamera();
+    const canvas = getCanvas();
+    if (
+      !balloonHoverBubbleEl ||
+      !camera ||
+      !canvas ||
+      balloonHoverTargets.length === 0
+    ) {
+      balloonHoverBubbleEl?.classList.remove("is-visible");
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    _pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    _raycaster.setFromCamera(_pointer, camera);
+    for (const target of balloonHoverTargets) {
+      if (!target.node.visible) continue;
+      const hits = _raycaster.intersectObjects(target.meshes, false);
+      if (hits.length > 0) {
+        camera.updateMatrixWorld(true);
+        _balloonHoverWorld.copy(target.anchorWorld);
+        _balloonHoverWorld.project(camera);
+        const x = (_balloonHoverWorld.x * 0.5 + 0.5) * rect.width + rect.left;
+        const y = (-_balloonHoverWorld.y * 0.5 + 0.5) * rect.height + rect.top;
+        balloonHoverBubbleEl.textContent = target.hintText;
+        balloonHoverBubbleEl.style.left = `${x}px`;
+        balloonHoverBubbleEl.style.top = `${y}px`;
+        balloonHoverBubbleEl.classList.add("is-visible");
+        return;
+      }
+    }
+    balloonHoverBubbleEl.classList.remove("is-visible");
+  }
+
   function handlePointerMove(event) {
     const canvas = getCanvas();
     if (!canvas) return;
@@ -406,16 +463,19 @@ export function createStage3InteractionsController({
       if (!e || !getCanvas()) return;
       if (isInteractionBlocked()) {
         canvas.style.cursor = "default";
+        balloonHoverBubbleEl?.classList.remove("is-visible");
         return;
       }
       const target = getPointerHitTarget(e.clientX, e.clientY);
       canvas.style.cursor = target ? "pointer" : "default";
+      updateBalloonHover(e.clientX, e.clientY);
     });
   }
 
   function handlePointerLeave() {
     const canvas = getCanvas();
     if (canvas) canvas.style.cursor = "default";
+    balloonHoverBubbleEl?.classList.remove("is-visible");
   }
 
   function handlePointerDown(event) {
@@ -423,6 +483,15 @@ export function createStage3InteractionsController({
     const canvas = getCanvas();
     if (!camera || !canvas) return;
     if (isInteractionBlocked()) return;
+
+    const balloonTarget = getClickedBalloonTarget(event.clientX, event.clientY);
+    if (balloonTarget) {
+      event.preventDefault();
+      event.stopPropagation();
+      holdBalloon(balloonTarget);
+      return;
+    }
+
     const target = getPointerHitTarget(event.clientX, event.clientY);
     if (!target) return;
     event.preventDefault();
@@ -442,7 +511,67 @@ export function createStage3InteractionsController({
    * @param {THREE.Object3D} islandModel
    * @param {import("three").AnimationClip[]} [animations]
    */
+  function releaseHeldBalloon() {
+    if (!heldBalloon) return;
+    const scene = getScene();
+    heldBalloon.node.visible = true;
+    if (scene) {
+      scene.remove(heldBalloon.clone);
+      scene.remove(heldBalloon.stringLine);
+    }
+    heldBalloon.stringLine.geometry.dispose();
+    heldBalloon.stringLine.material.dispose();
+    heldBalloon = null;
+  }
+
+  /** @param {{ node: import("three").Object3D }} target */
+  function holdBalloon(target) {
+    releaseHeldBalloon();
+    const scene = getScene();
+    if (!scene) return;
+    target.node.visible = false;
+    target.node.updateMatrixWorld(true);
+    const clone = target.node.clone(true);
+    const p = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    target.node.matrixWorld.decompose(p, q, s);
+    clone.position.copy(p);
+    clone.quaternion.copy(q);
+    clone.scale.copy(s);
+    scene.add(clone);
+
+    const stringPositions = new Float32Array(6);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(stringPositions, 3));
+    const stringLine = new THREE.Line(
+      geo,
+      new THREE.LineBasicMaterial({ color: 0xffffff }),
+    );
+    scene.add(stringLine);
+
+    heldBalloon = { clone, node: target.node, stringLine, stringPositions };
+  }
+
+  /** @returns {{ node: import("three").Object3D } | null} */
+  function getClickedBalloonTarget(clientX, clientY) {
+    const camera = getCamera();
+    const canvas = getCanvas();
+    if (!camera || !canvas || balloonHoverTargets.length === 0) return null;
+    const rect = canvas.getBoundingClientRect();
+    _pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    _raycaster.setFromCamera(_pointer, camera);
+    for (const target of balloonHoverTargets) {
+      if (!target.node.visible) continue;
+      const hits = _raycaster.intersectObjects(target.meshes, false);
+      if (hits.length > 0) return target;
+    }
+    return null;
+  }
+
   function registerIslandInteractions(islandModel, animations = []) {
+    releaseHeldBalloon();
     const vendingMachineController = getVendingMachineController();
     intRaycastMeshes.length = 0;
     gumtoongjiRaycastMeshes.length = 0;
@@ -505,8 +634,13 @@ export function createStage3InteractionsController({
           continue;
         }
         const action = islandLoopMixer.clipAction(clip);
-        action.setLoop(THREE.LoopRepeat, Infinity);
+        const isBalloon = BALLOON_CLIP_NAMES.has(name);
+        action.setLoop(
+          isBalloon ? THREE.LoopPingPong : THREE.LoopRepeat,
+          Infinity,
+        );
         action.clampWhenFinished = false;
+        if (isBalloon) action.timeScale = 2;
         action.play();
       }
     }
@@ -619,6 +753,49 @@ export function createStage3InteractionsController({
     });
 
     intRaycastMeshes.push(...meshSet);
+
+    // 풍선 호버 힌트: 클립 트랙에서 노드명 추출 → 메시 레이캐스트 재활성 후 balloonHoverTargets에 저장
+    // (applyStage3BackgroundMeshFlags가 먼저 실행되어 비활성화한 raycast를 여기서 복원)
+    balloonHoverTargets.length = 0;
+    for (const [clipName, hintText] of Object.entries(BALLOON_CLIP_HINT_MAP)) {
+      const clip = THREE.AnimationClip.findByName(animations, clipName);
+      if (!clip || !clip.tracks.length) continue;
+      const firstTrackName = clip.tracks[0].name;
+      const dotIdx = firstTrackName.indexOf(".");
+      const nodeName = dotIdx > 0 ? firstTrackName.slice(0, dotIdx) : null;
+      if (!nodeName) continue;
+      const balloonObj = islandModel.getObjectByName(nodeName);
+      if (!balloonObj) {
+        if (import.meta.env.DEV)
+          console.warn(
+            `[Balloon hover] 노드 없음: ${nodeName} (clip: ${clipName})`,
+          );
+        continue;
+      }
+      balloonObj.updateMatrixWorld(true);
+      _camAssistBox.setFromObject(balloonObj);
+      if (_camAssistBox.isEmpty()) continue;
+      const anchorWorld = new THREE.Vector3(
+        (_camAssistBox.min.x + _camAssistBox.max.x) * 0.5,
+        _camAssistBox.max.y + STAGE3_INT_CLICK_HINT_OFFSET_Y,
+        (_camAssistBox.min.z + _camAssistBox.max.z) * 0.5,
+      );
+      const meshes = [];
+      balloonObj.traverse((child) => {
+        if (child.isMesh) {
+          child.raycast = THREE.Mesh.prototype.raycast;
+          meshes.push(child);
+        }
+      });
+      if (meshes.length > 0) {
+        balloonHoverTargets.push({
+          meshes,
+          hintText,
+          anchorWorld,
+          node: balloonObj,
+        });
+      }
+    }
 
     if (animations.length > 0) {
       if (import.meta.env.DEV) {
@@ -925,6 +1102,17 @@ export function createStage3InteractionsController({
     activeIntHintTarget = null;
   }
 
+  function attachBalloonHoverBubble(el) {
+    detachBalloonHoverBubble();
+    balloonHoverBubbleEl = el;
+  }
+
+  function detachBalloonHoverBubble() {
+    if (!balloonHoverBubbleEl) return;
+    balloonHoverBubbleEl.classList.remove("is-visible");
+    balloonHoverBubbleEl = null;
+  }
+
   function resetCameraAssistSmoothing() {
     smoothedCameraYawAssist = 0;
     smoothedCameraYawAssistDemand = 0;
@@ -933,7 +1121,9 @@ export function createStage3InteractionsController({
   }
 
   function cleanup() {
+    releaseHeldBalloon();
     detachIntClickHintBubble();
+    detachBalloonHoverBubble();
     intRaycastMeshes.length = 0;
     if (unlistenMinigameClose) {
       unlistenMinigameClose();
@@ -971,11 +1161,33 @@ export function createStage3InteractionsController({
     unbindCanvas,
     attachIntClickHintBubble,
     detachIntClickHintBubble,
+    attachBalloonHoverBubble,
+    detachBalloonHoverBubble,
     update(delta) {
       if (islandLoopMixer) islandLoopMixer.update(delta);
       for (const set of clickOnceSets.values()) set.mixer.update(delta);
       updateIntClickHintBubble();
       updatePortalPassTrigger();
+
+      if (heldBalloon) {
+        const charPos = getCharacter()?.getPosition?.();
+        if (charPos) {
+          // string bottom: waist/chest level
+          _heldStringBottom.copy(charPos).setY(charPos.y + 1.0);
+          // balloon floats above the character
+          _heldBalloonTop.copy(charPos).setY(charPos.y + 2.5);
+          heldBalloon.clone.position.copy(_heldBalloonTop);
+          // update string geometry
+          const sp = heldBalloon.stringPositions;
+          sp[0] = _heldStringBottom.x;
+          sp[1] = _heldStringBottom.y;
+          sp[2] = _heldStringBottom.z;
+          sp[3] = _heldBalloonTop.x;
+          sp[4] = _heldBalloonTop.y;
+          sp[5] = _heldBalloonTop.z;
+          heldBalloon.stringLine.geometry.attributes.position.needsUpdate = true;
+        }
+      }
     },
     updateCameraYawAssist,
     resetCameraAssistSmoothing,
