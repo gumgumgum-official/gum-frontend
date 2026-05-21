@@ -62,6 +62,7 @@ import {
   unblockStage6Notifications,
 } from "../utils/stages/stage6/stage6NotificationGate.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
+import { createStage6CameraDebugOverlay } from "../utils/stages/stage6/stage6CameraDebugOverlay.js";
 const INT_PREFIX = "INT_";
 const CHAR_ROOT_NAMES = [
   "INT_Gum_Cry",
@@ -107,6 +108,12 @@ const PHONE_HANGUP_SOUND_VOLUME = 0.49;
 const PHONE_CALL_SOUNDS = ["/static/sounds/airport/payphone_voice.mp3"];
 const PHONE_CALL_RING_SUBTITLES = ["어? 전화가 온 것 같아요! 한번 받아볼까요?"];
 const PHONE_CALL_SOUND_VOLUME = 0.49;
+const CHAR_HOVER_AIRPLANE_HEHE_PATH =
+  "/static/sounds/airport/gum/baby_hehe1.mp3";
+const CHAR_HOVER_AIRPLANE_PLANE_PATH =
+  "/static/sounds/airport/gum/paper_plane.mp3";
+const CHAR_HOVER_CRY_PATH = "/static/sounds/airport/gum/baby_cry1.mp3";
+const CHAR_HOVER_SOUND_VOLUME = 0.6;
 const TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS = 5000;
 const ATM_INTERACTION_REQUIRED_COUNT = 3;
 const ATM_EMISSIVE_DARK_STRENGTH = 0.06;
@@ -175,10 +182,15 @@ function raycastFloorY(meshes, x, z, rc, rayStartY) {
 }
 
 /**
- * Stage6 공항 씬에서 OBJ_/INT_ 서브트리 메쉬를 정적 충돌 AABB로 수집한다.
+ * Stage6 공항 씬에서 실제 벽/카운터 역할을 하는 OBJ_/INT_ 메쉬만 정적 충돌 AABB로 수집한다.
+ *
+ * 바닥 패널·천장·얇은 장식처럼 높이가 낮은 메쉬(< MIN_WALL_HEIGHT)는 제외해
+ * "투명 돌부리" 현상을 방지한다.
+ *
  * @param {THREE.Object3D} root
  * @returns {Array<{ minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number }>}
  */
+const MIN_WALL_HEIGHT = 0.55;
 function collectStage6StaticColliderBoxes(root) {
   /** @type {Array<{ minX: number, maxX: number, minZ: number, maxZ: number, minY: number, maxY: number }>} */
   const out = [];
@@ -202,6 +214,8 @@ function collectStage6StaticColliderBoxes(root) {
     if (!underColliderRoot) return;
     tmp.setFromObject(obj);
     if (tmp.isEmpty()) return;
+    // 바닥판·천장·얇은 장식 제외 — 높이가 충분한 오브젝트만 충돌 벽으로 사용
+    if (tmp.max.y - tmp.min.y < MIN_WALL_HEIGHT) return;
     out.push({
       minX: tmp.min.x,
       maxX: tmp.max.x,
@@ -307,9 +321,16 @@ export function Stage6() {
   let phoneHangupAudio = null;
   /** @type {HTMLAudioElement | null} */
   let phoneCallAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let charHoverAirplaneHeheAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let charHoverAirplanePlaneAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let charHoverCryAudio = null;
   let isAirportChimeVisible = false;
 
   const bagPhysics = createBagPhysics();
+  let cameraDebugOverlay = null;
 
   function isLoadingOverlayVisible() {
     const loadingOverlay = document.getElementById("loading-overlay");
@@ -780,9 +801,44 @@ export function Stage6() {
     );
   }
 
+  function playCharHoverSound(charName) {
+    if (charName === "INT_Gum_Airplane") {
+      if (!charHoverAirplaneHeheAudio) {
+        charHoverAirplaneHeheAudio = new window.Audio();
+        charHoverAirplaneHeheAudio.preload = "auto";
+        charHoverAirplaneHeheAudio.src = resolvePublicAssetUrl(
+          CHAR_HOVER_AIRPLANE_HEHE_PATH,
+        );
+        charHoverAirplaneHeheAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+      }
+      if (!charHoverAirplanePlaneAudio) {
+        charHoverAirplanePlaneAudio = new window.Audio();
+        charHoverAirplanePlaneAudio.preload = "auto";
+        charHoverAirplanePlaneAudio.src = resolvePublicAssetUrl(
+          CHAR_HOVER_AIRPLANE_PLANE_PATH,
+        );
+        charHoverAirplanePlaneAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+      }
+      charHoverAirplaneHeheAudio.currentTime = 0;
+      charHoverAirplanePlaneAudio.currentTime = 0;
+      charHoverAirplaneHeheAudio.play().catch(() => {});
+      charHoverAirplanePlaneAudio.play().catch(() => {});
+    } else if (charName === "INT_Gum_Cry") {
+      if (!charHoverCryAudio) {
+        charHoverCryAudio = new window.Audio();
+        charHoverCryAudio.preload = "auto";
+        charHoverCryAudio.src = resolvePublicAssetUrl(CHAR_HOVER_CRY_PATH);
+        charHoverCryAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+      }
+      charHoverCryAudio.currentTime = 0;
+      charHoverCryAudio.play().catch(() => {});
+    }
+  }
+
   function playCharacter(charName) {
     const actions = charActions[charName];
     let animDurationSec = CHAR_BUBBLE_VISIBLE_SEC;
+    playCharHoverSound(charName);
     if (!actions?.length) {
       showCharBubble(charName);
       scheduleCharacterAnimNotificationUnblock(animDurationSec);
@@ -1224,6 +1280,14 @@ export function Stage6() {
       }
       cameraRef = this.camera;
 
+      if (import.meta.env.DEV) {
+        cameraDebugOverlay = createStage6CameraDebugOverlay({
+          camera: this.camera,
+          domElement: canvas,
+          config,
+        });
+      }
+
       scene.background = null;
       character = createCharacterController({
         scene,
@@ -1300,7 +1364,6 @@ export function Stage6() {
         const hit = getPointerHitTarget(event);
         if (!hit) return;
         if (isSceneInteractionLocked || isAnnouncementActive) return;
-        const isCharacterHit = CHAR_ROOT_NAMES.includes(hit.intName);
         if (hit.target === "photobooth") {
           playUiClickSound();
           hideTelBubble();
@@ -1669,6 +1732,8 @@ export function Stage6() {
     },
 
     update(delta) {
+      if (cameraDebugOverlay) cameraDebugOverlay.update();
+
       atmEmissiveProgress = THREE.MathUtils.damp(
         atmEmissiveProgress,
         atmEmissiveTarget,
@@ -1878,6 +1943,10 @@ export function Stage6() {
     cleanup(scene) {
       isStage6Active = false;
       keyboard.unmount();
+      if (cameraDebugOverlay) {
+        cameraDebugOverlay.dispose();
+        cameraDebugOverlay = null;
+      }
       if (characterAnimUnblockTimeoutId) {
         window.clearTimeout(characterAnimUnblockTimeoutId);
         characterAnimUnblockTimeoutId = 0;
@@ -1893,6 +1962,21 @@ export function Stage6() {
         atmClickAudio.pause();
         atmClickAudio.src = "";
         atmClickAudio = null;
+      }
+      if (charHoverAirplaneHeheAudio) {
+        charHoverAirplaneHeheAudio.pause();
+        charHoverAirplaneHeheAudio.src = "";
+        charHoverAirplaneHeheAudio = null;
+      }
+      if (charHoverAirplanePlaneAudio) {
+        charHoverAirplanePlaneAudio.pause();
+        charHoverAirplanePlaneAudio.src = "";
+        charHoverAirplanePlaneAudio = null;
+      }
+      if (charHoverCryAudio) {
+        charHoverCryAudio.pause();
+        charHoverCryAudio.src = "";
+        charHoverCryAudio = null;
       }
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
