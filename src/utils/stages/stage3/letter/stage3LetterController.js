@@ -29,6 +29,7 @@ import {
   FRAGMENT_BOUNCE_RESTITUTION,
   FRAGMENT_GROUND_FRICTION,
   FRAGMENT_BURST_IMPULSE_MUL,
+  FINAL_SHATTER_SPREAD_MUL,
   FRAGMENT_FADE_START,
   FRAGMENT_FADE_END,
   FLOWER_BLOOM_DURATION,
@@ -281,6 +282,8 @@ export function createStage3LetterController({
           group.updateMatrixWorld(true);
           const box = new THREE.Box3().setFromObject(group);
           const letterBottomOffset = Math.max(0, -box.min.y);
+          const letterWidth = box.max.x - box.min.x;
+          const letterHeight = Math.max(box.max.y - box.min.y, 0.1);
           const landingY =
             groundY + letterBottomOffset + STAGE3_LETTER_LANDING_LIFT;
 
@@ -312,6 +315,8 @@ export function createStage3LetterController({
             bounces: 0,
             landed: false,
             hitCount: 0,
+            letterWidth,
+            letterHeight,
           };
         } catch (e) {
           console.warn("[Stage3Letter] svg 로드 실패:", e);
@@ -489,7 +494,7 @@ export function createStage3LetterController({
     }
   }
 
-  function createFragmentMeshes(fragTriangles, mat, groundY) {
+  function createFragmentMeshes(fragTriangles, mat, groundY, spreadMul = 1.0) {
     const scene = getScene();
     if (!scene) return;
     for (const triList of fragTriangles) {
@@ -504,7 +509,7 @@ export function createStage3LetterController({
       const slot = allocFragment(geom, mat);
       slot.group.position.copy(fragCenter);
       slot.group.rotation.set(0, 0, 0);
-      const mul = FRAGMENT_BURST_IMPULSE_MUL;
+      const mul = FRAGMENT_BURST_IMPULSE_MUL * spreadMul;
       slot.velocity.set(
         (Math.random() - 0.5) * 6 * mul,
         (Math.random() * 2 + 3) * mul,
@@ -537,7 +542,9 @@ export function createStage3LetterController({
 
   function pickRandomFlowerScale() {
     const min = FLOWER_SCALE * FLOWER_SCALE_MIN_RATIO;
-    return min + Math.random() * (FLOWER_SCALE - min);
+    // 제곱 분포 → 작은 꽃 비율 증가
+    const t = Math.pow(Math.random(), 2);
+    return min + t * (FLOWER_SCALE - min);
   }
 
   function disposeStandaloneFlowerGroup(g) {
@@ -688,6 +695,14 @@ export function createStage3LetterController({
         if (!f.flowerSpawned) {
           f.flowerSpawned = true;
           spawnFlowerAt(f.group.position.x, f.group.position.z, f.groundY);
+          // 두 번째 꽃: FLOWER_MIN_DISTANCE(1.1)보다 충분히 먼 위치에 시도
+          const a = Math.random() * Math.PI * 2;
+          const r = 1.5 + Math.random() * 0.7;
+          spawnFlowerAt(
+            f.group.position.x + Math.cos(a) * r,
+            f.group.position.z + Math.sin(a) * r,
+            f.groundY,
+          );
         }
         releaseFragment(f);
         fragments.splice(i, 1);
@@ -771,7 +786,8 @@ export function createStage3LetterController({
     const branchCount = 1 + Math.floor(Math.random() * 2);
     for (let b = 0; b < branchCount; b++) {
       const angle = Math.random() * Math.PI * 2;
-      const len = (0.22 + Math.random() * 0.5) * 0.7;
+      // 금 길이: 0.05 ~ 0.13
+      const len = 0.052 + Math.random() * 0.078;
       const end = new THREE.Vector3(
         anchor.x + Math.cos(angle) * len,
         anchor.y + Math.sin(angle) * len,
@@ -785,7 +801,14 @@ export function createStage3LetterController({
     if (!state?.group) return;
     const verts = getLetterFrontCapVertices(state);
     if (verts.length === 0) return;
-    const clusterCount = Math.min(20, 6 + Math.floor(state.hitCount / 2));
+    // SVG 너비/높이 비율로 클러스터 수 스케일 → 긴 글자는 금 많이, 짧은 글자는 적게
+    const widthScale = Math.max(
+      0.5,
+      (state.letterWidth ?? state.letterHeight ?? 1) /
+        (state.letterHeight ?? 3.24),
+    );
+    const base = 6 + Math.floor(state.hitCount / 2);
+    const clusterCount = Math.min(20, Math.round(base * widthScale * 0.5));
 
     // bbox를 격자로 나눠 각 셀에서 앵커 선택 → 글자 전체에 골고루 퍼짐
     const box = new THREE.Box3();
@@ -941,7 +964,12 @@ export function createStage3LetterController({
       triangles,
       FINAL_SHATTER_PIECE_COUNT,
     );
-    createFragmentMeshes(shatterPieces, mat, target.groundY);
+    createFragmentMeshes(
+      shatterPieces,
+      mat,
+      target.groundY,
+      FINAL_SHATTER_SPREAD_MUL,
+    );
     playCrackFinalSound();
     removeLetterCollider();
     scene.remove(group);

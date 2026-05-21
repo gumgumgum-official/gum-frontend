@@ -22,6 +22,8 @@ export const FRAGMENT_GRAVITY_MUL = 2.8;
 export const FRAGMENT_BOUNCE_RESTITUTION = 0.35;
 export const FRAGMENT_GROUND_FRICTION = 0.82;
 export const FRAGMENT_BURST_IMPULSE_MUL = 1.55;
+/** 최종 shatter 시 조각 비산 거리 추가 배율 */
+export const FINAL_SHATTER_SPREAD_MUL = 2.5;
 export const FRAGMENT_FADE_START = 0.8;
 export const FRAGMENT_FADE_END = 2.0;
 export const FLOWER_BLOOM_DURATION = 3;
