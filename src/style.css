@@ -418,7 +418,7 @@ body {
 }
 
 .stage3-stamp-panel {
-  --stage3-stamp-scale: 0.52;
+  --stage3-stamp-scale: 0.68;
   --stage3-stamp-intro-scale: 1.68;
   border-radius: 10px;
   overflow: hidden;
@@ -440,8 +440,8 @@ body {
 
 .stage3-stamp-poster-wrap {
   position: relative;
-  width: min(24vw, 190px);
-  max-width: 190px;
+  width: min(30vw, 260px);
+  max-width: 260px;
 }
 
 .stage3-stamp-panel.stage3-stamp-panel--pop {
