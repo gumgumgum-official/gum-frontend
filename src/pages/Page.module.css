@@ -448,8 +448,8 @@
 }
 
 .kioskEnterLoadingVideo {
-  width: min(72vw, 520px);
-  max-height: 72vh;
+  width: min(98vw, 1200px);
+  max-height: 96vh;
   object-fit: contain;
   border-radius: 16px;
 }
