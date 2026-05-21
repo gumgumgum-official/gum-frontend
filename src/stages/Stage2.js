@@ -317,6 +317,7 @@ export function Stage2() {
   /** @type {{ update: (delta: number) => void, cleanup: () => void } | null} */
   let gumSpeechBubbles = null;
   let realtimeSubscription = null;
+  const realtimeDelayTimers = new Set();
   const fallingTexts = [];
   /** 초기 로드 + Realtime 공통 중복 방지 키 저장소 */
   const processedHandwritingKeys = new Set();
@@ -796,8 +797,13 @@ export function Stage2() {
       // Handwriting: 실시간 수신 (누적 로드는 GLB 로드 후 섬 땅 높이 적용 뒤 호출)
       realtimeSubscription = subscribeHandwritingRealtime({
         onNewHandwriting: (metadata) => {
-          svgQueue.push(() => ingestHandwriting(metadata, "realtime"));
-          void drainSvgQueue();
+          const timer = setTimeout(() => {
+            realtimeDelayTimers.delete(timer);
+            if (!isStage2Active) return;
+            svgQueue.push(() => ingestHandwriting(metadata, "realtime"));
+            void drainSvgQueue();
+          }, 10000);
+          realtimeDelayTimers.add(timer);
         },
         onError: (error) => {
           console.error("[Stage2] Handwriting realtime error:", error);
@@ -870,6 +876,8 @@ export function Stage2() {
     cleanup(scene) {
       isStage2Active = false;
       svgQueue.length = 0;
+      realtimeDelayTimers.forEach(clearTimeout);
+      realtimeDelayTimers.clear();
 
       // Realtime 구독 해제
       if (realtimeSubscription) {
