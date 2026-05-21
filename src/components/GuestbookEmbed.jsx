@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
 import { getGumServerBaseUrl } from "../lib/monitorCurrentApi.js";
+import {
+  pauseStage3BackgroundAmbientForOverlay,
+  resumeStage3BackgroundAmbientFromOverlay,
+} from "../utils/common/stage3IntroAudio.js";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const PINK = "#ff5fa2";
@@ -205,7 +209,7 @@ const GUESTBOOK_INPUT_CSS = `
 const GUESTBOOK_SUBMIT_BTN_CSS = `
 .guestbookEmbed-submitBtn{
   box-sizing:border-box;
-  
+
   font-family:"DOSGothic","Galmuri11","Galmuri9",monospace;
   font-size:1rem;
   font-weight:700;
@@ -471,23 +475,24 @@ function ProfileCard({ totalCount, countLoading }) {
 }
 
 // ── TodayCard (Figma 480:140) ─────────────────────────────────────────────────
-/** Figma 480:144 — 체리 아이콘 */
-function TodayCardIconCherry() {
+function TodayCardIconNote() {
   return (
-    <img
-      alt=""
-      src="/assets/guestbook/today_card_cherry.png"
-      width={27}
-      height={26}
-      draggable={false}
-      style={{
-        display: "block",
-        width: 27,
-        height: 26,
-        flexShrink: 0,
-        mixBlendMode: "multiply",
-      }}
-    />
+    <svg
+      aria-hidden
+      width={24}
+      height={24}
+      viewBox="0 0 8 8"
+      style={{ display: "block", flexShrink: 0, imageRendering: "pixelated" }}
+    >
+      {/* stem */}
+      <rect x="4" y="0" width="1" height="5" fill={PROFILE_ACCENT} />
+      {/* flag */}
+      <rect x="5" y="0" width="2" height="1" fill={PROFILE_ACCENT} />
+      <rect x="6" y="1" width="1" height="1" fill={PROFILE_ACCENT} />
+      {/* note head */}
+      <rect x="2" y="4" width="3" height="2" fill={PROFILE_ACCENT} />
+      <rect x="1" y="5" width="1" height="1" fill={PROFILE_ACCENT} />
+    </svg>
   );
 }
 
@@ -525,7 +530,7 @@ function TodayCardHeader() {
           boxSizing: "border-box",
         }}
       >
-        <TodayCardIconCherry />
+        <TodayCardIconNote />
         <div
           style={{
             fontFamily: FONT_TODAY_TITLE,
@@ -536,7 +541,7 @@ function TodayCardHeader() {
             whiteSpace: "nowrap",
           }}
         >
-          TODAY is ...
+          TODAY's music is ..
         </div>
       </div>
     </div>
@@ -569,7 +574,7 @@ function TodayCard() {
           color: PROFILE_STATUS_FG,
         }}
       >
-        기분 좋당
+        프리스타일 - y
       </p>
     </div>
   );
@@ -984,6 +989,18 @@ function GuestbookEntry({ index, name, date, message, postId }) {
 export function GuestbookEmbed({ onClose, variant = "default" }) {
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(true);
+
+  useEffect(() => {
+    pauseStage3BackgroundAmbientForOverlay();
+    const audio = new window.Audio("/static/sounds/guestbook/guestbook.mp3");
+    audio.loop = true;
+    audio.play().catch(() => {});
+    return () => {
+      audio.pause();
+      audio.src = "";
+      resumeStage3BackgroundAmbientFromOverlay();
+    };
+  }, []);
 
   useEffect(() => {
     const base = getGumServerBaseUrl();
