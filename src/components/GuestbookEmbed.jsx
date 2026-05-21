@@ -152,6 +152,12 @@ function sortPostsNewestFirst(posts) {
   );
 }
 
+/** 프로필 카드 TOTAL — Figma 스타일 (221,020) */
+function formatPostCount(count, loading) {
+  if (loading) return "...";
+  return count.toLocaleString("en-US");
+}
+
 // DOS Gothic (피그마 DOSGothic) + DungGeunMo(♡, 로컬 woff2) + Galmuri 폴백 — CDN 외 폰트는 public
 const DOS_GOTHIC_WOFF2 =
   "https://cdn.jsdelivr.net/gh/fonts-archive/DOSGothic@master/DOSGothic.woff2";
@@ -394,7 +400,12 @@ function ProfileCardHeader() {
   );
 }
 
-function ProfileCard() {
+/**
+ * @param {Object} props
+ * @param {number} props.totalCount
+ * @param {boolean} props.countLoading
+ */
+function ProfileCard({ totalCount, countLoading }) {
   return (
     <div
       style={{
@@ -452,7 +463,7 @@ function ProfileCard() {
         }}
       >
         <span>TODAY 202</span>
-        <span>TOTAL 221,020</span>
+        <span>TOTAL {formatPostCount(totalCount, countLoading)}</span>
       </div>
     </div>
   );
@@ -608,12 +619,22 @@ function GuestbookRibbonIcon() {
   );
 }
 
-function GuestbookHeader() {
+/**
+ * @param {Object} props
+ * @param {number} props.totalCount
+ * @param {boolean} props.countLoading
+ */
+function GuestbookHeader({ totalCount, countLoading }) {
+  const countLabel = countLoading
+    ? "..."
+    : `총 ${totalCount.toLocaleString("ko-KR")}개`;
+
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
         gap: 8,
         padding: "6px 10px",
         border: `2px solid ${PROFILE_BORDER}`,
@@ -622,18 +643,34 @@ function GuestbookHeader() {
         marginBottom: 12,
       }}
     >
-      <GuestbookRibbonIcon />
       <div
+        style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+      >
+        <GuestbookRibbonIcon />
+        <div
+          style={{
+            fontFamily: FONT,
+            fontWeight: 700,
+            fontSize: "1.25rem",
+            color: PROFILE_ACCENT,
+            lineHeight: 1.2,
+          }}
+        >
+          방명록
+        </div>
+      </div>
+      <span
         style={{
           fontFamily: FONT,
+          fontSize: "0.875rem",
           fontWeight: 700,
-          fontSize: "1.25rem",
-          color: PROFILE_ACCENT,
-          lineHeight: 1.2,
+          color: PROFILE_STATUS_FG,
+          whiteSpace: "nowrap",
+          flexShrink: 0,
         }}
       >
-        방명록
-      </div>
+        {countLabel}
+      </span>
     </div>
   );
 }
@@ -1062,7 +1099,10 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
               }}
             >
               <GuestbookTitle />
-              <ProfileCard />
+              <ProfileCard
+                totalCount={posts.length}
+                countLoading={postsLoading}
+              />
               <TodayCard />
             </div>
 
@@ -1087,7 +1127,10 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                     overflow: "hidden",
                   }}
                 >
-                  <GuestbookHeader />
+                  <GuestbookHeader
+                    totalCount={posts.length}
+                    countLoading={postsLoading}
+                  />
                   <GuestbookForm onSuccess={handlePostAdded} />
 
                   <div
