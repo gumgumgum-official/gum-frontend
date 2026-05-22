@@ -35,3 +35,15 @@
 전체 `localStorage` / `sessionStorage` / 쿠키 / Cache Storage / GLTF 메모리 캐시는 비우지 않는다 — 다음 이용자에게 미니게임 기록·에셋 웜업 상태는 유지하고, “이미 투표했음” UI만 초기화하기 위함이다.
 
 또한 일반 `/start` 진입(새로고침 포함)에서도 같은 투표 키를 초기화하지만, `complete=1` 경로에서는 중복 호출을 피하기 위해 일반 진입 초기화는 건너뛴다.
+
+## 전시 키오스크 에셋 로딩 (반복 루프)
+
+루트: `/start` → `/kiosk` → `/airport` → `/start?complete=1` (SPA, **F5 없이** 반복).
+
+| 운영 | 권장 |
+|------|------|
+| 이용자 전환 | `complete=1` 복귀만 사용. 전체 새로고침(F5)은 GLB 메모리 캐시가 초기화되어 첫 체험과 비슷한 지연이 생길 수 있음. |
+| 클라이언트 | `warmKioskExhibitionAssets()` — `/start` idle에 Stage3·텐트 GLB·타로/포스터 PNG 선로드. GLTF 메모리 캐시는 유지. |
+| `/start` 대기 | 키오스크 캔버스는 hidden이며, GPU 워밍업(`notifyStage3GpuReady`) 이후 Three.js 렌더를 일시 정지해 GPU 낭비를 줄임. |
+| 배포 | 정적 서버에서 `/models/**`, `/assets/**` 등에 `Cache-Control: public, max-age=31536000` (에셋 교체 시 파일명/URL 변경). |
+| 이상·멈춤 복구 | F5 대신 **소프트 리셋**: `/start` 우하단 「다시 시작」 또는 **`F8`** (`F9`도 동일) — 브라우저 창이 포커스된 상태에서만 동작. |
