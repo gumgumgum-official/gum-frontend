@@ -35,6 +35,8 @@ export function createStage3MonitorController({
   let monitorPollInFlight = false;
   /** @type {number | null} */
   let monitorFallbackTimeoutId = null;
+  /** 배경 ready당 1회만 fallback·편지 로드 (island ready + kiosk begin 이중 호출 방지) */
+  let backgroundReadyHandled = false;
 
   function applyMonitorIdleState() {
     if (monitorRestAssignmentReceived || assignedWorryId || assignedSvgUrl) {
@@ -149,6 +151,9 @@ export function createStage3MonitorController({
    * 배경 로드 완료 시: REST 할당이 있으면 즉시 낙하, 없으면 fallback 타이머
    */
   function onBackgroundReady() {
+    if (backgroundReadyHandled) return;
+    backgroundReadyHandled = true;
+
     if (assignedSvgUrl) {
       onLoadFromSvgUrl(assignedSvgUrl, assignedWorryId ?? "", {
         holdFallUntilIntroTopView: true,
@@ -168,6 +173,7 @@ export function createStage3MonitorController({
     assignedWorryId = null;
     assignedSvgUrl = null;
     monitorRestAssignmentReceived = false;
+    backgroundReadyHandled = false;
     clearFallbackTimeout();
     stopMonitorPolling();
   }

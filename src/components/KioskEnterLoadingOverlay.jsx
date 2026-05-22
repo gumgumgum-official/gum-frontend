@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import styles from "../pages/Page.module.css";
+import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 
 const LOADING_VIDEO_SRC = "/assets/loading_animation.mp4";
+const LOADING_SOUND_SRC = resolvePublicAssetUrl(
+  "/static/sounds/loading/airport_loading_sound.m4a",
+);
 
 /**
  * /start → /kiosk 진입 전 로딩 영상 (검정 배경, 중앙 재생)
@@ -16,6 +20,8 @@ const LOADING_VIDEO_SRC = "/assets/loading_animation.mp4";
  */
 export function KioskEnterLoadingOverlay({ active, onEnded }) {
   const videoRef = useRef(null);
+  /** @type {React.MutableRefObject<HTMLAudioElement | null>} */
+  const audioRef = useRef(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
 
@@ -49,9 +55,26 @@ export function KioskEnterLoadingOverlay({ active, onEnded }) {
       notifyEnd();
     };
 
+    const stopLoadingSound = () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.pause();
+      audio.currentTime = 0;
+    };
+
     const startPlayback = () => {
       if (cancelled) return;
       video.currentTime = 0;
+      if (!audioRef.current) {
+        const audio = new window.Audio(LOADING_SOUND_SRC);
+        audio.preload = "auto";
+        audioRef.current = audio;
+      }
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = 0;
+        void audio.play().catch(() => {});
+      }
       const playPromise = video.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(() => {
@@ -75,6 +98,7 @@ export function KioskEnterLoadingOverlay({ active, onEnded }) {
       video.removeEventListener("ended", handleEnded);
       video.removeEventListener("error", handleError);
       video.pause();
+      stopLoadingSound();
     };
   }, [active, fireEnded]);
 

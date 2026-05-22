@@ -272,7 +272,7 @@
 .introActionSlot {
   position: absolute;
   left: 50%;
-  bottom: 30px;
+  bottom: 52px;
   transform: translateX(-50%);
   min-height: 22px;
   width: min(92vw, 640px);

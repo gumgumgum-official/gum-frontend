@@ -10,7 +10,9 @@ import {
   getMonitorDeviceId,
   postMonitorComplete,
 } from "../lib/monitorCurrentApi.js";
+import { dispatchKioskNewVisitorUiReset } from "../events/kioskEvents.js";
 import { resetClientForNextKioskVisitor } from "../utils/common/resetClientForNextKioskVisitor.js";
+import { resetStage3KioskVisitorSession } from "../utils/stages/stage3/stage3KioskSession.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import {
   warmKioskExhibitionAssets,
@@ -633,6 +635,8 @@ export function StartPage() {
         void (async () => {
           try {
             await resetClientForNextKioskVisitor();
+            resetStage3KioskVisitorSession();
+            dispatchKioskNewVisitorUiReset();
             getGLBLoader().preloadDecoders();
             await waitForKioskExhibitionCriticalGlb();
             await waitForStage3GpuReady();

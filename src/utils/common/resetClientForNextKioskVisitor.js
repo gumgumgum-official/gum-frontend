@@ -1,13 +1,12 @@
 /**
- * 체험 완료 후 시작 화면으로 복귀할 때: 다음 이용자용으로 **게시판 투표(localStorage만)** 제거.
+ * 체험 완료 후 다음 이용자용 **게시판 투표(localStorage만)** 제거.
+ * Stage3 세션·React 오버레이 리셋은 호출부에서 별도 처리
+ * (`dispatchKioskSoftRestartUiCleanup`, StartPage `?complete=1` 등).
  * GLB 캐시·전체 localStorage 삭제는 하지 않아 재로딩 버벅임을 줄임.
- * (서버 상태는 `postMonitorComplete`로 이미 idle 처리)
  */
 
-import { dispatchKioskNewVisitorUiReset } from "../../events/kioskEvents.js";
 import { invalidateVoteBundleCache } from "../../lib/voteBundleCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../../lib/voteApi.js";
-import { resetStage3KioskVisitorSession } from "../stages/stage3/stage3KioskSession.js";
 
 /**
  * NOTE:
@@ -24,6 +23,4 @@ export async function resetClientForNextKioskVisitor() {
   } catch (err) {
     console.warn("[resetClientForNextKioskVisitor] ggumddi vote keys:", err);
   }
-  resetStage3KioskVisitorSession();
-  dispatchKioskNewVisitorUiReset();
 }

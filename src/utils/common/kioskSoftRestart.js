@@ -59,8 +59,6 @@ export function dispatchKioskSoftRestartUiCleanup() {
   window.dispatchEvent(new CustomEvent(STAGE6_PHONE_INDICATOR_HIDE_EVENT));
   dispatchMinigameClose();
   dispatchGumCardsModalClose();
-  // 모달 close 핸들러가 배경음을 resume 할 수 있어 마이크로태스크 한 번 더 정지
-  setTimeout(stopKioskExhibitionAudio, 0);
 }
 
 /**

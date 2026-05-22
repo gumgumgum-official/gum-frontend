@@ -89,6 +89,8 @@ export function Stage3(options = {}) {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** `/kiosk` begin이 island GLB 로드보다 먼저 온 경우( GPU 타임아웃 등) 재시도 */
+  let kioskSessionBeginPending = false;
   /** @type {import("three").CanvasTexture | null} */
   let skyBackgroundTexture = null;
   /** `Portal_Vortex` ShaderMaterial — cleanup 시 null */
@@ -155,6 +157,7 @@ export function Stage3(options = {}) {
 
   function resetKioskVisitorSession() {
     if (!isStage3Active) return;
+    kioskSessionBeginPending = false;
     clearStage3EntrySubtitleTimer();
     stopStage3IntroAudio();
     resetStage3IntroPlayState();
@@ -194,7 +197,28 @@ export function Stage3(options = {}) {
   }
 
   function beginKioskVisitorSession() {
-    if (!isStage3Active || !backgroundModel || !sceneRef) return;
+    if (!isStage3Active) {
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] beginKioskVisitorSession: stage inactive");
+      }
+      return;
+    }
+    if (!sceneRef) {
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] beginKioskVisitorSession: scene not ready");
+      }
+      return;
+    }
+    if (!backgroundModel) {
+      kioskSessionBeginPending = true;
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] beginKioskVisitorSession: background not ready — will retry after island GLB loads",
+        );
+      }
+      return;
+    }
+    kioskSessionBeginPending = false;
     monitorController.startSession();
     monitorController.onBackgroundReady();
     startStage3KioskCameraIntro();
@@ -444,6 +468,9 @@ export function Stage3(options = {}) {
     },
     setBackgroundModel: (model) => {
       backgroundModel = model;
+      if (kioskSessionBeginPending) {
+        beginKioskVisitorSession();
+      }
     },
     setFountainState: (state) => {
       fountainState = state;
