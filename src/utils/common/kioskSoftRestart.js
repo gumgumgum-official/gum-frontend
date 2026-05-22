@@ -3,7 +3,10 @@
  * GLB 메모리 캐시는 유지한다.
  */
 
-import { KIOSK_SOFT_RESTART_EVENT } from "../../events/kioskEvents.js";
+import {
+  dispatchKioskNewVisitorUiReset,
+  KIOSK_SOFT_RESTART_EVENT,
+} from "../../events/kioskEvents.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_HIDE_EVENT,
@@ -41,6 +44,7 @@ export function dispatchKioskSoftRestartUiCleanup() {
   // 모달 close 이벤트가 Stage3 배경음을 resume 하기 전에 먼저 정지
   stopKioskExhibitionAudio();
   resetStage3KioskVisitorSession();
+  dispatchKioskNewVisitorUiReset();
   window.dispatchEvent(new CustomEvent(KIOSK_SOFT_RESTART_EVENT));
   window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
   window.dispatchEvent(new CustomEvent("gum:closeGameMachineModal"));

@@ -154,6 +154,7 @@ export function Stage3(options = {}) {
     stampController.resetForSetup();
     overlayController.resetForCleanup();
     pendingGumStickCardNums.length = 0;
+    gumFollowers?.clearStickFollowers?.();
     resetStage3RevealForNextKioskEntry();
   }
 

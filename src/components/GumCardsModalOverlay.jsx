@@ -15,7 +15,10 @@ import {
 import { dispatchGumCardsStick } from "../events/gumCardsEvents.js";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import { preloadTentSceneSubtitleFonts } from "../utils/common/preloadGangwonEduFont.js";
-import { KIOSK_SOFT_RESTART_EVENT } from "../events/kioskEvents.js";
+import {
+  KIOSK_NEW_VISITOR_EVENT,
+  KIOSK_SOFT_RESTART_EVENT,
+} from "../events/kioskEvents.js";
 
 export function GumCardsModalOverlay() {
   // "closed" | "tent" | "cards"
@@ -60,14 +63,17 @@ export function GumCardsModalOverlay() {
   }, []);
 
   useEffect(() => {
-    const onSoftRestart = () => {
+    const onVisitorReset = () => {
       hasSeenTentIntroRef.current = false;
       setSkipTentBubbleSequence(false);
       setPhase("closed");
     };
-    window.addEventListener(KIOSK_SOFT_RESTART_EVENT, onSoftRestart);
-    return () =>
-      window.removeEventListener(KIOSK_SOFT_RESTART_EVENT, onSoftRestart);
+    window.addEventListener(KIOSK_SOFT_RESTART_EVENT, onVisitorReset);
+    window.addEventListener(KIOSK_NEW_VISITOR_EVENT, onVisitorReset);
+    return () => {
+      window.removeEventListener(KIOSK_SOFT_RESTART_EVENT, onVisitorReset);
+      window.removeEventListener(KIOSK_NEW_VISITOR_EVENT, onVisitorReset);
+    };
   }, []);
 
   const handleGumCardStick = useCallback(

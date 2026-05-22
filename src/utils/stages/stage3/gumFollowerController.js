@@ -823,6 +823,7 @@ export function createGumFollowersController({
   return {
     init,
     addStickFollower,
+    clearStickFollowers: removeAllStickCardFollowers,
     update(delta) {
       if (!isReady) return;
 

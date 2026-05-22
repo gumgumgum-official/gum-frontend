@@ -4,8 +4,10 @@
  * (서버 상태는 `postMonitorComplete`로 이미 idle 처리)
  */
 
+import { dispatchKioskNewVisitorUiReset } from "../../events/kioskEvents.js";
 import { invalidateVoteBundleCache } from "../../lib/voteBundleCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../../lib/voteApi.js";
+import { resetStage3KioskVisitorSession } from "../stages/stage3/stage3KioskSession.js";
 
 /**
  * NOTE:
@@ -22,4 +24,6 @@ export async function resetClientForNextKioskVisitor() {
   } catch (err) {
     console.warn("[resetClientForNextKioskVisitor] ggumddi vote keys:", err);
   }
+  resetStage3KioskVisitorSession();
+  dispatchKioskNewVisitorUiReset();
 }
