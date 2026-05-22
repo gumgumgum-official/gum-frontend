@@ -416,7 +416,7 @@ export function createStage3StampController({
     dispatchSubtitleSequence([
       { text: "껌딱지 월드에 오신 것을 환영합니다!", holdMs: 1500 },
       { text: "섬 위에 걱정들이 쏟아지고 있어요!", holdMs: 1500 },
-      { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2000 },
+      { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2500 },
     ]);
 
     stage3EntryStampRevealTimerId = window.setTimeout(() => {

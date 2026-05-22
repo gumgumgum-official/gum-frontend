@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
@@ -43,11 +43,7 @@ function dispatchTentSubtitleHide() {
   window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
 }
 
-export function TentSceneViewer({
-  onClose,
-  onCardOpen,
-  skipBubbleSequence = false,
-}) {
+export function TentSceneViewer({ onCardOpen, skipBubbleSequence = false }) {
   const FADE_IN_MS = 2000;
   const canvasRef = useRef(null);
   const rootRef = useRef(null);
@@ -58,11 +54,6 @@ export function TentSceneViewer({
 
   const [isVisible, setIsVisible] = useState(false);
   const isVisibleRef = useRef(false);
-
-  const handleClose = useCallback(() => {
-    dispatchTentSubtitleHide();
-    onClose?.();
-  }, [onClose]);
 
   useEffect(() => {
     let raf2 = 0;
@@ -285,9 +276,6 @@ export function TentSceneViewer({
         className={`tent-scene-viewer__content${isVisible ? " is-visible" : ""}`}
       >
         <canvas ref={canvasRef} className="tent-scene-canvas" />
-        <button className="tent-btn tent-btn--close" onClick={handleClose}>
-          ✕
-        </button>
       </div>
     </div>
   );
