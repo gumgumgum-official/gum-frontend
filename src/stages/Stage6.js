@@ -27,11 +27,13 @@ import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
   STAGE6_INTRO_CLICK_HINT_EVENT,
+  STAGE6_INTRO_FINISHED_EVENT,
   AIRPORT_SUBTITLE_HIDE_EVENT,
   AIRPORT_SUBTITLE_SHOW_EVENT,
   AIRPORT_SUBTITLE_UPDATE_EVENT,
   STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_WALK_TO_ESCALATOR_EVENT,
   STAGE6_FINISH_EVENT,
   STAGE6_SCREEN_FADE_EVENT,
   STAGE6_INT_CLICK_EVENT,
@@ -266,6 +268,8 @@ export function Stage6() {
   let onPointerMove = null;
   let onInteractionLock = null;
   let onInteractionUnlock = null;
+  /** @type {(() => void) | null} */
+  let onBoardingPassIssuedHandler = null;
   const interactedTargets = new Set();
   /** @type {string | null} */
   let hoveredCharacterName = null;
@@ -305,6 +309,11 @@ export function Stage6() {
   let onIntroAudioGestureListener = null;
   let isFinishFired = false;
   let isBoardingPassIssued = false;
+  /** 탑승권 발급 후 에스컬레이터 진입 존까지 자동 이동 */
+  let isWalkingToEscalator = false;
+  let escApproachTargetX = 0;
+  let escApproachTargetZ = 0;
+  let escWalkAfterBoardingTimeoutId = 0;
   let isEscalatorRiding = false;
   let isEscalatorFading = false;
   let escFadeProgress = 0;
@@ -317,6 +326,12 @@ export function Stage6() {
   let escNoBoardingCooldown = 0;
   /** 에스컬레이터 진입 존 감지 반경 (m) */
   const ESC_DETECT_RADIUS = 1.2;
+  /** 자동 이동 목표 — front step에서 캐릭터 방향으로 이 거리만큼 떨어진 지점 (m) */
+  const ESC_APPROACH_FROM_STEP_DIST = 0.22;
+  /** front step까지 이 거리 이내면 자동 이동 종료 → 진입 스냅 대기 */
+  const ESC_AUTO_WALK_ARRIVE_RADIUS = 0.5;
+  const ESC_AUTO_WALK_ARRIVE_RADIUS_SQ =
+    ESC_AUTO_WALK_ARRIVE_RADIUS * ESC_AUTO_WALK_ARRIVE_RADIUS;
   /** step 위 캐릭터 Y 오프셋 */
   const ESC_CHAR_Y_OFFSET = 0.05;
   /** 탑승 직전 step으로 스냅하는 보간 속도 */
@@ -529,6 +544,8 @@ export function Stage6() {
     activeSubtitleCueIndex = -1;
     isAirportSubtitleVisible = false;
     isAnnouncementActive = false;
+    introInputBlockedToastCooldown = 0;
+    window.dispatchEvent(new CustomEvent(STAGE6_INTRO_FINISHED_EVENT));
     dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
     dispatchGatedStage6WindowEvent(STAGE6_INTRO_CLICK_HINT_EVENT);
     telActivateTimeoutId = window.setTimeout(() => {
@@ -1482,6 +1499,121 @@ export function Stage6() {
     applyTelEmissive(telEmissiveProgress);
   }
 
+  /** @returns {{ frontStep: THREE.Object3D, topStep: THREE.Object3D | null } | null} */
+  function getEscStepAnchors() {
+    if (escSteps.length === 0) return null;
+    let frontStep = null;
+    let topStep = null;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const step of escSteps) {
+      step.updateMatrixWorld(true);
+      step.getWorldPosition(_escStepWorldPos);
+      if (_escStepWorldPos.y < minY) {
+        minY = _escStepWorldPos.y;
+        frontStep = step;
+        _escFrontStepPos.copy(_escStepWorldPos);
+      }
+      if (_escStepWorldPos.y > maxY) {
+        maxY = _escStepWorldPos.y;
+        topStep = step;
+        _escTopStepPos.copy(_escStepWorldPos);
+      }
+    }
+    if (!frontStep) return null;
+    return { frontStep, topStep };
+  }
+
+  function tryBeginWalkToEscalator() {
+    if (
+      !isStage6Active ||
+      !character ||
+      !isBoardingPassIssued ||
+      isFinishFired ||
+      isEscalatorSnapping ||
+      isEscalatorRiding
+    ) {
+      return;
+    }
+    const anchors = getEscStepAnchors();
+    if (!anchors) return;
+    const charPos = character.getPosition();
+    if (!charPos) return;
+    const dx = charPos.x - _escFrontStepPos.x;
+    const dz = charPos.z - _escFrontStepPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist <= ESC_DETECT_RADIUS) {
+      isWalkingToEscalator = false;
+      return;
+    }
+    if (dist > ESC_APPROACH_FROM_STEP_DIST) {
+      escApproachTargetX =
+        _escFrontStepPos.x + (dx / dist) * ESC_APPROACH_FROM_STEP_DIST;
+      escApproachTargetZ =
+        _escFrontStepPos.z + (dz / dist) * ESC_APPROACH_FROM_STEP_DIST;
+    } else {
+      escApproachTargetX = _escFrontStepPos.x;
+      escApproachTargetZ = _escFrontStepPos.z;
+    }
+    isWalkingToEscalator = true;
+  }
+
+  function getEscAutoWalkKeys() {
+    const pos = character?.getPosition();
+    if (!pos) {
+      isWalkingToEscalator = false;
+      return {};
+    }
+    if (getEscStepAnchors()) {
+      const toStepX = _escFrontStepPos.x - pos.x;
+      const toStepZ = _escFrontStepPos.z - pos.z;
+      if (
+        toStepX * toStepX + toStepZ * toStepZ <=
+        ESC_AUTO_WALK_ARRIVE_RADIUS_SQ
+      ) {
+        isWalkingToEscalator = false;
+        return {};
+      }
+    }
+    const dx = escApproachTargetX - pos.x;
+    const dz = escApproachTargetZ - pos.z;
+    const keys = {};
+    const axisThreshold = 0.12;
+    if (dz < -axisThreshold) {
+      keys.ArrowUp = true;
+      keys.w = true;
+      keys.W = true;
+      keys.KeyW = true;
+    }
+    if (dz > axisThreshold) {
+      keys.ArrowDown = true;
+      keys.s = true;
+      keys.S = true;
+      keys.KeyS = true;
+    }
+    if (dx < -axisThreshold) {
+      keys.ArrowLeft = true;
+      keys.a = true;
+      keys.A = true;
+      keys.KeyA = true;
+    }
+    if (dx > axisThreshold) {
+      keys.ArrowRight = true;
+      keys.d = true;
+      keys.D = true;
+      keys.KeyD = true;
+    }
+    return keys;
+  }
+
+  function getStage6MovementKeys() {
+    if (isWalkingToEscalator) return getEscAutoWalkKeys();
+    if (isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall) {
+      return {};
+    }
+    return keyboard.keys;
+  }
+
   function getPointerHitTarget(event) {
     if (!canvasRef || !cameraRef || intRaycastMeshes.length === 0) return null;
     const rect = canvasRef.getBoundingClientRect();
@@ -1556,10 +1688,7 @@ export function Stage6() {
         scene,
         glbLoader,
         config,
-        getKeys: () =>
-          isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall
-            ? {}
-            : keyboard.keys,
+        getKeys: getStage6MovementKeys,
       });
       keyboard.mount();
 
@@ -1601,6 +1730,11 @@ export function Stage6() {
       clearIntroAudioUnlockListeners();
       isFinishFired = false;
       isBoardingPassIssued = false;
+      isWalkingToEscalator = false;
+      if (escWalkAfterBoardingTimeoutId) {
+        window.clearTimeout(escWalkAfterBoardingTimeoutId);
+        escWalkAfterBoardingTimeoutId = 0;
+      }
       isEscalatorRiding = false;
       isEscalatorSnapping = false;
       isEscalatorFading = false;
@@ -1611,13 +1745,24 @@ export function Stage6() {
       escSteps.length = 0;
       escNoBoardingCooldown = 0;
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
+      onBoardingPassIssuedHandler = () => {
+        isBoardingPassIssued = true;
+        atmEmissiveTarget = 0;
+        if (escWalkAfterBoardingTimeoutId) {
+          window.clearTimeout(escWalkAfterBoardingTimeoutId);
+        }
+        escWalkAfterBoardingTimeoutId = window.setTimeout(() => {
+          escWalkAfterBoardingTimeoutId = 0;
+          tryBeginWalkToEscalator();
+        }, 400);
+      };
       window.addEventListener(
         STAGE6_BOARDING_PASS_ISSUED_EVENT,
-        () => {
-          isBoardingPassIssued = true;
-          atmEmissiveTarget = 0;
-        },
-        { once: true },
+        onBoardingPassIssuedHandler,
+      );
+      window.addEventListener(
+        STAGE6_WALK_TO_ESCALATOR_EVENT,
+        tryBeginWalkToEscalator,
       );
       onInteractionLock = () => {
         isSceneInteractionLocked = true;
@@ -1904,6 +2049,9 @@ export function Stage6() {
               escSteps.push(obj);
             }
           });
+          if (isBoardingPassIssued) {
+            tryBeginWalkToEscalator();
+          }
 
           const allStaticColliders = collectStage6StaticColliderBoxes(model);
           const staticColliderBoxes = bagPhysics.setup(
@@ -2077,7 +2225,13 @@ export function Stage6() {
         });
 
         // frustum 클램프 — 에스컬레이터 탑승 중엔 적용 안 함
-        if (posRef && wasInView && !isEscalatorSnapping && !isEscalatorRiding) {
+        if (
+          posRef &&
+          wasInView &&
+          !isEscalatorSnapping &&
+          !isEscalatorRiding &&
+          !isWalkingToEscalator
+        ) {
           const y = posRef.y;
           const cam = this.camera;
           if (!isInCameraView(posRef.x, y, posRef.z, cam)) {
@@ -2112,53 +2266,36 @@ export function Stage6() {
       ) {
         escNoBoardingCooldown = Math.max(0, escNoBoardingCooldown - delta);
         const charPos = character.getPosition();
-        if (charPos) {
-          let frontStep = null;
-          let topStep = null;
-          let minY = Infinity;
-          let maxY = -Infinity;
-          for (const step of escSteps) {
-            step.updateMatrixWorld(true);
-            step.getWorldPosition(_escStepWorldPos);
-            if (_escStepWorldPos.y < minY) {
-              minY = _escStepWorldPos.y;
-              frontStep = step;
-              _escFrontStepPos.copy(_escStepWorldPos);
-            }
-            if (_escStepWorldPos.y > maxY) {
-              maxY = _escStepWorldPos.y;
-              topStep = step;
-              _escTopStepPos.copy(_escStepWorldPos);
-            }
-          }
-          if (frontStep) {
-            const dx = charPos.x - _escFrontStepPos.x;
-            const dz = charPos.z - _escFrontStepPos.z;
-            if (dx * dx + dz * dz < ESC_DETECT_RADIUS * ESC_DETECT_RADIUS) {
-              if (!isBoardingPassIssued) {
-                if (escNoBoardingCooldown <= 0) {
-                  escNoBoardingCooldown = 4;
-                  dispatchStage6SubtitleSequence([
-                    {
-                      text: "탑승 수속을 먼저 완료해 주세요! 🎫",
-                      holdMs: 2500,
-                    },
-                  ]);
-                }
-              } else {
-                isEscalatorSnapping = true;
-                isSceneInteractionLocked = true;
-                escRidingStep = frontStep;
-                escFadeProgress = 0;
-                escRidingTime = 0;
-                isEscalatorFading = false;
-                // 에스컬레이터 이동 방향: 최하단 step → 최상단 step XZ 방향
-                if (topStep) {
-                  const ddx = _escTopStepPos.x - _escFrontStepPos.x;
-                  const ddz = _escTopStepPos.z - _escFrontStepPos.z;
-                  if (Math.abs(ddx) > 0.01 || Math.abs(ddz) > 0.01) {
-                    escFacingYaw = Math.atan2(ddx, ddz);
-                  }
+        const anchors = charPos ? getEscStepAnchors() : null;
+        if (charPos && anchors) {
+          const { frontStep, topStep } = anchors;
+          const dx = charPos.x - _escFrontStepPos.x;
+          const dz = charPos.z - _escFrontStepPos.z;
+          if (dx * dx + dz * dz < ESC_DETECT_RADIUS * ESC_DETECT_RADIUS) {
+            if (!isBoardingPassIssued) {
+              if (escNoBoardingCooldown <= 0) {
+                escNoBoardingCooldown = 4;
+                dispatchStage6SubtitleSequence([
+                  {
+                    text: "탑승 수속을 먼저 완료해 주세요! 🎫",
+                    holdMs: 2500,
+                  },
+                ]);
+              }
+            } else {
+              isWalkingToEscalator = false;
+              isEscalatorSnapping = true;
+              isSceneInteractionLocked = true;
+              escRidingStep = frontStep;
+              escFadeProgress = 0;
+              escRidingTime = 0;
+              isEscalatorFading = false;
+              // 에스컬레이터 이동 방향: 최하단 step → 최상단 step XZ 방향
+              if (topStep) {
+                const ddx = _escTopStepPos.x - _escFrontStepPos.x;
+                const ddz = _escTopStepPos.z - _escFrontStepPos.z;
+                if (Math.abs(ddx) > 0.01 || Math.abs(ddz) > 0.01) {
+                  escFacingYaw = Math.atan2(ddx, ddz);
                 }
               }
             }
@@ -2284,6 +2421,22 @@ export function Stage6() {
           onInteractionUnlock,
         );
       }
+      if (onBoardingPassIssuedHandler) {
+        window.removeEventListener(
+          STAGE6_BOARDING_PASS_ISSUED_EVENT,
+          onBoardingPassIssuedHandler,
+        );
+        onBoardingPassIssuedHandler = null;
+      }
+      window.removeEventListener(
+        STAGE6_WALK_TO_ESCALATOR_EVENT,
+        tryBeginWalkToEscalator,
+      );
+      if (escWalkAfterBoardingTimeoutId) {
+        window.clearTimeout(escWalkAfterBoardingTimeoutId);
+        escWalkAfterBoardingTimeoutId = 0;
+      }
+      isWalkingToEscalator = false;
       canvasRef = null;
       cameraRef = null;
       onPointerDown = null;

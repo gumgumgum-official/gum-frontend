@@ -6,6 +6,7 @@ import {
   AIRPORT_SUBTITLE_UPDATE_EVENT,
   STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_WALK_TO_ESCALATOR_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
   STAGE6_INTERACTION_UNLOCK_EVENT,
   STAGE6_NAME_MODAL_HIDE_EVENT,
@@ -399,6 +400,7 @@ export function Stage6BoardingOverlay() {
   const boardFlight = () => {
     setIsOverlayOpen(false);
     window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_WALK_TO_ESCALATOR_EVENT));
     window.dispatchEvent(
       new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
         detail: {

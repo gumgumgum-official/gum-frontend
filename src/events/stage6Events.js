@@ -24,6 +24,7 @@ export const STAGE6_NAME_MODAL_HIDE_EVENT = "gum:stage6-name-modal:hide";
 export const STAGE6_BOARDING_RESET_EVENT = "gum:stage6-boarding:reset";
 export const STAGE6_BOARDING_PASS_ISSUED_EVENT =
   "gum:stage6-boarding:pass-issued";
+export const STAGE6_WALK_TO_ESCALATOR_EVENT = "gum:stage6-walk-to-escalator";
 export const STAGE6_SCREEN_FADE_EVENT = "gum:stage6-screen-fade";
 
 export const STAGE6_INTERACTION_LOCK_EVENT = "gum:stage6-interaction-lock";
@@ -43,6 +44,9 @@ export const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";
 export const STAGE6_INTRO_CLICK_HINT_EVENT = "gum:stage6IntroClickHint";
 
 export const STAGE6_INTRO_CLICK_HINT_MESSAGE = "클릭해 보세요!";
+
+/** 공항 안내 자막·방송 인트로 종료 — 입력 제한 토스트 정리용 */
+export const STAGE6_INTRO_FINISHED_EVENT = "gum:stage6IntroFinished";
 
 export function dispatchStage6IntroClickHint() {
   window.dispatchEvent(
