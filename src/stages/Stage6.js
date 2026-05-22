@@ -49,7 +49,12 @@ import {
   STAGE6_POSTER_MODAL_SHOW_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
   dispatchStage6InputBlocked,
+  STAGE6_AUDIO_UNLOCKED_EVENT,
 } from "../events/stage6Events.js";
+import {
+  isStage6AudioUnlocked,
+  unlockStage6AudioFromUserGesture,
+} from "../utils/stages/stage6/stage6AudioUnlock.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import {
   createBagPhysics,
@@ -285,6 +290,11 @@ export function Stage6() {
   /** 인트로 중 입력 토스트 재표시 간격(초) — App 표시 시간과 동일 */
   const INTRO_INPUT_TOAST_COOLDOWN_SEC = 2;
   let introInputBlockedToastCooldown = 0;
+  let introSequenceStarted = false;
+  /** @type {(() => void) | null} */
+  let onIntroAudioUnlockListener = null;
+  /** @type {(() => void) | null} */
+  let onIntroAudioGestureListener = null;
   let isFinishFired = false;
   let isBoardingPassIssued = false;
   let isEscalatorRiding = false;
@@ -627,6 +637,64 @@ export function Stage6() {
         isAirportChimeVisible = false;
       }
       onStarted?.();
+    });
+  }
+
+  function tryStartAirportIntroSequence() {
+    if (!isStage6Active || introSequenceStarted) return;
+    introSequenceStarted = true;
+    scheduleAirplaneCallSign();
+  }
+
+  function clearIntroAudioUnlockListeners() {
+    if (onIntroAudioUnlockListener) {
+      window.removeEventListener(
+        STAGE6_AUDIO_UNLOCKED_EVENT,
+        onIntroAudioUnlockListener,
+      );
+      onIntroAudioUnlockListener = null;
+    }
+    if (onIntroAudioGestureListener) {
+      window.removeEventListener(
+        "pointerdown",
+        onIntroAudioGestureListener,
+        true,
+      );
+      window.removeEventListener("keydown", onIntroAudioGestureListener, true);
+      onIntroAudioGestureListener = null;
+    }
+  }
+
+  function ensureStage6AudioUnlockedThenStartIntro() {
+    if (isStage6AudioUnlocked()) {
+      tryStartAirportIntroSequence();
+      return;
+    }
+    clearIntroAudioUnlockListeners();
+    onIntroAudioUnlockListener = () => {
+      onIntroAudioUnlockListener = null;
+      tryStartAirportIntroSequence();
+    };
+    window.addEventListener(
+      STAGE6_AUDIO_UNLOCKED_EVENT,
+      onIntroAudioUnlockListener,
+      { once: true },
+    );
+
+    onIntroAudioGestureListener = () => {
+      if (isStage6AudioUnlocked()) return;
+      void unlockStage6AudioFromUserGesture().then(() => {
+        window.dispatchEvent(new CustomEvent(STAGE6_AUDIO_UNLOCKED_EVENT));
+      });
+    };
+    window.addEventListener(
+      "pointerdown",
+      onIntroAudioGestureListener,
+      { once: true, capture: true },
+    );
+    window.addEventListener("keydown", onIntroAudioGestureListener, {
+      once: true,
+      capture: true,
     });
   }
 
@@ -1416,6 +1484,8 @@ export function Stage6() {
       isSceneInteractionLocked = false;
       isAnnouncementActive = false;
       introInputBlockedToastCooldown = 0;
+      introSequenceStarted = false;
+      clearIntroAudioUnlockListeners();
       isFinishFired = false;
       isBoardingPassIssued = false;
       isEscalatorRiding = false;
@@ -1736,7 +1806,7 @@ export function Stage6() {
           });
 
           // GLB 씬이 실제로 준비된 뒤에 공항 안내 오디오/자막 시퀀스를 시작
-          scheduleAirplaneCallSign();
+          ensureStage6AudioUnlockedThenStartIntro();
         })
         .catch((err) => {
           console.error(
@@ -1747,7 +1817,7 @@ export function Stage6() {
             revealStage6Scene(scene);
           }
           // 배경 로드 실패해도 안내 방송은 진행 (기존 동작 유지)
-          scheduleAirplaneCallSign();
+          ensureStage6AudioUnlockedThenStartIntro();
         });
 
       // 벤치 로드 (config.bench 있을 때)
@@ -2143,6 +2213,8 @@ export function Stage6() {
       isSceneInteractionLocked = false;
       isAnnouncementActive = false;
       introInputBlockedToastCooldown = 0;
+      introSequenceStarted = false;
+      clearIntroAudioUnlockListeners();
       intRaycastMeshes.length = 0;
 
       bagPhysics.cleanup();

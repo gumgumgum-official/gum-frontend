@@ -13,6 +13,9 @@ export const STAGE3_ENTRY_SUBTITLE_START_DELAY_MS = 1500;
 /** Stage6BoardingOverlay `runSubtitleSequence`와 동일: hold + fade(600) + gap(200) × 구간 */
 export const STAGE3_ENTRY_SUBTITLE_TOTAL_MS = 2500 + 600 + 200 + 2000 + 600;
 
+/** 스탬프 패널 코너 이동 시작 후 이동 안내 상단 토스트까지 대기(ms) */
+export const STAGE3_ENTRY_MOVEMENT_HINT_DELAY_MS = 0;
+
 export const REQUIRED_EGG_COUNT = 3;
 
 export const MAIN_EASTER_EGG_CANONICAL = [

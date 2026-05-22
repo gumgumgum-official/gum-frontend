@@ -5,9 +5,12 @@
 
 /**
  * @param {string[]} keyList - 추적할 키 이름 목록 (예: ["ArrowUp", "ArrowDown", ...])
+ * @param {{
+ *   guardKeyDown?: (event: KeyboardEvent, keyId: string) => boolean,
+ * }} [options] - guardKeyDown이 false를 반환하면 키 상태를 갱신하지 않음
  * @returns {{ keys: Record<string, boolean>, mount: () => void, unmount: () => void }}
  */
-export function createKeyboardInput(keyList) {
+export function createKeyboardInput(keyList, options = {}) {
   /** @type {Record<string, boolean>} */
   const keys = Object.fromEntries(keyList.map((k) => [k, false]));
   const resetKeys = () => {
@@ -28,15 +31,15 @@ export function createKeyboardInput(keyList) {
 
   const handleKeyDown = (event) => {
     if (isInputFocused()) return;
-    if (event.key in keys) {
-      keys[event.key] = true;
+    const keyId =
+      event.key in keys ? event.key : event.code in keys ? event.code : null;
+    if (!keyId) return;
+    if (options.guardKeyDown?.(event, keyId) === false) {
       event.preventDefault();
       return;
     }
-    if (event.code in keys) {
-      keys[event.code] = true;
-      event.preventDefault();
-    }
+    keys[keyId] = true;
+    event.preventDefault();
   };
 
   const handleKeyUp = (event) => {

@@ -47,6 +47,9 @@ export const STAGE6_PHONE_INDICATOR_HIDE_EVENT =
 export const STAGE6_PHONE_INDICATOR_MODE_RINGING = "ringing";
 export const STAGE6_PHONE_INDICATOR_MODE_IN_CALL = "in-call";
 
+/** Stage6 오디오 unlock 완료 (인트로·띵동 재생 허용) */
+export const STAGE6_AUDIO_UNLOCKED_EVENT = "gum:stage6AudioUnlocked";
+
 /** 인트로·전화 중 등 입력 제한 시 상단 토스트 */
 export const STAGE6_INPUT_BLOCKED_EVENT = "gum:stage6InputBlocked";
 
@@ -59,12 +62,12 @@ export const STAGE6_INTRO_INPUT_BLOCKED_EVENT = STAGE6_INPUT_BLOCKED_EVENT;
 /** @type {Record<Stage6InputBlockedReason, Record<Stage6InputBlockedKind, string>>} */
 const STAGE6_INPUT_BLOCKED_MESSAGES = {
   intro: {
-    move: "인트로가 다 끝나면 움직일 수 있어요!",
-    click: "인트로가 다 끝나면 클릭할 수 있어요",
+    move: "⚠️ 인트로가 다 끝나면 움직일 수 있어요!",
+    click: "⚠️ 인트로가 다 끝나면 클릭할 수 있어요",
   },
   "phone-in-call": {
-    move: "전화가 끝나면 움직일 수 있어요!",
-    click: "전화가 끝나면 클릭할 수 있어요",
+    move: "⚠️ 전화가 끝나면 움직일 수 있어요!",
+    click: "⚠️ 전화가 끝나면 클릭할 수 있어요",
   },
 };
 
