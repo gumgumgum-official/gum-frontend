@@ -17,10 +17,7 @@ import {
   waitForKioskExhibitionCriticalGlb,
 } from "../utils/common/kioskExhibitionWarmup.js";
 import { KIOSK_SOFT_RESTART_EVENT } from "../events/kioskEvents.js";
-import {
-  registerStartPageIntroBgmStop,
-  stopStartPageIntroBgm,
-} from "../utils/common/startPageIntroAudio.js";
+import { registerStartPageIntroBgmStop } from "../utils/common/startPageIntroAudio.js";
 import { waitForStage3GpuReady } from "../utils/stages/stage3/stage3RevealGate.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
@@ -480,7 +477,7 @@ export function StartPage() {
 
   useEffect(() => {
     const onSoftRestart = () => {
-      stopStartPageIntroBgm();
+      stopIntroBgm();
       setIsIntroOpen(false);
       setIsStartFadingOut(false);
       setIsEnterLoadingVideo(false);

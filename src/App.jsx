@@ -25,10 +25,7 @@ import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js
 import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
 import { waitForStage3GpuReady } from "./utils/stages/stage3/stage3RevealGate.js";
 import { KioskOperatorCornerReset } from "./components/KioskOperatorCornerReset.jsx";
-import {
-  performKioskSoftRestart,
-  stopKioskExhibitionAudio,
-} from "./utils/common/kioskSoftRestart.js";
+import { performKioskSoftRestart } from "./utils/common/kioskSoftRestart.js";
 import { beginStage3KioskVisitorSession } from "./utils/stages/stage3/stage3KioskSession.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
@@ -48,9 +45,13 @@ import {
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
 import {
+  STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+  STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT,
   STAGE3_INTRO_INPUT_BLOCKED_EVENT,
   STAGE3_INTRO_MOVEMENT_HINT_EVENT,
   STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+  STAGE3_NOTICE_MODAL_CLOSE_EVENT,
+  STAGE3_NOTICE_MODAL_SHOW_EVENT,
 } from "./events/stage3Events.js";
 import {
   runStage6NotificationNowOrEnqueue,
@@ -144,8 +145,6 @@ function AppLayout() {
   const runKioskSoftRestart = useCallback(async () => {
     await performKioskSoftRestart();
     navigate({ pathname: "/start", search: "" }, { replace: true });
-    stopKioskExhibitionAudio();
-    setTimeout(stopKioskExhibitionAudio, 0);
   }, [navigate]);
 
   // 긴급 배정: ?worryId=223 감지 → 서버 emergency-assign 호출 후 파라미터 제거
@@ -208,22 +207,31 @@ function AppLayout() {
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
     const closeHandler = () => setShowNoticeModal(false);
-    window.addEventListener("gum:showNoticeModal", showHandler);
-    window.addEventListener("gum:closeNoticeModal", closeHandler);
+    window.addEventListener(STAGE3_NOTICE_MODAL_SHOW_EVENT, showHandler);
+    window.addEventListener(STAGE3_NOTICE_MODAL_CLOSE_EVENT, closeHandler);
     return () => {
-      window.removeEventListener("gum:showNoticeModal", showHandler);
-      window.removeEventListener("gum:closeNoticeModal", closeHandler);
+      window.removeEventListener(STAGE3_NOTICE_MODAL_SHOW_EVENT, showHandler);
+      window.removeEventListener(STAGE3_NOTICE_MODAL_CLOSE_EVENT, closeHandler);
     };
   }, []);
 
   useEffect(() => {
     const showHandler = () => setShowGameMachineModalShell(true);
     const closeHandler = () => closeGameMachineModalShell();
-    window.addEventListener("gum:showGameMachineModal", showHandler);
-    window.addEventListener("gum:closeGameMachineModal", closeHandler);
+    window.addEventListener(STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT, showHandler);
+    window.addEventListener(
+      STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+      closeHandler,
+    );
     return () => {
-      window.removeEventListener("gum:showGameMachineModal", showHandler);
-      window.removeEventListener("gum:closeGameMachineModal", closeHandler);
+      window.removeEventListener(
+        STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT,
+        showHandler,
+      );
+      window.removeEventListener(
+        STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+        closeHandler,
+      );
     };
   }, [closeGameMachineModalShell]);
 

@@ -22,6 +22,10 @@ import { resetStage3KioskVisitorSession } from "../stages/stage3/stage3KioskSess
 import { stopStartPageIntroBgm } from "./startPageIntroAudio.js";
 import { stopStage3IntroAudio } from "./stage3IntroAudio.js";
 import {
+  dispatchStage3GameMachineModalClose,
+  dispatchStage3NoticeModalClose,
+} from "../../events/stage3Events.js";
+import {
   dispatchGumCardsModalClose,
   stopTentModalBgm,
 } from "../stages/stage3/gumCardsModalLauncher.js";
@@ -46,8 +50,8 @@ export function dispatchKioskSoftRestartUiCleanup() {
   resetStage3KioskVisitorSession();
   dispatchKioskNewVisitorUiReset();
   window.dispatchEvent(new CustomEvent(KIOSK_SOFT_RESTART_EVENT));
-  window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
-  window.dispatchEvent(new CustomEvent("gum:closeGameMachineModal"));
+  dispatchStage3NoticeModalClose();
+  dispatchStage3GameMachineModalClose();
   window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
@@ -55,7 +59,7 @@ export function dispatchKioskSoftRestartUiCleanup() {
   window.dispatchEvent(new CustomEvent(STAGE6_PHONE_INDICATOR_HIDE_EVENT));
   dispatchMinigameClose();
   dispatchGumCardsModalClose();
-  stopKioskExhibitionAudio();
+  // 모달 close 핸들러가 배경음을 resume 할 수 있어 마이크로태스크 한 번 더 정지
   setTimeout(stopKioskExhibitionAudio, 0);
 }
 

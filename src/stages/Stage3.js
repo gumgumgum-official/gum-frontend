@@ -26,6 +26,7 @@ import { createStage3OverlayController } from "../utils/stages/stage3/overlay/st
 import { createStage3InputController } from "../utils/stages/stage3/input/stage3InputController.js";
 import { teardownStage3Scene } from "../utils/stages/stage3/lifecycle/stage3SceneTeardown.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3/stage3.js";
+import { dispatchStage3NoticeModalClose } from "../events/stage3Events.js";
 import { STAGE3_ENTRY_SUBTITLE_START_DELAY_MS } from "../config/stages/stage3/stage3Stamp.js";
 import { STAGE3_MOVEMENT_KEY_CODES } from "../config/stages/stage3/stage3Keyboard.js";
 import {
@@ -684,7 +685,7 @@ export function Stage3(options = {}) {
         interactionsController.unbindCanvas(canvasRef);
         canvasRef = null;
       }
-      window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
+      dispatchStage3NoticeModalClose();
       closeMinigame({
         camera: cameraRef ?? this.camera,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,

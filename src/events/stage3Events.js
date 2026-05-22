@@ -11,6 +11,15 @@ export const STAGE3_INTRO_INPUT_BLOCKED_EVENT = "gum:stage3IntroInputBlocked";
 /** 진입 연출(카메라·자막·포스터) 종료 후 이동 안내 상단 토스트 */
 export const STAGE3_INTRO_MOVEMENT_HINT_EVENT = "gum:stage3IntroMovementHint";
 
+/** Stage3 게시판 모달 — App.jsx `NoticeModalBoard` */
+export const STAGE3_NOTICE_MODAL_SHOW_EVENT = "gum:showNoticeModal";
+export const STAGE3_NOTICE_MODAL_CLOSE_EVENT = "gum:closeNoticeModal";
+
+/** Stage3 게임기 모달 — App.jsx `GameMachineModalShell` */
+export const STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT = "gum:showGameMachineModal";
+export const STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT =
+  "gum:closeGameMachineModal";
+
 export const STAGE3_INTRO_MOVEMENT_HINT_MESSAGE =
   "방향키, wasd로 캐릭터를 움직여 보세요!";
 
@@ -42,4 +51,12 @@ export function dispatchStage3IntroMovementHint() {
       detail: { message: STAGE3_INTRO_MOVEMENT_HINT_MESSAGE },
     }),
   );
+}
+
+export function dispatchStage3NoticeModalClose() {
+  window.dispatchEvent(new CustomEvent(STAGE3_NOTICE_MODAL_CLOSE_EVENT));
+}
+
+export function dispatchStage3GameMachineModalClose() {
+  window.dispatchEvent(new CustomEvent(STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT));
 }

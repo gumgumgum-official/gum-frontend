@@ -8,7 +8,6 @@ import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
 import { GuestbookEmbed } from "./GuestbookEmbed.jsx";
 import { getGuestbookImageUrls } from "../utils/common/guestbookAssetUrls.js";
-import { preloadImageUrls } from "../utils/common/preloadImages.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
@@ -69,11 +68,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
     prefetchVoteBundle(voteClientId);
   }, [isOpen, voteClientId]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    void preloadImageUrls(getGuestbookImageUrls());
-  }, [isOpen]);
-
+  const guestbookPreloadUrls = useMemo(() => getGuestbookImageUrls(), []);
   const guestbookBgUrl = useMemo(
     () => resolvePublicAssetUrl(NOTICE.guestbookFullscreenBg),
     [],
@@ -81,22 +76,25 @@ export function NoticeModalBoard({ isOpen, onClose }) {
 
   return (
     <AnimatePresence>
-      {isOpen ? (
-        <img
-          src={guestbookBgUrl}
-          alt=""
-          aria-hidden
-          fetchPriority="low"
-          decoding="async"
-          style={{
-            position: "fixed",
-            width: 0,
-            height: 0,
-            opacity: 0,
-            pointerEvents: "none",
-          }}
-        />
-      ) : null}
+      {isOpen
+        ? guestbookPreloadUrls.map((url) => (
+            <img
+              key={url}
+              src={url}
+              alt=""
+              aria-hidden
+              fetchPriority="low"
+              decoding="async"
+              style={{
+                position: "fixed",
+                width: 0,
+                height: 0,
+                opacity: 0,
+                pointerEvents: "none",
+              }}
+            />
+          ))
+        : null}
       {isOpen && (
         <motion.div
           initial={{ opacity: 0 }}
