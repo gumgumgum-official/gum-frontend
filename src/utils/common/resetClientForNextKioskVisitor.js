@@ -9,6 +9,7 @@
 import { invalidateVoteBundleCache } from "../../lib/voteBundleCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../../lib/voteApi.js";
 import { resetKioskExhibitionWarmupState } from "./kioskExhibitionWarmup.js";
+import { resetStage6AudioUnlock } from "../stages/stage6/stage6AudioUnlock.js";
 
 /**
  * NOTE:
@@ -19,6 +20,7 @@ import { resetKioskExhibitionWarmupState } from "./kioskExhibitionWarmup.js";
  * @returns {Promise<void>}
  */
 export async function resetClientForNextKioskVisitor() {
+  resetStage6AudioUnlock();
   resetKioskExhibitionWarmupState();
   try {
     invalidateVoteBundleCache();

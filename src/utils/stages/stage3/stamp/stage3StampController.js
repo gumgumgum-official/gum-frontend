@@ -140,9 +140,14 @@ export function createStage3StampController({
     return true;
   }
 
+  /** @returns {HTMLElement | null} */
+  function getStampPanel() {
+    const el = stampUiRoot?.querySelector(".stage3-stamp-panel") ?? null;
+    return el instanceof window.HTMLElement ? el : null;
+  }
+
   function setStampPanelHidden(hidden) {
-    if (!stampUiRoot) return;
-    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (!panel) return;
     panel.classList.toggle("stage3-stamp-panel--hidden", hidden);
   }
@@ -324,9 +329,9 @@ export function createStage3StampController({
       window.clearTimeout(stage3StampIntroFlyTimerId);
       stage3StampIntroFlyTimerId = null;
     }
-    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (panel) {
-      clearStampIntroInlineStyles(/** @type {HTMLElement} */ (panel));
+      clearStampIntroInlineStyles(panel);
       panel.getAnimations().forEach((anim) => anim.cancel());
       panel.classList.remove(
         "stage3-stamp-panel--intro-center",
@@ -339,8 +344,7 @@ export function createStage3StampController({
 
   function playStampPanelEntryAnimation() {
     if (!stampUiRoot || !getIsStageActive()) return;
-    /** @type {HTMLElement | null} */
-    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (!panel) return;
     clearStampIntroTimers();
     stage3StampIntroAnimating = true;
@@ -406,12 +410,13 @@ export function createStage3StampController({
       window.clearTimeout(stage3EntryStampRevealTimerId);
       stage3EntryStampRevealTimerId = null;
     }
-    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (panel) panel.classList.add("stage3-stamp-panel--hidden");
 
     dispatchSubtitleSequence([
-      { text: "어딘가에서 걱정들이 쏟아지고 있어요...", holdMs: 2500 },
-      { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2000 },
+      { text: "껌딱지 월드에 오신 것을 환영합니다!", holdMs: 1500 },
+      { text: "섬 위에 걱정들이 쏟아지고 있어요!", holdMs: 1500 },
+      { text: "걱정을 부시며 섬을 둘러볼까요?", holdMs: 2500 },
     ]);
 
     stage3EntryStampRevealTimerId = window.setTimeout(() => {
@@ -434,9 +439,9 @@ export function createStage3StampController({
     stage3InteractionLocked = false;
     stage3StampIntroAnimating = false;
 
-    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (panel) {
-      clearStampIntroInlineStyles(/** @type {HTMLElement} */ (panel));
+      clearStampIntroInlineStyles(panel);
       panel.classList.remove(
         "stage3-stamp-panel--hidden",
         "stage3-stamp-panel--intro-center",

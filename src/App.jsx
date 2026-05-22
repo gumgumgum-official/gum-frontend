@@ -43,6 +43,9 @@ import {
   STAGE6_PHONE_INDICATOR_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
+  STAGE6_INPUT_BLOCKED_EVENT,
+  STAGE6_INTRO_CLICK_HINT_EVENT,
+  STAGE6_INTRO_CLICK_HINT_MESSAGE,
 } from "./events/stage6Events.js";
 import {
   STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
@@ -55,6 +58,8 @@ import {
 } from "./events/stage3Events.js";
 import {
   runStage6NotificationNowOrEnqueue,
+  STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG,
+  STAGE6_POSTER_MODAL_BLOCK_TAG,
   unblockStage6Notifications,
 } from "./utils/stages/stage6/stage6NotificationGate.js";
 
@@ -122,11 +127,21 @@ function AppLayout() {
     useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
-  const [stage3TopToast, setStage3TopToast] = useState({
-    visible: false,
-    message: "",
-  });
-  const stage3TopToastTimerRef = useRef(null);
+  const [topHudToastMessage, setTopHudToastMessage] = useState(null);
+  const topHudToastTimerRef = useRef(null);
+  const [introClickHintMessage, setIntroClickHintMessage] = useState(null);
+  const introClickHintTimerRef = useRef(null);
+
+  const showTopHudToast = useCallback((message) => {
+    setTopHudToastMessage(message);
+    if (topHudToastTimerRef.current) {
+      clearTimeout(topHudToastTimerRef.current);
+    }
+    topHudToastTimerRef.current = window.setTimeout(() => {
+      setTopHudToastMessage(null);
+      topHudToastTimerRef.current = null;
+    }, 2000);
+  }, []);
 
   const closeGameMachineModalShell = useCallback(() => {
     setShowGameMachineModalShell(false);
@@ -246,7 +261,7 @@ function AppLayout() {
     };
     const hideStage6Poster = () => {
       setShowStage6PosterModal(false);
-      unblockStage6Notifications("poster-modal");
+      unblockStage6Notifications(STAGE6_POSTER_MODAL_BLOCK_TAG);
     };
     window.addEventListener(STAGE6_POSTER_MODAL_SHOW_EVENT, showStage6Poster);
     window.addEventListener(STAGE6_POSTER_MODAL_HIDE_EVENT, hideStage6Poster);
@@ -281,7 +296,7 @@ function AppLayout() {
     };
     const hideStage6Photobooth = () => {
       setShowStage6PhotoboothModal(false);
-      unblockStage6Notifications("photobooth-modal");
+      unblockStage6Notifications(STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG);
     };
     window.addEventListener(
       STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
@@ -304,10 +319,9 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showChime = () =>
-      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(true));
-    const hideChime = () =>
-      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(false));
+    // 띵-동 HUD는 call sign 오디오와 동기 — 알림 큐를 타면 탑승 수속 멘트만 먼저 뜰 수 있음
+    const showChime = () => setShowAirportChime(true);
+    const hideChime = () => setShowAirportChime(false);
     window.addEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
     window.addEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
     return () => {
@@ -317,23 +331,53 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showStage3TopToast = (message) => {
-      setStage3TopToast({ visible: true, message });
-      if (stage3TopToastTimerRef.current) {
-        clearTimeout(stage3TopToastTimerRef.current);
-      }
-      stage3TopToastTimerRef.current = window.setTimeout(() => {
-        setStage3TopToast((prev) => ({ ...prev, visible: false }));
-        stage3TopToastTimerRef.current = null;
-      }, 2000);
+    const INTRO_CLICK_HINT_VISIBLE_MS = 2500;
+
+    const showIntroClickHint = (/** @type {CustomEvent} */ event) => {
+      const message =
+        typeof event?.detail?.message === "string" && event.detail.message
+          ? event.detail.message
+          : STAGE6_INTRO_CLICK_HINT_MESSAGE;
+      runStage6NotificationNowOrEnqueue(() => {
+        setIntroClickHintMessage(message);
+        if (introClickHintTimerRef.current) {
+          clearTimeout(introClickHintTimerRef.current);
+        }
+        introClickHintTimerRef.current = window.setTimeout(() => {
+          setIntroClickHintMessage(null);
+          introClickHintTimerRef.current = null;
+        }, INTRO_CLICK_HINT_VISIBLE_MS);
+      });
     };
-    const onIslandExitBlocked = () =>
-      showStage3TopToast("하핳.. 거기로는 못 가요😅");
+
+    window.addEventListener(STAGE6_INTRO_CLICK_HINT_EVENT, showIntroClickHint);
+    return () => {
+      window.removeEventListener(
+        STAGE6_INTRO_CLICK_HINT_EVENT,
+        showIntroClickHint,
+      );
+      if (introClickHintTimerRef.current) {
+        clearTimeout(introClickHintTimerRef.current);
+        introClickHintTimerRef.current = null;
+      }
+      setIntroClickHintMessage(null);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onIslandExitBlocked = () => {
+      showTopHudToast("하핳.. 거기로는 못 가요😅");
+    };
     const onStage3TopToastMessage = (/** @type {CustomEvent} */ event) => {
       const message = event.detail?.message;
       if (typeof message === "string" && message.length > 0) {
-        showStage3TopToast(message);
+        showTopHudToast(message);
       }
+    };
+    const showStage6InputBlockedToast = (event) => {
+      const text =
+        typeof event?.detail?.text === "string" ? event.detail.text : "";
+      if (text) showTopHudToast(text);
     };
     window.addEventListener(
       STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
@@ -346,6 +390,10 @@ function AppLayout() {
     window.addEventListener(
       STAGE3_INTRO_MOVEMENT_HINT_EVENT,
       onStage3TopToastMessage,
+    );
+    window.addEventListener(
+      STAGE6_INPUT_BLOCKED_EVENT,
+      showStage6InputBlockedToast,
     );
     return () => {
       window.removeEventListener(
@@ -360,14 +408,20 @@ function AppLayout() {
         STAGE3_INTRO_MOVEMENT_HINT_EVENT,
         onStage3TopToastMessage,
       );
-      if (stage3TopToastTimerRef.current) {
-        clearTimeout(stage3TopToastTimerRef.current);
-        stage3TopToastTimerRef.current = null;
+      window.removeEventListener(
+        STAGE6_INPUT_BLOCKED_EVENT,
+        showStage6InputBlockedToast,
+      );
+      if (topHudToastTimerRef.current) {
+        clearTimeout(topHudToastTimerRef.current);
+        topHudToastTimerRef.current = null;
       }
     };
-  }, []);
+  }, [showTopHudToast]);
 
   useEffect(() => {
+    // 전화 HUD는 통화 상태 표시 — 알림 게이트(큐)를 타면 통화 중 block 시
+    // '전화 중'이 큐에 쌓였다가 종료 후 flush되어 늦게 뜨는 레이스가 난다.
     const showPhone = (e) => {
       const mode = e.detail?.mode;
       setPhoneIndicatorMode(
@@ -410,14 +464,20 @@ function AppLayout() {
       <Stage6PosterModal
         isOpen={showStage6PosterModal}
         imageSrc={stage6PosterImageSrc}
-        onClose={() => setShowStage6PosterModal(false)}
+        onClose={() => {
+          window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
+        }}
       />
       <Stage6PhotoboothModal
         isOpen={showStage6PhotoboothModal}
         videoSrc={stage6PhotoboothVideoSrc}
         photoSrcs={stage6PhotoboothPhotoSrcs}
         photoRatios={stage6PhotoboothPhotoRatios}
-        onClose={() => setShowStage6PhotoboothModal(false)}
+        onClose={() => {
+          window.dispatchEvent(
+            new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT),
+          );
+        }}
       />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />
@@ -428,22 +488,29 @@ function AppLayout() {
           }}
         />
       ) : null}
-      <div
-        className={`airport-chime-indicator stage3-island-exit-toast ${stage3TopToast.visible ? "visible" : ""}`}
-      >
-        {stage3TopToast.message}
-      </div>
-      <div
-        className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
-      >
-        🔔 띵-동
-      </div>
-      <div
-        className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
-      >
-        {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
-          ? "전화 중 📞"
-          : "☎️ 전화 왔어요"}
+      <div className="airport-hud-indicator-stack" aria-live="polite">
+        <div
+          className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
+        >
+          🔔 띵-동
+        </div>
+        {introClickHintMessage ? (
+          <div className="airport-chime-indicator visible">
+            {introClickHintMessage}
+          </div>
+        ) : null}
+        <div
+          className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
+        >
+          {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+            ? "전화 중 📞"
+            : "☎️ 전화 왔어요"}
+        </div>
+        <div
+          className={`airport-chime-indicator stage3-island-exit-toast ${topHudToastMessage ? "visible" : ""}`}
+        >
+          {topHudToastMessage ?? ""}
+        </div>
       </div>
       {showKioskCanvas && (
         <div

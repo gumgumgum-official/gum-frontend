@@ -9,6 +9,8 @@ import {
 } from "../../events/kioskEvents.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
+  STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_NAME_MODAL_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_HIDE_EVENT,
   STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
@@ -30,6 +32,9 @@ import {
   stopTentModalBgm,
 } from "../stages/stage3/gumCardsModalLauncher.js";
 import { dispatchMinigameClose } from "../stages/stage3/minigameLauncher.js";
+import { disposePhotoboothCameraSound } from "../stages/stage6/playPhotoboothCameraSound.js";
+import { resetStage6AudioUnlock } from "../stages/stage6/stage6AudioUnlock.js";
+import { resetStage6NotificationGate } from "../stages/stage6/stage6NotificationGate.js";
 
 /** 우측 상단 연속 탭: 횟수·허용 시간(ms) */
 export const KIOSK_SOFT_RESTART_CORNER_TAP_COUNT = 5;
@@ -42,11 +47,14 @@ export function stopKioskExhibitionAudio() {
   stopStage3IntroAudio();
   stopTentModalBgm();
   stopStartPageIntroBgm();
+  disposePhotoboothCameraSound();
 }
 
 export function dispatchKioskSoftRestartUiCleanup() {
   // 모달 close 이벤트가 Stage3 배경음을 resume 하기 전에 먼저 정지
   stopKioskExhibitionAudio();
+  resetStage6AudioUnlock();
+  resetStage6NotificationGate();
   resetStage3KioskVisitorSession();
   dispatchKioskNewVisitorUiReset();
   window.dispatchEvent(new CustomEvent(KIOSK_SOFT_RESTART_EVENT));
@@ -54,6 +62,8 @@ export function dispatchKioskSoftRestartUiCleanup() {
   dispatchStage3GameMachineModalClose();
   window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT));
+  window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_HIDE_EVENT));
+  window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_PHONE_INDICATOR_HIDE_EVENT));

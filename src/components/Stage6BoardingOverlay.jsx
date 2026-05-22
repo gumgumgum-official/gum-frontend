@@ -6,6 +6,7 @@ import {
   AIRPORT_SUBTITLE_UPDATE_EVENT,
   STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_WALK_TO_ESCALATOR_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
   STAGE6_INTERACTION_UNLOCK_EVENT,
   STAGE6_NAME_MODAL_HIDE_EVENT,
@@ -15,10 +16,20 @@ import {
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
   STAGE6_SUBTITLE_SHOW_EVENT,
 } from "../events/stage6Events.js";
-import { unblockStage6Notifications } from "../utils/stages/stage6/stage6NotificationGate.js";
+import {
+  KIOSK_NEW_VISITOR_EVENT,
+  KIOSK_SOFT_RESTART_EVENT,
+} from "../events/kioskEvents.js";
+import {
+  resetStage6NotificationGate,
+  STAGE6_NAME_MODAL_BLOCK_TAG,
+  unblockStage6Notifications,
+} from "../utils/stages/stage6/stage6NotificationGate.js";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const DEFAULT_SUBTITLE_LABEL = "ANNOUNCEMENT";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
+/** 이름 입력 모달 닫힌 뒤 탑승권(티켓) 오버레이 표시까지 대기 (ms) */
+const TICKET_OVERLAY_OPEN_DELAY_MS = 1000;
 /** '탑승권 발급받기' 클릭 시 재생 (랜덤 1종) */
 const TICKET_ISSUE_SOUND_PATHS = [
   "/static/sounds/airport/ticket_sound1.mp3",
@@ -66,6 +77,7 @@ export function Stage6BoardingOverlay() {
   /** subtitle effect의 `schedule` — 언마운트/reset 시 timersRef와 함께 정리 */
   const scheduleRef = useRef(null);
   const sequenceTokenRef = useRef(0);
+  const ticketOverlayTimerRef = useRef(0);
   const latestPassengerNameRef = useRef("");
   const showSubtitleRef = useRef(false);
   const subtitleTextRef = useRef("");
@@ -116,6 +128,13 @@ export function Stage6BoardingOverlay() {
     const cancelSequence = () => {
       sequenceTokenRef.current += 1;
       clearTimers();
+    };
+
+    const clearTicketOverlayTimer = () => {
+      if (ticketOverlayTimerRef.current) {
+        window.clearTimeout(ticketOverlayTimerRef.current);
+        ticketOverlayTimerRef.current = 0;
+      }
     };
 
     const showSubtitleNow = (text) => {
@@ -235,11 +254,13 @@ export function Stage6BoardingOverlay() {
 
     const onStage6NameModalHide = () => {
       setIsNameModalOpen(false);
-      unblockStage6Notifications("name-modal");
+      unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
       window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
 
-    const onBoardingReset = () => {
+    const resetBoardingUiForNextVisitor = () => {
+      clearTicketOverlayTimer();
+      resetStage6NotificationGate();
       cancelSequence();
       setShowSubtitle(false);
       setFadeOutSubtitle(false);
@@ -250,9 +271,19 @@ export function Stage6BoardingOverlay() {
       setIsNameModalOpen(false);
       setIsOverlayOpen(false);
       setIsScreenFading(false);
+      setPassengerName("");
       setNameInputValue("");
-      unblockStage6Notifications("name-modal");
+      latestPassengerNameRef.current = "";
+      unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
       window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
+    };
+
+    const onBoardingReset = () => {
+      resetBoardingUiForNextVisitor();
+    };
+
+    const onKioskVisitorReset = () => {
+      resetBoardingUiForNextVisitor();
     };
 
     const onScreenFade = () => setIsScreenFading(true);
@@ -278,9 +309,12 @@ export function Stage6BoardingOverlay() {
       onStage6NameModalHide,
     );
     window.addEventListener(STAGE6_BOARDING_RESET_EVENT, onBoardingReset);
+    window.addEventListener(KIOSK_NEW_VISITOR_EVENT, onKioskVisitorReset);
+    window.addEventListener(KIOSK_SOFT_RESTART_EVENT, onKioskVisitorReset);
     window.addEventListener(STAGE6_SCREEN_FADE_EVENT, onScreenFade);
 
     return () => {
+      clearTicketOverlayTimer();
       clearTimers();
       scheduleRef.current = null;
       window.removeEventListener(
@@ -316,6 +350,8 @@ export function Stage6BoardingOverlay() {
         onStage6NameModalHide,
       );
       window.removeEventListener(STAGE6_BOARDING_RESET_EVENT, onBoardingReset);
+      window.removeEventListener(KIOSK_NEW_VISITOR_EVENT, onKioskVisitorReset);
+      window.removeEventListener(KIOSK_SOFT_RESTART_EVENT, onKioskVisitorReset);
       window.removeEventListener(STAGE6_SCREEN_FADE_EVENT, onScreenFade);
     };
   }, []);
@@ -324,9 +360,13 @@ export function Stage6BoardingOverlay() {
     if (!isNameModalOpen && !isOverlayOpen) return;
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
+        if (ticketOverlayTimerRef.current) {
+          window.clearTimeout(ticketOverlayTimerRef.current);
+          ticketOverlayTimerRef.current = 0;
+        }
         setIsNameModalOpen(false);
         setIsOverlayOpen(false);
-        unblockStage6Notifications("name-modal");
+        unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
         window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
       }
       if (event.key === "Enter" && isNameModalOpen) {
@@ -345,27 +385,23 @@ export function Stage6BoardingOverlay() {
     setPassengerName(nextPassengerName);
     setNameInputValue(nextPassengerName);
     setIsNameModalOpen(false);
-    unblockStage6Notifications("name-modal");
+    unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
     window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
-
-    window.dispatchEvent(
-      new CustomEvent(STAGE6_SUBTITLE_SHOW_EVENT, {
-        detail: {
-          text: `${nextPassengerName}님, 탑승권이 발급되었습니다.\n일상으로 출발합니다 ✈`,
-        },
-      }),
-    );
-
-    scheduleRef.current?.(() => {
+    window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
+    if (ticketOverlayTimerRef.current) {
+      window.clearTimeout(ticketOverlayTimerRef.current);
+    }
+    ticketOverlayTimerRef.current = window.setTimeout(() => {
+      ticketOverlayTimerRef.current = 0;
       setIsOverlayOpen(true);
-      window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_PASS_ISSUED_EVENT));
-    }, 2500);
+    }, TICKET_OVERLAY_OPEN_DELAY_MS);
   };
 
   const boardFlight = () => {
     setIsOverlayOpen(false);
     window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_WALK_TO_ESCALATOR_EVENT));
     window.dispatchEvent(
       new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
         detail: {
@@ -418,7 +454,7 @@ export function Stage6BoardingOverlay() {
         aria-label="Passenger name input"
         onClick={() => {
           setIsNameModalOpen(false);
-          unblockStage6Notifications("name-modal");
+          unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
           window.dispatchEvent(
             new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT),
           );

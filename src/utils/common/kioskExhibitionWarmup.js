@@ -14,9 +14,16 @@ import {
 } from "./gltfTemplateCache.js";
 import { getGuestbookImageUrls } from "./guestbookAssetUrls.js";
 import { preloadImageUrls } from "./preloadImages.js";
+import {
+  resetTentScenePrewarmState,
+  TENT_SCENE_GLB_PATH,
+  warmTentSceneVisualAssets,
+} from "./tentScenePrewarm.js";
 
-export const TENT_SCENE_GLB_PATH = "/models/stage3/tent_gum_scene.glb";
-const TENT_SCENE_HDRI_PATH = "/hdri/sunny_rose_garden_1k.exr";
+export {
+  TENT_SCENE_GLB_PATH,
+  TENT_SCENE_HDRI_PATH,
+} from "./tentScenePrewarm.js";
 
 /** @type {Promise<void> | null} */
 let idleWarmPromise = null;
@@ -30,6 +37,7 @@ let criticalGlbPromise = null;
 export function resetKioskExhibitionWarmupState() {
   idleWarmPromise = null;
   criticalGlbPromise = null;
+  resetTentScenePrewarmState();
 }
 
 /**
@@ -106,8 +114,7 @@ function runIdleWarmup() {
   preloadStage6AirportGlb();
   void loadGlbUrls([...new Set(glbUrls)]);
   void preloadImageUrls(getKioskExhibitionImageUrls());
-  const hdriUrl = resolvePublicAssetUrl(TENT_SCENE_HDRI_PATH);
-  void fetch(hdriUrl, { priority: "low" }).catch(() => {});
+  void warmTentSceneVisualAssets();
 }
 
 /**
@@ -138,7 +145,9 @@ export function warmKioskExhibitionAssets(options = {}) {
  */
 export function waitForKioskExhibitionCriticalGlb() {
   if (!criticalGlbPromise) {
-    criticalGlbPromise = loadGlbUrls(getKioskExhibitionCriticalGlbUrls());
+    criticalGlbPromise = loadGlbUrls(getKioskExhibitionCriticalGlbUrls()).then(
+      () => warmTentSceneVisualAssets(),
+    );
   }
   return criticalGlbPromise;
 }

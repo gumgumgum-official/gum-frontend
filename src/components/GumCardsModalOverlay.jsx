@@ -88,7 +88,6 @@ export function GumCardsModalOverlay() {
     <>
       {(phase === "tent" || phase === "cards") && (
         <TentSceneViewer
-          onClose={closeAll}
           onCardOpen={openCards}
           skipBubbleSequence={skipTentBubbleSequence}
         />

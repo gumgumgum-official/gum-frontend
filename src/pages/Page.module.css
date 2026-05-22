@@ -448,3 +448,33 @@
   object-fit: contain;
   border-radius: 16px;
 }
+
+.airportAudioUnlockOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2350;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+  margin: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.airportAudioUnlockText {
+  max-width: min(88vw, 520px);
+  padding: 14px 28px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.27);
+  color: #422442;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(66, 36, 66, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
+}

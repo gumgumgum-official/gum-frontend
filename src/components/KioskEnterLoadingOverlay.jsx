@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import styles from "../pages/Page.module.css";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import { markStage6AudioUnlocked } from "../utils/stages/stage6/stage6AudioUnlock.js";
 
 const LOADING_VIDEO_SRC = "/assets/loading_animation.mp4";
 const LOADING_SOUND_SRC = resolvePublicAssetUrl(
@@ -73,7 +74,11 @@ export function KioskEnterLoadingOverlay({ active, onEnded }) {
       const audio = audioRef.current;
       if (audio) {
         audio.currentTime = 0;
-        void audio.play().catch(() => {});
+        audio.onplay = () => markStage6AudioUnlocked();
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.then === "function") {
+          playPromise.then(() => markStage6AudioUnlocked()).catch(() => {});
+        }
       }
       const playPromise = video.play();
       if (playPromise && typeof playPromise.catch === "function") {
