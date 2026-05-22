@@ -6,6 +6,7 @@
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
 import { STAGE3_OBJECTS_CONFIG } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
 import { applyExtendedAudioVolume } from "../../common/audioGain.js";
+import { warmTentSceneVisualAssets } from "../../common/tentScenePrewarm.js";
 
 const EVENT_OPEN = "gum-cards-modal:open";
 const EVENT_CLOSE = "gum-cards-modal:close";
@@ -129,6 +130,7 @@ if (typeof window !== "undefined") {
   const run = () => {
     primeTentSoundCache();
     primeTentModalBgmCache();
+    void warmTentSceneVisualAssets();
   };
   if (typeof globalThis.requestIdleCallback === "function") {
     globalThis.requestIdleCallback(run, { timeout: 4_000 });
@@ -160,6 +162,7 @@ function playRandomTentModalSound() {
 }
 
 export function openGumCardsModal() {
+  void warmTentSceneVisualAssets();
   playRandomTentModalSound();
   startTentModalBgm();
   window.dispatchEvent(new CustomEvent(EVENT_OPEN));

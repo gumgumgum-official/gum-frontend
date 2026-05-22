@@ -26,6 +26,7 @@ import {
 } from "../playWellClickSound.js";
 import { onMinigameClose, closeMinigame } from "../minigameLauncher.js";
 import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3IntroAudio.js";
+import { notifyStage3IntroInputBlocked } from "../stage3IntroInputBlockedNotify.js";
 
 /**
  * @typedef {"notice" | "gameMachine" | "tent" | "vendingMachine" | "portal" | "well" | "clock" | "gumtoongji"} Stage3InteractionTarget
@@ -40,6 +41,7 @@ import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3
  *   getVendingMachineController: () => ReturnType<typeof import("../vendingMachine/stage3VendingMachineController.js").createStage3VendingMachineController>,
  *   getCameraIntroState: () => { completed: boolean; active: boolean },
  *   isInteractionBlocked: () => boolean,
+ *   isIntroPresentationLocked: () => boolean,
  *   getPortalTransitionInProgress: () => boolean,
  *   isPortalOpenForStageTransition: () => boolean,
  *   onTryEnterPortal: () => void,
@@ -71,6 +73,7 @@ export function createStage3InteractionsController({
   getVendingMachineController,
   getCameraIntroState,
   isInteractionBlocked,
+  isIntroPresentationLocked,
   getPortalTransitionInProgress,
   isPortalOpenForStageTransition,
   onTryEnterPortal,
@@ -166,6 +169,15 @@ export function createStage3InteractionsController({
   let _pointerMoveRafId = 0;
   /** @type {PointerEvent | null} */
   let _lastPointerEvent = null;
+
+  /** @param {THREE.Vector3} origin @param {THREE.Box3} box */
+  function xzDistanceToFootprintBox(origin, box) {
+    const cx = THREE.MathUtils.clamp(origin.x, box.min.x, box.max.x);
+    const cz = THREE.MathUtils.clamp(origin.z, box.min.z, box.max.z);
+    const dx = origin.x - cx;
+    const dz = origin.z - cz;
+    return Math.sqrt(dx * dx + dz * dz);
+  }
 
   function normalizeIntNameToken(value) {
     return String(value ?? "")
@@ -492,6 +504,10 @@ export function createStage3InteractionsController({
     const camera = getCamera();
     const canvas = getCanvas();
     if (!camera || !canvas) return;
+    if (isIntroPresentationLocked()) {
+      notifyStage3IntroInputBlocked("click");
+      return;
+    }
     if (isInteractionBlocked()) return;
 
     const balloonTarget = getClickedBalloonTarget(event.clientX, event.clientY);
@@ -510,6 +526,10 @@ export function createStage3InteractionsController({
   }
 
   function handleIntClickHintPointerDown(event) {
+    if (isIntroPresentationLocked()) {
+      notifyStage3IntroInputBlocked("click");
+      return;
+    }
     if (isInteractionBlocked()) return;
     if (!activeIntHintTarget) return;
     event.preventDefault();
@@ -867,6 +887,7 @@ export function createStage3InteractionsController({
       );
       intProximityTargets.push({
         sphere: _camAssistSphere.clone(),
+        footprintBox: _camAssistBox.clone(),
         anchorWorld,
         hintText: intTarget === "portal" ? "통과!" : "Click!",
         hintVariant: isWell ? "well-side" : "default",
@@ -1007,19 +1028,19 @@ export function createStage3InteractionsController({
       intClickHintBubbleEl.classList.remove("is-visible");
       return;
     }
-    const radiusSq =
-      STAGE3_INT_CLICK_HINT_RADIUS * STAGE3_INT_CLICK_HINT_RADIUS;
     let nearest = null;
-    let nearestDistSq = Infinity;
+    let nearestEdgeDist = Infinity;
     for (let i = 0; i < intProximityTargets.length; i++) {
       const target = intProximityTargets[i];
-      const sphere = target.sphere;
-      const dx = sphere.center.x - charPos.x;
-      const dz = sphere.center.z - charPos.z;
-      const distSq = dx * dx + dz * dz;
-      if (distSq > radiusSq || distSq >= nearestDistSq) continue;
+      const edgeDist = xzDistanceToFootprintBox(charPos, target.footprintBox);
+      if (
+        edgeDist > STAGE3_INT_CLICK_HINT_RADIUS ||
+        edgeDist >= nearestEdgeDist
+      ) {
+        continue;
+      }
       nearest = target;
-      nearestDistSq = distSq;
+      nearestEdgeDist = edgeDist;
     }
     if (!nearest) {
       activeIntHintTarget = null;

@@ -22,6 +22,7 @@ import {
  *   } | null,
  *   hasBlockingOverlayOpen: () => boolean,
  *   isStampPanelSettledInCorner: () => boolean,
+ *   isWorryEnterBubbleUnlocked: () => boolean,
  *   attachIntClickHintBubble: (el: HTMLDivElement) => void,
  *   detachIntClickHintBubble: () => void,
  *   hideIntClickHint: () => void,
@@ -39,6 +40,7 @@ export function createStage3BubblesController({
   getGumFollowers,
   hasBlockingOverlayOpen,
   isStampPanelSettledInCorner,
+  isWorryEnterBubbleUnlocked,
   attachIntClickHintBubble,
   detachIntClickHintBubble,
   hideIntClickHint,
@@ -137,7 +139,11 @@ export function createStage3BubblesController({
         getGumFollowers()?.getPrimaryFollowerBubbleAnchorWorld?.(_projWorry),
       );
 
-    if (hasBlockingOverlayOpen() || !isStampPanelSettledInCorner()) {
+    if (
+      hasBlockingOverlayOpen() ||
+      !isStampPanelSettledInCorner() ||
+      !isWorryEnterBubbleUnlocked()
+    ) {
       userWorryEnterBubblePhase = "off";
       userWorryEnterBubbleT = 0;
       userWorryEnterBubbleEl.classList.remove("is-visible");

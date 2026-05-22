@@ -19,6 +19,7 @@
  * @property {number} [initialStage] - 시작 Stage
  * @property {boolean} [enableKeyboardSwitch] - 키보드 2~6 전환 활성화
  * @property {boolean} [skipStage3Intro] - `/dev` 등: Stage3 상공 카메라·인트로 사운드 생략
+ * @property {function(): boolean} [getRenderPaused] - true면 animate에서 update/render 스킵 (`/start` idle)
  * @property {function(string, Error?): void} [onError] - 에러 시 사용자 피드백용 콜백 (메시지, 원본 에러)
  */
 

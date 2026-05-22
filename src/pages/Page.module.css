@@ -257,21 +257,22 @@
 
 .introHint {
   min-height: 18px;
+  margin: 0;
   font-size: 12px;
   letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.48);
+  color: rgba(255, 255, 255, 0.55);
   opacity: 0;
-  transform: translateY(4px);
-  transition:
-    color 0.22s ease,
-    opacity 0.32s ease,
-    transform 0.32s ease;
+  transform: translateY(10px);
+}
+
+.introHintShow {
+  animation: introFadeUp 0.78s ease forwards;
 }
 
 .introActionSlot {
   position: absolute;
   left: 50%;
-  bottom: 30px;
+  bottom: 52px;
   transform: translateX(-50%);
   min-height: 22px;
   width: min(92vw, 640px);
@@ -284,12 +285,6 @@
 
 .introActionSlot > * {
   pointer-events: auto;
-}
-
-.introHintReady {
-  color: rgba(255, 255, 255, 0.58);
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .introNav {
@@ -452,4 +447,34 @@
   max-height: 96vh;
   object-fit: contain;
   border-radius: 16px;
+}
+
+.airportAudioUnlockOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2350;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+  margin: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.airportAudioUnlockText {
+  max-width: min(88vw, 520px);
+  padding: 14px 28px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.27);
+  color: #422442;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(66, 36, 66, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
 }

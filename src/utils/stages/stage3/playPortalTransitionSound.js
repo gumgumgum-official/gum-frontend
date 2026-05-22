@@ -1,6 +1,7 @@
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
 import { STAGE3_OBJECTS_CONFIG } from "../../../config/stages/stage3/stage3ObjectsConfig.js";
 import { applyExtendedAudioVolume } from "../../common/audioGain.js";
+import { markStage6AudioUnlocked } from "../stage6/stage6AudioUnlock.js";
 
 /** @type {HTMLAudioElement | null} */
 let portalTransitionAudio = null;
@@ -28,8 +29,13 @@ export function playRandomPortalTransitionSound() {
   } catch {
     // ignore
   }
+  portalTransitionAudio.onplay = () => {
+    markStage6AudioUnlocked();
+  };
   const p = portalTransitionAudio.play();
-  if (p && typeof p.catch === "function") {
+  if (p && typeof p.then === "function") {
+    p.then(() => markStage6AudioUnlocked()).catch(() => {});
+  } else if (p && typeof p.catch === "function") {
     p.catch(() => {});
   }
 }

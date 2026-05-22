@@ -13,7 +13,8 @@ export const STAGE3_INT_SUFFIX_TO_TARGET = {
   vendingmachine: "vendingMachine", // GLB 노드명: INT_vending_machine
 };
 
-export const STAGE3_INT_CLICK_HINT_RADIUS = 15;
+/** INT_ 오브젝트 바닥 footprint 외곽까지 "Click!" 말풍선 표시 거리 (XZ, m) */
+export const STAGE3_INT_CLICK_HINT_RADIUS = 30;
 export const STAGE3_INT_CLICK_HINT_OFFSET_Y = 0.2;
 
 /** 포탈 통과 판정 반경 보정치(포탈 bbox 구체 반경 기반) */

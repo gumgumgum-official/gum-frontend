@@ -4,7 +4,7 @@ import styles from "../pages/Page.module.css";
 const FIRST_LINE_DELAY_MS = 500;
 const REST_LINES_DELAY_MS = 1700;
 const LAST_LINE_DELAY_MS = 2600;
-const ADVANCE_HINT_DELAY_MS = 1200;
+const ADVANCE_HINT_DELAY_MS = 2000;
 const INTRO_OVERLAY_ENTER_MS = 750;
 
 const INTRO_SCENES = [
@@ -320,42 +320,44 @@ export function IntroStoryOverlay({ onComplete }) {
             </span>
           ))}
         </div>
-        <div className={styles.introActionSlot}>
-          {isFinalScene ? (
-            showAdvanceHint ? (
-              <button
-                type="button"
-                className={`${styles.introEnterButton} ${styles.introEnterButtonShow}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onComplete?.();
-                }}
-              >
-                <span
-                  className={styles.introEnterButtonEmoji}
-                  aria-hidden="true"
-                >
-                  <img
-                    src="/assets/island.svg"
-                    alt=""
-                    className={styles.introEnterButtonIsland}
-                    draggable={false}
-                    decoding="async"
-                  />
-                </span>
-                <span className={styles.introEnterButtonLabel}>
-                  껌딱지 월드로 들어가기
-                </span>
-                <span
-                  className={styles.introEnterButtonArrow}
-                  aria-hidden="true"
-                >
-                  →
-                </span>
-              </button>
-            ) : null
-          ) : null}
-        </div>
+      </div>
+      <div className={styles.introActionSlot}>
+        {!isFinalScene && showAdvanceHint ? (
+          <p
+            className={`${styles.introHint} ${styles.introHintShow}`}
+            aria-hidden="true"
+          >
+            클릭으로 다음 화면 넘어가기
+          </p>
+        ) : null}
+        {isFinalScene ? (
+          showAdvanceHint ? (
+            <button
+              type="button"
+              className={`${styles.introEnterButton} ${styles.introEnterButtonShow}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onComplete?.();
+              }}
+            >
+              <span className={styles.introEnterButtonEmoji} aria-hidden="true">
+                <img
+                  src="/assets/island.svg"
+                  alt=""
+                  className={styles.introEnterButtonIsland}
+                  draggable={false}
+                  decoding="async"
+                />
+              </span>
+              <span className={styles.introEnterButtonLabel}>
+                껌딱지 월드로 들어가기
+              </span>
+              <span className={styles.introEnterButtonArrow} aria-hidden="true">
+                →
+              </span>
+            </button>
+          ) : null
+        ) : null}
       </div>
       <div className={styles.introNav}>
         {INTRO_SCENES.map((_, idx) => (
