@@ -2,11 +2,13 @@
  * 체험 완료 후 다음 이용자용 **게시판 투표(localStorage만)** 제거.
  * Stage3 세션·React 오버레이 리셋은 호출부에서 별도 처리
  * (`dispatchKioskSoftRestartUiCleanup`, StartPage `?complete=1` 등).
- * GLB 캐시·전체 localStorage 삭제는 하지 않아 재로딩 버벅임을 줄임.
+ * GLB Map 캐시·전체 localStorage 삭제는 하지 않고, 웜업 Promise만 초기화해
+ * 다음 루프에서 idle·critical 선로드를 다시 스케줄한다.
  */
 
 import { invalidateVoteBundleCache } from "../../lib/voteBundleCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../../lib/voteApi.js";
+import { resetKioskExhibitionWarmupState } from "./kioskExhibitionWarmup.js";
 
 /**
  * NOTE:
@@ -17,6 +19,7 @@ import { clearGgumddiMyVotesFromLocalStorage } from "../../lib/voteApi.js";
  * @returns {Promise<void>}
  */
 export async function resetClientForNextKioskVisitor() {
+  resetKioskExhibitionWarmupState();
   try {
     invalidateVoteBundleCache();
     clearGgumddiMyVotesFromLocalStorage();

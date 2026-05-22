@@ -24,6 +24,15 @@ let idleWarmPromise = null;
 let criticalGlbPromise = null;
 
 /**
+ * 다음 이용자·소프트 리셋 시 웜업 스케줄을 초기화한다.
+ * GLTF Map 캐시는 유지하되, 장시간 운영 후 다음 루프에서 idle·critical 웜업을 다시 걸 수 있게 한다.
+ */
+export function resetKioskExhibitionWarmupState() {
+  idleWarmPromise = null;
+  criticalGlbPromise = null;
+}
+
+/**
  * @returns {string[]}
  */
 export function getKioskExhibitionImageUrls() {
