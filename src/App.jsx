@@ -58,6 +58,8 @@ import {
 } from "./events/stage3Events.js";
 import {
   runStage6NotificationNowOrEnqueue,
+  STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG,
+  STAGE6_POSTER_MODAL_BLOCK_TAG,
   unblockStage6Notifications,
 } from "./utils/stages/stage6/stage6NotificationGate.js";
 
@@ -259,7 +261,7 @@ function AppLayout() {
     };
     const hideStage6Poster = () => {
       setShowStage6PosterModal(false);
-      unblockStage6Notifications("poster-modal");
+      unblockStage6Notifications(STAGE6_POSTER_MODAL_BLOCK_TAG);
     };
     window.addEventListener(STAGE6_POSTER_MODAL_SHOW_EVENT, showStage6Poster);
     window.addEventListener(STAGE6_POSTER_MODAL_HIDE_EVENT, hideStage6Poster);
@@ -294,7 +296,7 @@ function AppLayout() {
     };
     const hideStage6Photobooth = () => {
       setShowStage6PhotoboothModal(false);
-      unblockStage6Notifications("photobooth-modal");
+      unblockStage6Notifications(STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG);
     };
     window.addEventListener(
       STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
@@ -317,10 +319,9 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showChime = () =>
-      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(true));
-    const hideChime = () =>
-      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(false));
+    // 띵-동 HUD는 call sign 오디오와 동기 — 알림 큐를 타면 탑승 수속 멘트만 먼저 뜰 수 있음
+    const showChime = () => setShowAirportChime(true);
+    const hideChime = () => setShowAirportChime(false);
     window.addEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
     window.addEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
     return () => {
@@ -463,14 +464,20 @@ function AppLayout() {
       <Stage6PosterModal
         isOpen={showStage6PosterModal}
         imageSrc={stage6PosterImageSrc}
-        onClose={() => setShowStage6PosterModal(false)}
+        onClose={() => {
+          window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
+        }}
       />
       <Stage6PhotoboothModal
         isOpen={showStage6PhotoboothModal}
         videoSrc={stage6PhotoboothVideoSrc}
         photoSrcs={stage6PhotoboothPhotoSrcs}
         photoRatios={stage6PhotoboothPhotoRatios}
-        onClose={() => setShowStage6PhotoboothModal(false)}
+        onClose={() => {
+          window.dispatchEvent(
+            new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT),
+          );
+        }}
       />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />

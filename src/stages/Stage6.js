@@ -67,6 +67,8 @@ import {
   isStage6ClickBubbleSuppressed,
   isStage6PhotoboothModalOpen,
   openStage6NameModal,
+  openStage6PhotoboothModal,
+  openStage6PosterModal,
   resetStage6NotificationGate,
   runStage6NotificationNowOrEnqueue,
   STAGE6_PHONE_IN_CALL_BLOCK_TAG,
@@ -114,7 +116,7 @@ const PHONE_RING_SOUND_VOLUME = 0.42;
 /** 전화 받기 전 벨소리 재생 횟수 */
 const PHONE_RING_REPEAT_COUNT = 2;
 const PHONE_HANGUP_SOUND_PATH = "/static/sounds/airport/phone_hangup.mp3";
-const PHONE_HANGUP_SOUND_VOLUME = 0.49;
+const PHONE_HANGUP_SOUND_VOLUME = 0.75;
 const PHONE_CALL_SOUNDS = ["/static/sounds/airport/payphone_voice.mp3"];
 const PHONE_CALL_RING_SUBTITLES = ["어? 전화가 온 것 같아요! 한번 받아볼까요?"];
 const PHONE_CALL_SOUND_VOLUME = 0.49;
@@ -331,6 +333,10 @@ export function Stage6() {
   const _escFrontStepPos = new THREE.Vector3();
   const _escTopStepPos = new THREE.Vector3();
   let airplaneCallSignTimeoutId = 0;
+  /** `playAirplaneCallSignOnce` — 자막 시작(띵-동 표시 후 1초) 전용 */
+  let atmCallSignOnStartedTimeoutId = 0;
+  /** `playAirplaneCallSignOnce` — 오디오 미재생 시 띵-동·자막 폴백 */
+  let atmCallSignFallbackTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   let announceWatchdogId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -376,7 +382,7 @@ export function Stage6() {
   /** 칠 사인 오디오 재생 후 chime 아이콘을 표시하기 시작할 시간(초) */
   const CHIME_INDICATOR_TRIGGER_TIME_SEC = 0.58;
   const AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS = 100;
-  const AIRPORT_ANNOUNCE_INTRO_VOLUME = 0.55;
+  const AIRPORT_ANNOUNCE_INTRO_VOLUME = 0.8;
   /** `OBJ_ATM` 클릭 시 */
   const ATM_CLICK_SOUND_PATH = "/static/sounds/click.mp3";
   const ATM_CLICK_SOUND_VOLUME = 0.5;
@@ -454,7 +460,31 @@ export function Stage6() {
     dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_UPDATE_EVENT, { text });
   }
 
+  function showAirportChimeIndicator() {
+    if (isAirportChimeVisible) return;
+    window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_SHOW_EVENT));
+    isAirportChimeVisible = true;
+  }
+
+  function hideAirportChimeIndicator() {
+    if (!isAirportChimeVisible) return;
+    window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
+    isAirportChimeVisible = false;
+  }
+
+  function clearAtmCallSignTimers() {
+    if (atmCallSignOnStartedTimeoutId) {
+      window.clearTimeout(atmCallSignOnStartedTimeoutId);
+      atmCallSignOnStartedTimeoutId = 0;
+    }
+    if (atmCallSignFallbackTimeoutId) {
+      window.clearTimeout(atmCallSignFallbackTimeoutId);
+      atmCallSignFallbackTimeoutId = 0;
+    }
+  }
+
   function cancelAirplaneCallSignScheduled() {
+    clearAtmCallSignTimers();
     if (airplaneCallSignTimeoutId) {
       window.clearTimeout(airplaneCallSignTimeoutId);
       airplaneCallSignTimeoutId = 0;
@@ -480,10 +510,7 @@ export function Stage6() {
       airplaneCallSignAudio.src = "";
       airplaneCallSignAudio = null;
     }
-    if (isAirportChimeVisible) {
-      window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
-      isAirportChimeVisible = false;
-    }
+    hideAirportChimeIndicator();
     if (airportAnnounceIntroAudio) {
       airportAnnounceIntroAudio.onplay = null;
       airportAnnounceIntroAudio.ontimeupdate = null;
@@ -611,39 +638,66 @@ export function Stage6() {
         "/static/sounds/airport/airplane_call_sign.mp3",
       );
     }
-    if (airplaneCallSignTimeoutId) {
-      window.clearTimeout(airplaneCallSignTimeoutId);
-      airplaneCallSignTimeoutId = 0;
-    }
-    isAirportChimeVisible = false;
-    airplaneCallSignAudio.onplay = () => {
-      dispatchGatedStage6WindowEvent(AIRPORT_CHIME_SHOW_EVENT);
-      isAirportChimeVisible = true;
-      if (airplaneCallSignTimeoutId) {
-        window.clearTimeout(airplaneCallSignTimeoutId);
-        airplaneCallSignTimeoutId = 0;
-      }
-      airplaneCallSignTimeoutId = window.setTimeout(() => {
-        airplaneCallSignTimeoutId = 0;
-        onStarted?.();
+    clearAtmCallSignTimers();
+    let onStartedFired = false;
+    const fireOnStartedOnce = () => {
+      if (onStartedFired) return;
+      onStartedFired = true;
+      onStarted?.();
+    };
+    const scheduleOnStartedAfterChime = () => {
+      if (atmCallSignOnStartedTimeoutId) return;
+      atmCallSignOnStartedTimeoutId = window.setTimeout(() => {
+        atmCallSignOnStartedTimeoutId = 0;
+        fireOnStartedOnce();
       }, 1000);
     };
-    airplaneCallSignAudio.ontimeupdate = null;
-    airplaneCallSignAudio.onended = () => {
-      if (isAirportChimeVisible) {
-        dispatchGatedStage6WindowEvent(AIRPORT_CHIME_HIDE_EVENT);
-        isAirportChimeVisible = false;
+    const runAtmCallSignFallback = () => {
+      if (onStartedFired) return;
+      if (atmCallSignFallbackTimeoutId) {
+        window.clearTimeout(atmCallSignFallbackTimeoutId);
+        atmCallSignFallbackTimeoutId = 0;
       }
+      showAirportChimeIndicator();
+      scheduleOnStartedAfterChime();
+    };
+
+    isAirportChimeVisible = false;
+    airplaneCallSignAudio.onplay = null;
+    airplaneCallSignAudio.ontimeupdate = () => {
+      if (
+        Number(airplaneCallSignAudio?.currentTime ?? 0) <
+        CHIME_INDICATOR_TRIGGER_TIME_SEC
+      ) {
+        return;
+      }
+      if (atmCallSignFallbackTimeoutId) {
+        window.clearTimeout(atmCallSignFallbackTimeoutId);
+        atmCallSignFallbackTimeoutId = 0;
+      }
+      if (!isAirportChimeVisible) {
+        showAirportChimeIndicator();
+        scheduleOnStartedAfterChime();
+      }
+    };
+    airplaneCallSignAudio.onended = () => {
+      hideAirportChimeIndicator();
     };
     airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
     airplaneCallSignAudio.currentTime = 0;
-    airplaneCallSignAudio.play().catch(() => {
-      if (isAirportChimeVisible) {
-        dispatchGatedStage6WindowEvent(AIRPORT_CHIME_HIDE_EVENT);
-        isAirportChimeVisible = false;
-      }
-      onStarted?.();
-    });
+    try {
+      airplaneCallSignAudio.load();
+    } catch {
+      // ignore
+    }
+    const playPromise = airplaneCallSignAudio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(runAtmCallSignFallback);
+    }
+    atmCallSignFallbackTimeoutId = window.setTimeout(
+      runAtmCallSignFallback,
+      2500,
+    );
   }
 
   function tryStartAirportIntroSequence() {
@@ -1597,17 +1651,13 @@ export function Stage6() {
         if (hit.target === "photobooth") {
           playUiClickSound();
           hideTelBubble();
-          showStage6Modal(
-            STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
-            {
-              videoSrc:
-                config.photoboothVideoPath ??
-                "/assets/photo_booth/photobooth.mp4",
-              photoSrcs: config.photoboothPhotoSrcs,
-              photoRatios: config.photoboothPhotoRatios,
-            },
-            "photobooth-modal",
-          );
+          openStage6PhotoboothModal({
+            videoSrc:
+              config.photoboothVideoPath ??
+              "/assets/photo_booth/photobooth.mp4",
+            photoSrcs: config.photoboothPhotoSrcs,
+            photoRatios: config.photoboothPhotoRatios,
+          });
         }
         const isAtmHit = isAtmHitTarget(hit);
         const isTelHit = isTelHitTarget(hit);
@@ -1633,15 +1683,11 @@ export function Stage6() {
         if (hit.target === "boardpic" || hit.target === "poster") {
           playUiClickSound();
           hideTelBubble();
-          showStage6Modal(
-            STAGE6_POSTER_MODAL_SHOW_EVENT,
-            {
-              imageSrc:
-                config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
-              intName: hit.intName,
-            },
-            "poster-modal",
-          );
+          openStage6PosterModal({
+            imageSrc:
+              config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
+            intName: hit.intName,
+          });
         }
         window.dispatchEvent(
           new CustomEvent(STAGE6_INT_CLICK_EVENT, {

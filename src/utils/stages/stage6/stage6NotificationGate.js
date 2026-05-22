@@ -2,7 +2,13 @@
  * Stage6 자막·chime 등 UI 알림 — 모달/애니메이션 중에는 큐에 쌓았다가 해제 시 순서대로 재생.
  */
 
-import { STAGE6_NAME_MODAL_SHOW_EVENT } from "../../../events/stage6Events.js";
+import {
+  STAGE6_NAME_MODAL_SHOW_EVENT,
+  STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+  STAGE6_POSTER_MODAL_SHOW_EVENT,
+} from "../../../events/stage6Events.js";
+
+export const STAGE6_POSTER_MODAL_BLOCK_TAG = "poster-modal";
 
 /** @type {Map<string, number>} */
 const blockRefcounts = new Map();
@@ -17,7 +23,7 @@ export const STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG = "photobooth-modal";
 
 const CLICK_BUBBLE_SUPPRESS_TAGS = new Set([
   STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG,
-  "poster-modal",
+  STAGE6_POSTER_MODAL_BLOCK_TAG,
 ]);
 
 export function isStage6PhotoboothModalOpen() {
@@ -94,4 +100,23 @@ const NAME_MODAL_BLOCK_TAG = "name-modal";
 export function openStage6NameModal() {
   blockStage6NotificationsOnce(NAME_MODAL_BLOCK_TAG);
   window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
+}
+
+/** 포토부스 — 사용자 클릭은 큐 없이 즉시 연다 */
+export function openStage6PhotoboothModal(detail) {
+  // 자동 닫기 등으로 React만 닫히고 block이 남으면 재오픈·알림 큐가 꼬임
+  blockRefcounts.delete(STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG);
+  blockStage6NotificationsOnce(STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG);
+  window.dispatchEvent(
+    new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT, { detail }),
+  );
+}
+
+/** 포스터 — 사용자 클릭은 큐 없이 즉시 연다 */
+export function openStage6PosterModal(detail) {
+  blockRefcounts.delete(STAGE6_POSTER_MODAL_BLOCK_TAG);
+  blockStage6NotificationsOnce(STAGE6_POSTER_MODAL_BLOCK_TAG);
+  window.dispatchEvent(
+    new CustomEvent(STAGE6_POSTER_MODAL_SHOW_EVENT, { detail }),
+  );
 }

@@ -39,13 +39,11 @@ export function Stage6PhotoboothModal({
     onClose?.();
   }, [onClose]);
 
-  const prevIsOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen && !prevIsOpenRef.current) {
+    if (isOpen) {
       setIsExiting(false);
     }
-    prevIsOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, videoSrc]);
 
   useEffect(() => {
     setRevealed(photos.map(() => false));
