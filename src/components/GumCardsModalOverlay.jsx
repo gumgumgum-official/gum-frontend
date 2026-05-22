@@ -53,10 +53,7 @@ export function GumCardsModalOverlay() {
   }, []);
 
   useEffect(() => {
-    const onClose = () => {
-      hasSeenTentIntroRef.current = false;
-      setPhase("closed");
-    };
+    const onClose = () => setPhase("closed");
     window.addEventListener(EVENT_CLOSE, onClose);
     return () => window.removeEventListener(EVENT_CLOSE, onClose);
   }, []);

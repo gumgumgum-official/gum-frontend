@@ -172,8 +172,6 @@ export function GumCardsModal({ open, onClose, onStick }) {
     }
 
     if (open) {
-      setFlippedCard(null);
-      flippedCardRef.current = null;
       setShouldRender(true);
       openRafRef.current = requestAnimationFrame(() => {
         setIsOverlayVisible(true);
