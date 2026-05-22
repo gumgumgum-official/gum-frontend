@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_PHOTO_RATIOS = [0.25, 0.75, 0.82];
 /** 영상 종료 후 자동으로 모달을 닫기 전 대기 시간 (ms) */
-const AUTO_CLOSE_AFTER_END_MS = 5000;
+const AUTO_CLOSE_AFTER_END_MS = 1500;
 /** 닫힐 때 오버레이 페이드아웃 시간 — style.css의 transition과 맞출 것 */
 const CLOSE_TRANSITION_MS = 320;
 

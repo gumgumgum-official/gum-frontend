@@ -9,6 +9,8 @@ import {
 } from "../../events/kioskEvents.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
+  STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_NAME_MODAL_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_HIDE_EVENT,
   STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
@@ -54,6 +56,8 @@ export function dispatchKioskSoftRestartUiCleanup() {
   dispatchStage3GameMachineModalClose();
   window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT));
+  window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_HIDE_EVENT));
+  window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
   window.dispatchEvent(new CustomEvent(STAGE6_PHONE_INDICATOR_HIDE_EVENT));

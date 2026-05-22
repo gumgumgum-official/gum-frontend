@@ -272,6 +272,8 @@ export function Stage6() {
   let isTelRinging = false;
   /** 통화 음성 재생 중 — 포인터 클릭·모달 차단 */
   let isPhoneInCall = false;
+  /** 벨 자막 재생 전에 수화기를 들면 `activateTelRinging` 자막·큐 재생 생략 */
+  let skipTelRingSubtitle = false;
   let telEmissiveProgress = 0;
   let telEmissiveTarget = 0;
   let telCallIndex = 0;
@@ -687,11 +689,10 @@ export function Stage6() {
         window.dispatchEvent(new CustomEvent(STAGE6_AUDIO_UNLOCKED_EVENT));
       });
     };
-    window.addEventListener(
-      "pointerdown",
-      onIntroAudioGestureListener,
-      { once: true, capture: true },
-    );
+    window.addEventListener("pointerdown", onIntroAudioGestureListener, {
+      once: true,
+      capture: true,
+    });
     window.addEventListener("keydown", onIntroAudioGestureListener, {
       once: true,
       capture: true,
@@ -1237,16 +1238,30 @@ export function Stage6() {
     return isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall;
   }
 
+  function dispatchTelRingSubtitleIfNeeded() {
+    if (skipTelRingSubtitle || isPhoneInCall) return;
+    const ringSubtitle =
+      PHONE_CALL_RING_SUBTITLES[telCallIndex] ?? PHONE_CALL_RING_SUBTITLES[0];
+    const messages = [{ text: ringSubtitle, holdMs: 3000 }];
+    runStage6NotificationNowOrEnqueue(() => {
+      if (skipTelRingSubtitle || isPhoneInCall) return;
+      window.dispatchEvent(
+        new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
+          detail: { messages },
+        }),
+      );
+    });
+  }
+
   function activateTelRinging() {
     if (!isStage6Active || isTelActivated) return;
     isTelActivated = true;
+    skipTelRingSubtitle = false;
     telEmissiveTarget = 1;
     showPhoneIndicator(STAGE6_PHONE_INDICATOR_MODE_RINGING);
     playPhoneRing();
     showTelBubble("click!");
-    const ringSubtitle =
-      PHONE_CALL_RING_SUBTITLES[telCallIndex] ?? PHONE_CALL_RING_SUBTITLES[0];
-    dispatchStage6SubtitleSequence([{ text: ringSubtitle, holdMs: 3000 }]);
+    dispatchTelRingSubtitleIfNeeded();
   }
 
   function startPhoneCallAfterHangup(callSrc) {
@@ -1282,6 +1297,8 @@ export function Stage6() {
 
   function playCurrentPhoneCall() {
     if (telCallIndex >= PHONE_CALL_SOUNDS.length) return;
+    skipTelRingSubtitle = true;
+    hideStage6SubtitlesNow();
     stopPhoneRing();
     hideTelBubble();
     hideCharBubble();
@@ -1476,6 +1493,7 @@ export function Stage6() {
       isTelActivated = false;
       isTelRinging = false;
       isPhoneInCall = false;
+      skipTelRingSubtitle = false;
       telEmissiveTarget = 0;
       telEmissiveProgress = 0;
       telCallIndex = 0;
@@ -2205,6 +2223,7 @@ export function Stage6() {
       isTelActivated = false;
       isTelRinging = false;
       isPhoneInCall = false;
+      skipTelRingSubtitle = false;
       telRootRef = null;
       telEmissiveMaterials.length = 0;
       telEmissiveProgress = 0;
