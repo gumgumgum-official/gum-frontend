@@ -7,6 +7,7 @@ import { initThreeApp } from "../three/initThreeApp.js";
  * @property {number} initialStage - 시작 Stage
  * @property {boolean} [enableKeyboardSwitch] - 키보드 2~6 전환 (개발용)
  * @property {boolean} [skipStage3Intro] - true면 `/dev` 등에서 Stage3 카메라·인트로 사운드 생략
+ * @property {boolean} [renderPaused] - true면 Three.js update/render 일시 정지
  * @property {function(string, Error?): void} [onError] - 에러 시 호출 (미전달 시 화면에 메시지 표시)
  */
 
@@ -20,15 +21,18 @@ export function ThreeCanvas({
   initialStage,
   enableKeyboardSwitch = false,
   skipStage3Intro = false,
+  renderPaused = false,
   onError: onErrorProp,
 }) {
   const canvasRef = useRef(null);
   const disposeRef = useRef(null);
+  const renderPausedRef = useRef(renderPaused);
   const [errorMessage, setErrorMessage] = useState(null);
 
   const handleError = onErrorProp ?? setErrorMessage;
   const onErrorRef = useRef(handleError);
   onErrorRef.current = handleError;
+  renderPausedRef.current = renderPaused;
 
   useEffect(() => {
     setErrorMessage(null);
@@ -41,6 +45,7 @@ export function ThreeCanvas({
       initialStage,
       enableKeyboardSwitch,
       skipStage3Intro,
+      getRenderPaused: () => renderPausedRef.current,
       onError: (msg, err) => onErrorRef.current(msg, err),
     });
     disposeRef.current = app.dispose;

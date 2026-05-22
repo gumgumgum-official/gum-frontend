@@ -12,7 +12,7 @@ import {
  * @param {{ includeVendingMachineSpawnPaths?: boolean }} [options]
  * @returns {string[]}
  */
-function getStage3PrewarmAbsoluteUrls(options = {}) {
+export function getStage3PrewarmAbsoluteUrls(options = {}) {
   const { includeVendingMachineSpawnPaths = true } = options;
   /** @type {string[]} */
   const urls = [];

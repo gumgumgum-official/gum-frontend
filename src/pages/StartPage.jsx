@@ -12,7 +12,14 @@ import {
 } from "../lib/monitorCurrentApi.js";
 import { resetClientForNextKioskVisitor } from "../utils/common/resetClientForNextKioskVisitor.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
-import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import {
+  warmKioskExhibitionAssets,
+  waitForKioskExhibitionCriticalGlb,
+} from "../utils/common/kioskExhibitionWarmup.js";
+import {
+  KIOSK_SOFT_RESTART_SHORTCUT_LABEL,
+  performKioskSoftRestart,
+} from "../utils/common/kioskSoftRestart.js";
 import { waitForStage3GpuReady } from "../utils/stages/stage3/stage3RevealGate.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
@@ -72,6 +79,7 @@ export function StartPage() {
   /** Stage6 완주 후: reset + Stage3 GPU 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
+  const [isSoftRestarting, setIsSoftRestarting] = useState(false);
 
   const stopIntroBgm = useCallback(() => {
     if (introBgmStopTimerRef.current) {
@@ -350,7 +358,7 @@ export function StartPage() {
     const params = new URLSearchParams(location.search);
     if (params.get("complete") === "1") return;
     getGLBLoader().preloadDecoders();
-    warmStage3GltfTemplateUrls();
+    warmKioskExhibitionAssets({ priority: "idle" });
     // 인트로 이미지 HTTP 캐시 워밍업 — 첫 브라우저 로드 시 reveal 버벅임 방지
     const introImageUrls = [
       "/assets/intro_story/1.svg",
@@ -468,6 +476,39 @@ export function StartPage() {
     resolve();
   }, []);
 
+  const handleSoftRestart = useCallback(
+    async (event) => {
+      event?.stopPropagation?.();
+      event?.preventDefault?.();
+      if (isPreparingKiosk || isCompletingKioskSession || isSoftRestarting) {
+        return;
+      }
+      setIsSoftRestarting(true);
+      stopIntroBgm();
+      try {
+        await performKioskSoftRestart();
+        setIsIntroOpen(false);
+        setIsStartFadingOut(false);
+        setIsEnterLoadingVideo(false);
+        setIsPreparingKiosk(false);
+        startNavigationLockedRef.current = false;
+        navigate({ pathname: "/start", search: "" }, { replace: true });
+      } catch (e) {
+        console.warn("[StartPage] soft restart 실패:", e);
+        navigate({ pathname: "/start", search: "" }, { replace: true });
+      } finally {
+        setIsSoftRestarting(false);
+      }
+    },
+    [
+      isPreparingKiosk,
+      isCompletingKioskSession,
+      isSoftRestarting,
+      navigate,
+      stopIntroBgm,
+    ],
+  );
+
   const handleIntroEnter = useCallback(async () => {
     if (isCompletingKioskSession || startNavigationLockedRef.current) {
       return;
@@ -522,6 +563,7 @@ export function StartPage() {
         });
       });
       await Promise.all([
+        waitForKioskExhibitionCriticalGlb(),
         Promise.race([waitForStage3GpuReady(), gpuTimeout]),
         Promise.race([videoPromise, videoTimeout]),
       ]);
@@ -611,6 +653,7 @@ export function StartPage() {
           try {
             await resetClientForNextKioskVisitor();
             getGLBLoader().preloadDecoders();
+            await waitForKioskExhibitionCriticalGlb();
             await waitForStage3GpuReady();
             setToastMessage(null);
             params.delete("complete");
@@ -637,7 +680,7 @@ export function StartPage() {
   }, [location.search, navigate]);
 
   const isStartInteractiveBlocked =
-    isPreparingKiosk || isCompletingKioskSession;
+    isPreparingKiosk || isCompletingKioskSession || isSoftRestarting;
   const startPageClassName = [
     styles.page,
     styles.startBackground,
@@ -688,6 +731,17 @@ export function StartPage() {
         active={isEnterLoadingVideo}
         onEnded={handleLoadingVideoEnded}
       />
+      <button
+        type="button"
+        className={styles.startSoftRestartBtn}
+        title={`운영 복구 (F5 대신). 단축키 ${KIOSK_SOFT_RESTART_SHORTCUT_LABEL}`}
+        aria-label="다시 시작 — 운영 복구"
+        disabled={isStartInteractiveBlocked}
+        onClick={(e) => void handleSoftRestart(e)}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {isSoftRestarting ? "복구 중…" : "다시 시작"}
+      </button>
     </div>
   );
 }

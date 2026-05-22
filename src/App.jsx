@@ -23,6 +23,11 @@ import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
 import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
+import { waitForStage3GpuReady } from "./utils/stages/stage3/stage3RevealGate.js";
+import {
+  performKioskSoftRestart,
+  setKioskSoftRestartRequestHandler,
+} from "./utils/common/kioskSoftRestart.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
   getGumServerBaseUrl,
@@ -84,6 +89,8 @@ function AppLayout() {
   const isStartRoute = location.pathname === "/start";
   const isKioskRoute = location.pathname === "/kiosk";
   const showKioskCanvas = isStartRoute || isKioskRoute;
+  const [stage3GpuReady, setStage3GpuReady] = useState(false);
+  const kioskRenderPaused = isStartRoute && !isKioskRoute && stage3GpuReady;
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showGameMachineModalShell, setShowGameMachineModalShell] =
@@ -124,6 +131,18 @@ function AppLayout() {
     closeGameMachineModalShell();
   }, [closeGameMachineModalShell]);
 
+  const runKioskSoftRestart = useCallback(async () => {
+    await performKioskSoftRestart();
+    navigate({ pathname: "/start", search: "" }, { replace: true });
+  }, [navigate]);
+
+  useEffect(() => {
+    setKioskSoftRestartRequestHandler(() => {
+      void runKioskSoftRestart();
+    });
+    return () => setKioskSoftRestartRequestHandler(null);
+  }, [runKioskSoftRestart]);
+
   // 긴급 배정: ?worryId=223 감지 → 서버 emergency-assign 호출 후 파라미터 제거
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -149,6 +168,22 @@ function AppLayout() {
     }
     prevPathnameRef.current = location.pathname;
   }, [location.pathname, isKioskRoute]);
+
+  // /start 대기 중(hidden 캔버스): GPU 워밍업 완료 후에만 렌더 정지
+  useEffect(() => {
+    if (!showKioskCanvas) {
+      setStage3GpuReady(false);
+      return;
+    }
+    let cancelled = false;
+    setStage3GpuReady(false);
+    void waitForStage3GpuReady().then(() => {
+      if (!cancelled) setStage3GpuReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showKioskCanvas, location.pathname]);
 
   // Stage3 → Stage6 전환 이벤트 (/kiosk에서만)
   useEffect(() => {
@@ -373,7 +408,11 @@ function AppLayout() {
             pointerEvents: isKioskRoute ? "auto" : "none",
           }}
         >
-          <ThreeCanvas allowedStages={KIOSK_ALLOWED_STAGES} initialStage={3} />
+          <ThreeCanvas
+            allowedStages={KIOSK_ALLOWED_STAGES}
+            initialStage={3}
+            renderPaused={kioskRenderPaused}
+          />
         </div>
       )}
       <Routes>
