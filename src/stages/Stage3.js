@@ -392,6 +392,8 @@ export function Stage3(options = {}) {
     hasBlockingOverlayOpen: () => overlayController.hasBlockingOverlayOpen(),
     isStampPanelSettledInCorner: () =>
       stampController.isStampPanelSettledInCorner(),
+    isWorryEnterBubbleUnlocked: () =>
+      stampController.isWorryEnterBubbleUnlocked(),
     attachIntClickHintBubble: (el) =>
       interactionsController.attachIntClickHintBubble(el),
     detachIntClickHintBubble: () =>

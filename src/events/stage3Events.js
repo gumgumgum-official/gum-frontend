@@ -16,8 +16,8 @@ export const STAGE3_INTRO_MOVEMENT_HINT_MESSAGE =
 
 /** @type {Record<"click" | "move", string>} */
 export const STAGE3_INTRO_INPUT_BLOCKED_MESSAGES = {
-  click: "인트로가 다 끝나면 클릭할 수 있어요!",
-  move: "인트로가 다 끝나면 움직일 수 있어요!",
+  click: "⚠️ 인트로가 다 끝나면 클릭할 수 있어요",
+  move: "⚠️ 인트로가 다 끝나면 움직일 수 있어요",
 };
 
 export function dispatchStage3IslandExitBlocked() {
