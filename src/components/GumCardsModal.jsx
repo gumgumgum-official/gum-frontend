@@ -5,10 +5,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { CARDS } from "../config/stages/stage3/gumCardsConfig.js";
-import {
-  KIOSK_NEW_VISITOR_EVENT,
-  KIOSK_SOFT_RESTART_EVENT,
-} from "../events/kioskEvents.js";
+import { KIOSK_NEW_VISITOR_EVENT } from "../events/kioskEvents.js";
 import { playRandomGumCardPickSound } from "../utils/stages/stage3/playGumCardPickSound.js";
 import { EVENT_CLOSE } from "../utils/stages/stage3/gumCardsModalLauncher.js";
 import "./GumCardsModal.css";
@@ -177,11 +174,9 @@ export function GumCardsModal({ open, onClose, onStick }) {
   useEffect(() => {
     const onSessionReset = () => resetCardSelection();
     window.addEventListener(KIOSK_NEW_VISITOR_EVENT, onSessionReset);
-    window.addEventListener(KIOSK_SOFT_RESTART_EVENT, onSessionReset);
     window.addEventListener(EVENT_CLOSE, onSessionReset);
     return () => {
       window.removeEventListener(KIOSK_NEW_VISITOR_EVENT, onSessionReset);
-      window.removeEventListener(KIOSK_SOFT_RESTART_EVENT, onSessionReset);
       window.removeEventListener(EVENT_CLOSE, onSessionReset);
     };
   }, [resetCardSelection]);

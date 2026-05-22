@@ -15,6 +15,7 @@ export function isStage3IntroPresentationLocked({
   isInteractionLocked,
 }) {
   const cameraIntro = getCameraIntroState();
+  // 미시작 상태(active=false, completed=false)도 잠금
   if (cameraIntro.active || !cameraIntro.completed) return true;
   if (isStampIntroAnimating()) return true;
   if (isInteractionLocked()) return true;
