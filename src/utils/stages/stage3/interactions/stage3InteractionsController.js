@@ -160,6 +160,8 @@ export function createStage3InteractionsController({
   const _heldBalloonActual = new THREE.Vector3();
   /** 손(Hand_R)에서 풍선까지 실 길이(월드 유닛) — 값이 클수록 풍선이 높이 뜸 */
   const HELD_BALLOON_STRING_LENGTH = 0.55;
+  /** 풍선 첫 획득 안내 자막을 1회만 노출하기 위한 플래그 */
+  let balloonPickupAnnounced = false;
 
   let _pointerMoveRafId = 0;
   /** @type {PointerEvent | null} */
@@ -643,6 +645,12 @@ export function createStage3InteractionsController({
       spawnBalloonPickupEffect(sx, sy);
     } else {
       spawnBalloonPickupEffect(clickX, clickY);
+    }
+
+    // 하양색 파티클 효과와 함께 첫 풍선 획득 시 1회만 안내 자막
+    if (!balloonPickupAnnounced) {
+      balloonPickupAnnounced = true;
+      dispatchSubtitleLine("멋진 풍선이네요!");
     }
 
     const stringPositions = new Float32Array(6);
