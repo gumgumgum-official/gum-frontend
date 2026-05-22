@@ -128,9 +128,14 @@ export function createStage3StampController({
     return true;
   }
 
+  /** @returns {HTMLElement | null} */
+  function getStampPanel() {
+    const el = stampUiRoot?.querySelector(".stage3-stamp-panel") ?? null;
+    return el instanceof window.HTMLElement ? el : null;
+  }
+
   function setStampPanelHidden(hidden) {
-    if (!stampUiRoot) return;
-    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (!panel) return;
     panel.classList.toggle("stage3-stamp-panel--hidden", hidden);
   }
@@ -270,9 +275,9 @@ export function createStage3StampController({
       window.clearTimeout(stage3StampIntroFlyTimerId);
       stage3StampIntroFlyTimerId = null;
     }
-    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (panel) {
-      clearStampIntroInlineStyles(/** @type {HTMLElement} */ (panel));
+      clearStampIntroInlineStyles(panel);
       panel.getAnimations().forEach((anim) => anim.cancel());
       panel.classList.remove(
         "stage3-stamp-panel--intro-center",
@@ -285,7 +290,7 @@ export function createStage3StampController({
 
   function playStampPanelEntryAnimation() {
     if (!stampUiRoot || !getIsStageActive()) return;
-    const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (!panel) return;
     clearStampIntroTimers();
     stage3StampIntroAnimating = true;
@@ -351,7 +356,7 @@ export function createStage3StampController({
       window.clearTimeout(stage3EntryStampRevealTimerId);
       stage3EntryStampRevealTimerId = null;
     }
-    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (panel) panel.classList.add("stage3-stamp-panel--hidden");
 
     dispatchSubtitleSequence([
@@ -379,9 +384,9 @@ export function createStage3StampController({
     stage3InteractionLocked = false;
     stage3StampIntroAnimating = false;
 
-    const panel = stampUiRoot?.querySelector(".stage3-stamp-panel");
+    const panel = getStampPanel();
     if (panel) {
-      clearStampIntroInlineStyles(/** @type {HTMLElement} */ (panel));
+      clearStampIntroInlineStyles(panel);
       panel.classList.remove(
         "stage3-stamp-panel--hidden",
         "stage3-stamp-panel--intro-center",

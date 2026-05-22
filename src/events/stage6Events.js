@@ -46,3 +46,43 @@ export const STAGE6_PHONE_INDICATOR_HIDE_EVENT =
 /** @typedef {'ringing' | 'in-call'} Stage6PhoneIndicatorMode */
 export const STAGE6_PHONE_INDICATOR_MODE_RINGING = "ringing";
 export const STAGE6_PHONE_INDICATOR_MODE_IN_CALL = "in-call";
+
+/** 인트로·전화 중 등 입력 제한 시 상단 토스트 */
+export const STAGE6_INPUT_BLOCKED_EVENT = "gum:stage6InputBlocked";
+
+/** @deprecated `STAGE6_INPUT_BLOCKED_EVENT` 사용 */
+export const STAGE6_INTRO_INPUT_BLOCKED_EVENT = STAGE6_INPUT_BLOCKED_EVENT;
+
+/** @typedef {'move' | 'click'} Stage6InputBlockedKind */
+/** @typedef {'intro' | 'phone-in-call'} Stage6InputBlockedReason */
+
+/** @type {Record<Stage6InputBlockedReason, Record<Stage6InputBlockedKind, string>>} */
+const STAGE6_INPUT_BLOCKED_MESSAGES = {
+  intro: {
+    move: "인트로가 다 끝나면 움직일 수 있어요!",
+    click: "인트로가 다 끝나면 클릭할 수 있어요",
+  },
+  "phone-in-call": {
+    move: "전화가 끝나면 움직일 수 있어요!",
+    click: "전화가 끝나면 클릭할 수 있어요",
+  },
+};
+
+/**
+ * @param {Stage6InputBlockedReason} reason
+ * @param {Stage6InputBlockedKind} kind
+ */
+export function dispatchStage6InputBlocked(reason, kind) {
+  const text = STAGE6_INPUT_BLOCKED_MESSAGES[reason]?.[kind];
+  if (!text) return;
+  window.dispatchEvent(
+    new CustomEvent(STAGE6_INPUT_BLOCKED_EVENT, {
+      detail: { reason, kind, text },
+    }),
+  );
+}
+
+/** @deprecated `dispatchStage6InputBlocked` 사용 */
+export function dispatchStage6IntroInputBlocked(kind) {
+  dispatchStage6InputBlocked("intro", kind);
+}

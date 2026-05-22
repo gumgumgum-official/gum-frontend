@@ -39,6 +39,7 @@ import {
   STAGE6_PHONE_INDICATOR_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
+  STAGE6_INPUT_BLOCKED_EVENT,
 } from "./events/stage6Events.js";
 import { STAGE3_ISLAND_EXIT_BLOCKED_EVENT } from "./events/stage3Events.js";
 import {
@@ -106,9 +107,19 @@ function AppLayout() {
     useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
-  const [showStage3IslandExitToast, setShowStage3IslandExitToast] =
-    useState(false);
-  const stage3IslandExitToastTimerRef = useRef(null);
+  const [topHudToastMessage, setTopHudToastMessage] = useState(null);
+  const topHudToastTimerRef = useRef(null);
+
+  const showTopHudToast = useCallback((message) => {
+    setTopHudToastMessage(message);
+    if (topHudToastTimerRef.current) {
+      clearTimeout(topHudToastTimerRef.current);
+    }
+    topHudToastTimerRef.current = window.setTimeout(() => {
+      setTopHudToastMessage(null);
+      topHudToastTimerRef.current = null;
+    }, 2000);
+  }, []);
 
   const closeGameMachineModalShell = useCallback(() => {
     setShowGameMachineModalShell(false);
@@ -269,30 +280,36 @@ function AppLayout() {
 
   useEffect(() => {
     const showIslandExitToast = () => {
-      setShowStage3IslandExitToast(true);
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
-      }
-      stage3IslandExitToastTimerRef.current = window.setTimeout(() => {
-        setShowStage3IslandExitToast(false);
-        stage3IslandExitToastTimerRef.current = null;
-      }, 2000);
+      showTopHudToast("하핳.. 거기로는 못 가요😅");
+    };
+    const showStage6InputBlockedToast = (event) => {
+      const text =
+        typeof event?.detail?.text === "string" ? event.detail.text : "";
+      if (text) showTopHudToast(text);
     };
     window.addEventListener(
       STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
       showIslandExitToast,
+    );
+    window.addEventListener(
+      STAGE6_INPUT_BLOCKED_EVENT,
+      showStage6InputBlockedToast,
     );
     return () => {
       window.removeEventListener(
         STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
         showIslandExitToast,
       );
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
-        stage3IslandExitToastTimerRef.current = null;
+      window.removeEventListener(
+        STAGE6_INPUT_BLOCKED_EVENT,
+        showStage6InputBlockedToast,
+      );
+      if (topHudToastTimerRef.current) {
+        clearTimeout(topHudToastTimerRef.current);
+        topHudToastTimerRef.current = null;
       }
     };
-  }, []);
+  }, [showTopHudToast]);
 
   useEffect(() => {
     const showPhone = (e) => {
@@ -348,22 +365,24 @@ function AppLayout() {
       />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />
-      <div
-        className={`airport-chime-indicator stage3-island-exit-toast ${showStage3IslandExitToast ? "visible" : ""}`}
-      >
-        하핳.. 거기로는 못 가요😅
-      </div>
-      <div
-        className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
-      >
-        🔔 띵-동
-      </div>
-      <div
-        className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
-      >
-        {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
-          ? "전화 중 📞"
-          : "☎️ 전화 왔어요"}
+      <div className="airport-hud-indicator-stack" aria-live="polite">
+        <div
+          className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
+        >
+          🔔 띵-동
+        </div>
+        <div
+          className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
+        >
+          {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+            ? "전화 중 📞"
+            : "☎️ 전화 왔어요"}
+        </div>
+        <div
+          className={`airport-chime-indicator stage3-island-exit-toast ${topHudToastMessage ? "visible" : ""}`}
+        >
+          {topHudToastMessage ?? ""}
+        </div>
       </div>
       {showKioskCanvas && (
         <div

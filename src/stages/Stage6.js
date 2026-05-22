@@ -36,7 +36,9 @@ import {
   STAGE6_INT_CLICK_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
   STAGE6_INTERACTION_UNLOCK_EVENT,
+  STAGE6_NAME_MODAL_HIDE_EVENT,
   STAGE6_NAME_MODAL_SHOW_EVENT,
+  STAGE6_SUBTITLE_HIDE_EVENT,
   STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_MODE_IN_CALL,
@@ -46,6 +48,7 @@ import {
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
+  dispatchStage6InputBlocked,
 } from "../events/stage6Events.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import {
@@ -58,6 +61,8 @@ import {
   dispatchGatedStage6WindowEvent,
   isStage6ClickBubbleSuppressed,
   resetStage6NotificationGate,
+  runStage6NotificationNowOrEnqueue,
+  STAGE6_PHONE_IN_CALL_BLOCK_TAG,
   unblockStage6Notifications,
 } from "../utils/stages/stage6/stage6NotificationGate.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
@@ -277,6 +282,9 @@ export function Stage6() {
   const telEmissiveMaterials = [];
   let isSceneInteractionLocked = false;
   let isAnnouncementActive = false;
+  /** 인트로 중 입력 토스트 재표시 간격(초) — App 표시 시간과 동일 */
+  const INTRO_INPUT_TOAST_COOLDOWN_SEC = 2;
+  let introInputBlockedToastCooldown = 0;
   let isFinishFired = false;
   let isBoardingPassIssued = false;
   let isEscalatorRiding = false;
@@ -690,8 +698,34 @@ export function Stage6() {
     }, AIRPLANE_CALL_SIGN_DELAY_MS);
   }
 
+  function isIntroMovementKey(event) {
+    return event.key in keyboard.keys || event.code in keyboard.keys;
+  }
+
+  /** @returns {import("../events/stage6Events.js").Stage6InputBlockedReason | null} */
+  function getStage6InputBlockedReason() {
+    if (isAnnouncementActive) return "intro";
+    if (isPhoneInCall) return "phone-in-call";
+    return null;
+  }
+
+  /** @param {import("../events/stage6Events.js").Stage6InputBlockedKind} kind */
+  function notifyStage6InputBlocked(kind) {
+    const reason = getStage6InputBlockedReason();
+    if (!isStage6Active || !reason) return;
+    if (introInputBlockedToastCooldown > 0) return;
+    dispatchStage6InputBlocked(reason, kind);
+    introInputBlockedToastCooldown = INTRO_INPUT_TOAST_COOLDOWN_SEC;
+  }
+
   const handleKeyDown = (event) => {
-    if (isSceneInteractionLocked || isAnnouncementActive || isFinishFired) {
+    if (getStage6InputBlockedReason()) {
+      if (isIntroMovementKey(event)) {
+        notifyStage6InputBlocked("move");
+      }
+      return;
+    }
+    if (isSceneInteractionLocked || isFinishFired) {
       return;
     }
     if (event.key === "Enter") {
@@ -932,6 +966,49 @@ export function Stage6() {
     });
   }
 
+  function hideStage6SubtitlesNow() {
+    window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
+  }
+
+  function dismissStage6ModalsNow() {
+    window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_HIDE_EVENT));
+  }
+
+  function beginPhoneInCallNotificationsBlock() {
+    blockStage6Notifications(STAGE6_PHONE_IN_CALL_BLOCK_TAG);
+    hideStage6SubtitlesNow();
+    dismissStage6ModalsNow();
+  }
+
+  function endPhoneInCallNotificationsBlock() {
+    unblockStage6Notifications(STAGE6_PHONE_IN_CALL_BLOCK_TAG);
+  }
+
+  /**
+   * @param {string} eventName
+   * @param {Record<string, unknown> | undefined} detail
+   * @param {string} blockTag
+   */
+  function showStage6Modal(eventName, detail, blockTag) {
+    runStage6NotificationNowOrEnqueue(() => {
+      blockStage6Notifications(blockTag);
+      window.dispatchEvent(
+        new CustomEvent(eventName, { detail: detail ?? undefined }),
+      );
+    });
+  }
+
+  /** @param {string} eventName @param {string} blockTag */
+  function showStage6ModalEvent(eventName, blockTag) {
+    runStage6NotificationNowOrEnqueue(() => {
+      blockStage6Notifications(blockTag);
+      window.dispatchEvent(new CustomEvent(eventName));
+    });
+  }
+
   function collectAtmInteractiveRoot(rootModel) {
     atmRootRef = null;
     rootModel.traverse((obj) => {
@@ -1116,6 +1193,7 @@ export function Stage6() {
     phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
     phoneCallAudio.onended = () => {
       isPhoneInCall = false;
+      endPhoneInCallNotificationsBlock();
       hidePhoneIndicator();
       telEmissiveTarget = 0;
       telRingAgainTimeoutId = window.setTimeout(() => {
@@ -1140,6 +1218,7 @@ export function Stage6() {
     hideTelBubble();
     hideCharBubble();
     isPhoneInCall = true;
+    beginPhoneInCallNotificationsBlock();
     telEmissiveTarget = 0;
     showPhoneIndicator(STAGE6_PHONE_INDICATOR_MODE_IN_CALL);
     isTelActivated = false;
@@ -1299,7 +1378,9 @@ export function Stage6() {
         glbLoader,
         config,
         getKeys: () =>
-          isSceneInteractionLocked || isAnnouncementActive ? {} : keyboard.keys,
+          isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall
+            ? {}
+            : keyboard.keys,
       });
       keyboard.mount();
 
@@ -1334,6 +1415,7 @@ export function Stage6() {
       telEmissiveMaterials.length = 0;
       isSceneInteractionLocked = false;
       isAnnouncementActive = false;
+      introInputBlockedToastCooldown = 0;
       isFinishFired = false;
       isBoardingPassIssued = false;
       isEscalatorRiding = false;
@@ -1368,23 +1450,26 @@ export function Stage6() {
       );
       window.addEventListener("keydown", handleKeyDown, { capture: true });
       onPointerDown = (event) => {
+        if (getStage6InputBlockedReason()) {
+          notifyStage6InputBlocked("click");
+          return;
+        }
         const hit = getPointerHitTarget(event);
         if (!hit) return;
         if (isStage6PointerBlocked()) return;
         if (hit.target === "photobooth") {
           playUiClickSound();
           hideTelBubble();
-          blockStage6Notifications("photobooth-modal");
-          window.dispatchEvent(
-            new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT, {
-              detail: {
-                videoSrc:
-                  config.photoboothVideoPath ??
-                  "/assets/photo_booth/photobooth.mp4",
-                photoSrcs: config.photoboothPhotoSrcs,
-                photoRatios: config.photoboothPhotoRatios,
-              },
-            }),
+          showStage6Modal(
+            STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+            {
+              videoSrc:
+                config.photoboothVideoPath ??
+                "/assets/photo_booth/photobooth.mp4",
+              photoSrcs: config.photoboothPhotoSrcs,
+              photoRatios: config.photoboothPhotoRatios,
+            },
+            "photobooth-modal",
           );
         }
         const isAtmHit = isAtmHitTarget(hit);
@@ -1403,8 +1488,7 @@ export function Stage6() {
               },
             ]);
           } else {
-            blockStage6Notifications("name-modal");
-            window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
+            showStage6ModalEvent(STAGE6_NAME_MODAL_SHOW_EVENT, "name-modal");
           }
         } else {
           registerNonAtmInteraction(hit);
@@ -1412,15 +1496,14 @@ export function Stage6() {
         if (hit.target === "boardpic" || hit.target === "poster") {
           playUiClickSound();
           hideTelBubble();
-          blockStage6Notifications("poster-modal");
-          window.dispatchEvent(
-            new CustomEvent(STAGE6_POSTER_MODAL_SHOW_EVENT, {
-              detail: {
-                imageSrc:
-                  config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
-                intName: hit.intName,
-              },
-            }),
+          showStage6Modal(
+            STAGE6_POSTER_MODAL_SHOW_EVENT,
+            {
+              imageSrc:
+                config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
+              intName: hit.intName,
+            },
+            "poster-modal",
           );
         }
         window.dispatchEvent(
@@ -1740,6 +1823,12 @@ export function Stage6() {
     },
 
     update(delta) {
+      if (introInputBlockedToastCooldown > 0) {
+        introInputBlockedToastCooldown = Math.max(
+          0,
+          introInputBlockedToastCooldown - delta,
+        );
+      }
       atmEmissiveProgress = THREE.MathUtils.damp(
         atmEmissiveProgress,
         atmEmissiveTarget,
@@ -2053,6 +2142,7 @@ export function Stage6() {
       telCallIndex = 0;
       isSceneInteractionLocked = false;
       isAnnouncementActive = false;
+      introInputBlockedToastCooldown = 0;
       intRaycastMeshes.length = 0;
 
       bagPhysics.cleanup();

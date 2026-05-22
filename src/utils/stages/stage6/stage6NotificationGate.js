@@ -8,6 +8,9 @@ const blockRefcounts = new Map();
 const pendingRuns = [];
 let flushScheduled = false;
 
+/** 전화 통화 중 자막·모달 큐잉 */
+export const STAGE6_PHONE_IN_CALL_BLOCK_TAG = "phone-in-call";
+
 const CLICK_BUBBLE_SUPPRESS_TAGS = new Set([
   "photobooth-modal",
   "poster-modal",
