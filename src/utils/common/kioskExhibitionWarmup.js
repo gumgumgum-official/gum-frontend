@@ -12,6 +12,7 @@ import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "./gltfTemplateCache.js";
+import { getGuestbookImageUrls } from "./guestbookAssetUrls.js";
 import { preloadImageUrls } from "./preloadImages.js";
 
 export const TENT_SCENE_GLB_PATH = "/models/stage3/tent_gum_scene.glb";
@@ -40,9 +41,7 @@ export function getKioskExhibitionImageUrls() {
   for (const rel of notice?.voteCandidateImages ?? []) {
     urls.push(resolvePublicAssetUrl(rel));
   }
-  if (notice?.guestbookFullscreenBg) {
-    urls.push(resolvePublicAssetUrl(notice.guestbookFullscreenBg));
-  }
+  urls.push(...getGuestbookImageUrls());
   urls.push(resolvePublicAssetUrl(STAMP_POSTER_IMAGE_PATH));
   return [...new Set(urls)];
 }

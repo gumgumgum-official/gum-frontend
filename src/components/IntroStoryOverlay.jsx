@@ -4,7 +4,7 @@ import styles from "../pages/Page.module.css";
 const FIRST_LINE_DELAY_MS = 500;
 const REST_LINES_DELAY_MS = 1700;
 const LAST_LINE_DELAY_MS = 2600;
-const ADVANCE_HINT_DELAY_MS = 1200;
+const ADVANCE_HINT_DELAY_MS = 2000;
 const INTRO_OVERLAY_ENTER_MS = 750;
 
 const INTRO_SCENES = [
@@ -321,6 +321,14 @@ export function IntroStoryOverlay({ onComplete }) {
           ))}
         </div>
         <div className={styles.introActionSlot}>
+          {!isFinalScene && showAdvanceHint ? (
+            <p
+              className={`${styles.introHint} ${styles.introHintShow}`}
+              aria-hidden="true"
+            >
+              클릭으로 다음 화면 넘어가기
+            </p>
+          ) : null}
           {isFinalScene ? (
             showAdvanceHint ? (
               <button

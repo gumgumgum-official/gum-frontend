@@ -6,7 +6,10 @@ import { prefetchVoteBundle } from "../lib/voteBundleCache.js";
 import { playRandomNoticePaperSound } from "../utils/stages/stage3/playNoticePaperSound.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
-import { GuestbookEmbed } from "./GuestbookEmbed";
+import { GuestbookEmbed } from "./GuestbookEmbed.jsx";
+import { getGuestbookImageUrls } from "../utils/common/guestbookAssetUrls.js";
+import { preloadImageUrls } from "../utils/common/preloadImages.js";
+import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const NOTICE_POSTER = NOTICE.posterImages;
@@ -66,8 +69,34 @@ export function NoticeModalBoard({ isOpen, onClose }) {
     prefetchVoteBundle(voteClientId);
   }, [isOpen, voteClientId]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    void preloadImageUrls(getGuestbookImageUrls());
+  }, [isOpen]);
+
+  const guestbookBgUrl = useMemo(
+    () => resolvePublicAssetUrl(NOTICE.guestbookFullscreenBg),
+    [],
+  );
+
   return (
     <AnimatePresence>
+      {isOpen ? (
+        <img
+          src={guestbookBgUrl}
+          alt=""
+          aria-hidden
+          fetchPriority="low"
+          decoding="async"
+          style={{
+            position: "fixed",
+            width: 0,
+            height: 0,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+      ) : null}
       {isOpen && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -405,7 +434,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   pointerEvents: zoomedPoster ? "auto" : "none",
                   ...(zoomedPoster === "guestbook"
                     ? {
-                        backgroundImage: `url(${NOTICE.guestbookFullscreenBg})`,
+                        backgroundImage: `url(${guestbookBgUrl})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
