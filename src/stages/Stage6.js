@@ -496,6 +496,11 @@ export function Stage6() {
     const runAnnounceFallback = () => {
       if (announceFallbackFired || !isStage6Active) return;
       announceFallbackFired = true;
+      if (airportAnnounceIntroAudio) {
+        airportAnnounceIntroAudio.onplay = null;
+        airportAnnounceIntroAudio.ontimeupdate = null;
+        airportAnnounceIntroAudio.onended = null;
+      }
       const cues = STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES ?? [];
       let cueIdx = 0;
       const showNextCue = () => {
@@ -644,6 +649,10 @@ export function Stage6() {
       const runChimeFallback = () => {
         if (chimeFallbackFired || !isStage6Active) return;
         chimeFallbackFired = true;
+        if (airplaneCallSignAudio) {
+          airplaneCallSignAudio.ontimeupdate = null;
+          airplaneCallSignAudio.onended = null;
+        }
         if (isAirportChimeVisible) {
           dispatchGatedStage6WindowEvent(AIRPORT_CHIME_HIDE_EVENT);
           isAirportChimeVisible = false;
@@ -672,6 +681,7 @@ export function Stage6() {
         isAirportChimeVisible = true;
       };
       airplaneCallSignAudio.onended = () => {
+        if (chimeFallbackFired) return;
         if (isAirportChimeVisible) {
           dispatchGatedStage6WindowEvent(AIRPORT_CHIME_HIDE_EVENT);
           isAirportChimeVisible = false;
@@ -1417,7 +1427,7 @@ export function Stage6() {
             new CustomEvent(STAGE6_POSTER_MODAL_SHOW_EVENT, {
               detail: {
                 imageSrc:
-                  config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
+                  config.boardPosterImage ?? "/assets/poster/stamp_poster.webp",
                 intName: hit.intName,
               },
             }),
