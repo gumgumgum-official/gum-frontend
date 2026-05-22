@@ -63,6 +63,11 @@ import {
   resetStage3RevealForNextKioskEntry,
   resetStage3RevealGate,
 } from "../utils/stages/stage3/stage3RevealGate.js";
+import { isStage3IntroPresentationLocked } from "../utils/stages/stage3/stage3IntroPresentationLock.js";
+import {
+  notifyStage3IntroInputBlocked,
+  resetStage3IntroInputBlockedNotify,
+} from "../utils/stages/stage3/stage3IntroInputBlockedNotify.js";
 
 /**
  * `skipStage3Intro`가 true면 `/dev` 등에서 상공 카메라·인트로 사운드를 생략한다.
@@ -110,7 +115,15 @@ export function Stage3(options = {}) {
 
   let textDestroyed = false;
   let cameraShakeEndTime = 0;
-  const keyboard = createKeyboardInput(STAGE3_MOVEMENT_KEY_CODES);
+  /** @type {() => boolean} */
+  let isIntroPresentationLocked = () => false;
+  const keyboard = createKeyboardInput(STAGE3_MOVEMENT_KEY_CODES, {
+    guardKeyDown() {
+      if (!isIntroPresentationLocked()) return true;
+      notifyStage3IntroInputBlocked("move");
+      return false;
+    },
+  });
   let character = null;
   let gumFollowers = null;
   /** @type {import("three").WebGLRenderer | null} */
@@ -156,6 +169,7 @@ export function Stage3(options = {}) {
     pendingGumStickCardNums.length = 0;
     gumFollowers?.clearStickFollowers?.();
     resetStage3RevealForNextKioskEntry();
+    resetStage3IntroInputBlockedNotify();
   }
 
   function startStage3KioskCameraIntro() {
@@ -231,6 +245,13 @@ export function Stage3(options = {}) {
     },
   });
 
+  isIntroPresentationLocked = () =>
+    isStage3IntroPresentationLocked({
+      getCameraIntroState: () => cameraIntroController.getState(),
+      isStampIntroAnimating: () => stampController.isStampIntroAnimating(),
+      isInteractionLocked: () => stampController.isInteractionLocked(),
+    });
+
   /** @type {ReturnType<typeof createStage3LetterController>} */
   let letterController;
 
@@ -301,6 +322,7 @@ export function Stage3(options = {}) {
     hasBlockingOverlayOpen: () => overlayController.hasBlockingOverlayOpen(),
     isStampIntroAnimating: () => stampController.isStampIntroAnimating(),
     isInteractionLocked: () => stampController.isInteractionLocked(),
+    isIntroPresentationLocked,
     onStampKeyToggle: () => stampController.handleStampKeyToggle(),
     onEnterHit: () => onEnterHit(),
     onResetLetterFall: () => letterController.resetFall(),
@@ -318,6 +340,7 @@ export function Stage3(options = {}) {
       stampController.isStampIntroAnimating() ||
       stampController.isInteractionLocked() ||
       overlayController.hasBlockingOverlayOpen(),
+    isIntroPresentationLocked,
     getPortalTransitionInProgress: () => portalController.isInProgress(),
     isPortalOpenForStageTransition: () => stampController.isPortalOpenReady(),
     onTryEnterPortal: () => {

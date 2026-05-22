@@ -8,5 +8,5 @@ export const STAGE3_USER_ENTER_BUBBLE_GAP_SEC = 4.0;
 /** 고민 ENTER 힌트 말풍선 — 표시 시 랜덤 선택 */
 export const STAGE3_WORRY_ENTER_BUBBLE_MESSAGES = [
   "앞에 있는 엔터 쿠션을 마구 두들겨 주세요! 🔨",
-  "엔터키를 세게 때려서 걱정을 부셔버려요!",
+  "엔터키를 세게 때려서 걱정을 부셔버려요~!",
 ];

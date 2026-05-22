@@ -47,7 +47,11 @@ import {
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
-import { STAGE3_ISLAND_EXIT_BLOCKED_EVENT } from "./events/stage3Events.js";
+import {
+  STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+  STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+  STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+} from "./events/stage3Events.js";
 import {
   runStage6NotificationNowOrEnqueue,
   unblockStage6Notifications,
@@ -117,9 +121,11 @@ function AppLayout() {
     useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
-  const [showStage3IslandExitToast, setShowStage3IslandExitToast] =
-    useState(false);
-  const stage3IslandExitToastTimerRef = useRef(null);
+  const [stage3TopToast, setStage3TopToast] = useState({
+    visible: false,
+    message: "",
+  });
+  const stage3TopToastTimerRef = useRef(null);
 
   const closeGameMachineModalShell = useCallback(() => {
     setShowGameMachineModalShell(false);
@@ -303,28 +309,52 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showIslandExitToast = () => {
-      setShowStage3IslandExitToast(true);
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
+    const showStage3TopToast = (message) => {
+      setStage3TopToast({ visible: true, message });
+      if (stage3TopToastTimerRef.current) {
+        clearTimeout(stage3TopToastTimerRef.current);
       }
-      stage3IslandExitToastTimerRef.current = window.setTimeout(() => {
-        setShowStage3IslandExitToast(false);
-        stage3IslandExitToastTimerRef.current = null;
+      stage3TopToastTimerRef.current = window.setTimeout(() => {
+        setStage3TopToast((prev) => ({ ...prev, visible: false }));
+        stage3TopToastTimerRef.current = null;
       }, 2000);
+    };
+    const onIslandExitBlocked = () =>
+      showStage3TopToast("하핳.. 거기로는 못 가요😅");
+    const onStage3TopToastMessage = (/** @type {CustomEvent} */ event) => {
+      const message = event.detail?.message;
+      if (typeof message === "string" && message.length > 0) {
+        showStage3TopToast(message);
+      }
     };
     window.addEventListener(
       STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
-      showIslandExitToast,
+      onIslandExitBlocked,
+    );
+    window.addEventListener(
+      STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+      onStage3TopToastMessage,
+    );
+    window.addEventListener(
+      STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+      onStage3TopToastMessage,
     );
     return () => {
       window.removeEventListener(
         STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
-        showIslandExitToast,
+        onIslandExitBlocked,
       );
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
-        stage3IslandExitToastTimerRef.current = null;
+      window.removeEventListener(
+        STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+        onStage3TopToastMessage,
+      );
+      window.removeEventListener(
+        STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+        onStage3TopToastMessage,
+      );
+      if (stage3TopToastTimerRef.current) {
+        clearTimeout(stage3TopToastTimerRef.current);
+        stage3TopToastTimerRef.current = null;
       }
     };
   }, []);
@@ -391,9 +421,9 @@ function AppLayout() {
         />
       ) : null}
       <div
-        className={`airport-chime-indicator stage3-island-exit-toast ${showStage3IslandExitToast ? "visible" : ""}`}
+        className={`airport-chime-indicator stage3-island-exit-toast ${stage3TopToast.visible ? "visible" : ""}`}
       >
-        하핳.. 거기로는 못 가요😅
+        {stage3TopToast.message}
       </div>
       <div
         className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}

@@ -24,6 +24,7 @@ import {
 } from "../playWellClickSound.js";
 import { onMinigameClose, closeMinigame } from "../minigameLauncher.js";
 import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3IntroAudio.js";
+import { notifyStage3IntroInputBlocked } from "../stage3IntroInputBlockedNotify.js";
 
 /**
  * @typedef {"notice" | "gameMachine" | "tent" | "vendingMachine" | "portal" | "well" | "clock" | "gumtoongji"} Stage3InteractionTarget
@@ -38,6 +39,7 @@ import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3
  *   getVendingMachineController: () => ReturnType<typeof import("../vendingMachine/stage3VendingMachineController.js").createStage3VendingMachineController>,
  *   getCameraIntroState: () => { completed: boolean; active: boolean },
  *   isInteractionBlocked: () => boolean,
+ *   isIntroPresentationLocked: () => boolean,
  *   getPortalTransitionInProgress: () => boolean,
  *   isPortalOpenForStageTransition: () => boolean,
  *   onTryEnterPortal: () => void,
@@ -67,6 +69,7 @@ export function createStage3InteractionsController({
   getVendingMachineController,
   getCameraIntroState,
   isInteractionBlocked,
+  isIntroPresentationLocked,
   getPortalTransitionInProgress,
   isPortalOpenForStageTransition,
   onTryEnterPortal,
@@ -422,6 +425,10 @@ export function createStage3InteractionsController({
     const camera = getCamera();
     const canvas = getCanvas();
     if (!camera || !canvas) return;
+    if (isIntroPresentationLocked()) {
+      notifyStage3IntroInputBlocked("click");
+      return;
+    }
     if (isInteractionBlocked()) return;
     const target = getPointerHitTarget(event.clientX, event.clientY);
     if (!target) return;
@@ -431,6 +438,10 @@ export function createStage3InteractionsController({
   }
 
   function handleIntClickHintPointerDown(event) {
+    if (isIntroPresentationLocked()) {
+      notifyStage3IntroInputBlocked("click");
+      return;
+    }
     if (isInteractionBlocked()) return;
     if (!activeIntHintTarget) return;
     event.preventDefault();
