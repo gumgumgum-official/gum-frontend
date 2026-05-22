@@ -16,10 +16,11 @@ import {
   warmKioskExhibitionAssets,
   waitForKioskExhibitionCriticalGlb,
 } from "../utils/common/kioskExhibitionWarmup.js";
+import { KIOSK_SOFT_RESTART_EVENT } from "../events/kioskEvents.js";
 import {
-  KIOSK_SOFT_RESTART_SHORTCUT_LABEL,
-  performKioskSoftRestart,
-} from "../utils/common/kioskSoftRestart.js";
+  registerStartPageIntroBgmStop,
+  stopStartPageIntroBgm,
+} from "../utils/common/startPageIntroAudio.js";
 import { waitForStage3GpuReady } from "../utils/stages/stage3/stage3RevealGate.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
@@ -79,27 +80,26 @@ export function StartPage() {
   /** Stage6 완주 후: reset + Stage3 GPU 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
-  const [isSoftRestarting, setIsSoftRestarting] = useState(false);
-
   const stopIntroBgm = useCallback(() => {
     if (introBgmStopTimerRef.current) {
       window.clearTimeout(introBgmStopTimerRef.current);
       introBgmStopTimerRef.current = null;
     }
     const { source, gain } = introBgmNodesRef.current;
-    if (!source || !gain) return;
-    try {
-      source.stop();
-    } catch {
-      // ignore
+    if (source && gain) {
+      try {
+        source.stop();
+      } catch {
+        // ignore
+      }
+      try {
+        source.disconnect();
+        gain.disconnect();
+      } catch {
+        // ignore
+      }
+      introBgmNodesRef.current = { source: null, gain: null };
     }
-    try {
-      source.disconnect();
-      gain.disconnect();
-    } catch {
-      // ignore
-    }
-    introBgmNodesRef.current = { source: null, gain: null };
 
     const html = htmlAudioRef.current;
     if (html.introBgmFadeTimer) {
@@ -343,7 +343,9 @@ export function StartPage() {
   );
 
   useEffect(() => {
+    registerStartPageIntroBgmStop(stopIntroBgm);
     return () => {
+      registerStartPageIntroBgmStop(null);
       stopIntroBgm();
     };
   }, [stopIntroBgm]);
@@ -476,38 +478,20 @@ export function StartPage() {
     resolve();
   }, []);
 
-  const handleSoftRestart = useCallback(
-    async (event) => {
-      event?.stopPropagation?.();
-      event?.preventDefault?.();
-      if (isPreparingKiosk || isCompletingKioskSession || isSoftRestarting) {
-        return;
-      }
-      setIsSoftRestarting(true);
-      stopIntroBgm();
-      try {
-        await performKioskSoftRestart();
-        setIsIntroOpen(false);
-        setIsStartFadingOut(false);
-        setIsEnterLoadingVideo(false);
-        setIsPreparingKiosk(false);
-        startNavigationLockedRef.current = false;
-        navigate({ pathname: "/start", search: "" }, { replace: true });
-      } catch (e) {
-        console.warn("[StartPage] soft restart 실패:", e);
-        navigate({ pathname: "/start", search: "" }, { replace: true });
-      } finally {
-        setIsSoftRestarting(false);
-      }
-    },
-    [
-      isPreparingKiosk,
-      isCompletingKioskSession,
-      isSoftRestarting,
-      navigate,
-      stopIntroBgm,
-    ],
-  );
+  useEffect(() => {
+    const onSoftRestart = () => {
+      stopStartPageIntroBgm();
+      setIsIntroOpen(false);
+      setIsStartFadingOut(false);
+      setIsEnterLoadingVideo(false);
+      setIsPreparingKiosk(false);
+      startNavigationLockedRef.current = false;
+      loadingVideoResolveRef.current = null;
+    };
+    window.addEventListener(KIOSK_SOFT_RESTART_EVENT, onSoftRestart);
+    return () =>
+      window.removeEventListener(KIOSK_SOFT_RESTART_EVENT, onSoftRestart);
+  }, [stopIntroBgm]);
 
   const handleIntroEnter = useCallback(async () => {
     if (isCompletingKioskSession || startNavigationLockedRef.current) {
@@ -680,7 +664,7 @@ export function StartPage() {
   }, [location.search, navigate]);
 
   const isStartInteractiveBlocked =
-    isPreparingKiosk || isCompletingKioskSession || isSoftRestarting;
+    isPreparingKiosk || isCompletingKioskSession;
   const startPageClassName = [
     styles.page,
     styles.startBackground,
@@ -731,17 +715,6 @@ export function StartPage() {
         active={isEnterLoadingVideo}
         onEnded={handleLoadingVideoEnded}
       />
-      <button
-        type="button"
-        className={styles.startSoftRestartBtn}
-        title={`운영 복구 (F5 대신). 단축키 ${KIOSK_SOFT_RESTART_SHORTCUT_LABEL}`}
-        aria-label="다시 시작 — 운영 복구"
-        disabled={isStartInteractiveBlocked}
-        onClick={(e) => void handleSoftRestart(e)}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        {isSoftRestarting ? "복구 중…" : "다시 시작"}
-      </button>
     </div>
   );
 }

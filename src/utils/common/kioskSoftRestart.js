@@ -15,6 +15,7 @@ import { postMonitorComplete } from "../../lib/monitorCurrentApi.js";
 import { getGLBLoader } from "./assetLoaders.js";
 import { warmKioskExhibitionAssets } from "./kioskExhibitionWarmup.js";
 import { resetClientForNextKioskVisitor } from "./resetClientForNextKioskVisitor.js";
+import { stopStartPageIntroBgm } from "./startPageIntroAudio.js";
 import { stopStage3IntroAudio } from "./stage3IntroAudio.js";
 import {
   dispatchGumCardsModalClose,
@@ -22,39 +23,22 @@ import {
 } from "../stages/stage3/gumCardsModalLauncher.js";
 import { dispatchMinigameClose } from "../stages/stage3/minigameLauncher.js";
 
-/** 운영자 복구 단축키 (키오스크 라우트에서만, capture 단계) */
-export const KIOSK_SOFT_RESTART_SHORTCUT_LABEL = "F8";
-
-/** @type {(() => void) | null} */
-let softRestartRequestHandler = null;
+/** 우측 상단 연속 탭: 횟수·허용 시간(ms) */
+export const KIOSK_SOFT_RESTART_CORNER_TAP_COUNT = 5;
+export const KIOSK_SOFT_RESTART_CORNER_TAP_WINDOW_MS = 2000;
 
 let restartInFlight = false;
 
-/**
- * @param {string} pathname
- * @returns {boolean}
- */
-export function isKioskExhibitionPath(pathname) {
-  const p = pathname.replace(/\/$/, "") || "/";
-  return (
-    p === "/start" ||
-    p.endsWith("/start") ||
-    p === "/kiosk" ||
-    p.endsWith("/kiosk") ||
-    p === "/airport" ||
-    p.endsWith("/airport")
-  );
-}
-
-/**
- * App에서 navigate 포함 전체 복구 핸들러 등록
- * @param {(() => void) | null} handler
- */
-export function setKioskSoftRestartRequestHandler(handler) {
-  softRestartRequestHandler = handler;
+/** 소프트 리셋·/start 복귀 시 키오스크·인트로 BGM 일괄 정지 */
+export function stopKioskExhibitionAudio() {
+  stopStage3IntroAudio();
+  stopTentModalBgm();
+  stopStartPageIntroBgm();
 }
 
 export function dispatchKioskSoftRestartUiCleanup() {
+  // 모달 close 이벤트가 Stage3 배경음을 resume 하기 전에 먼저 정지
+  stopKioskExhibitionAudio();
   window.dispatchEvent(new CustomEvent(KIOSK_SOFT_RESTART_EVENT));
   window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
   window.dispatchEvent(new CustomEvent("gum:closeGameMachineModal"));
@@ -65,8 +49,8 @@ export function dispatchKioskSoftRestartUiCleanup() {
   window.dispatchEvent(new CustomEvent(STAGE6_PHONE_INDICATOR_HIDE_EVENT));
   dispatchMinigameClose();
   dispatchGumCardsModalClose();
-  stopTentModalBgm();
-  stopStage3IntroAudio();
+  stopKioskExhibitionAudio();
+  setTimeout(stopKioskExhibitionAudio, 0);
 }
 
 /**
@@ -92,30 +76,4 @@ export async function performKioskSoftRestart(options = {}) {
   } finally {
     restartInFlight = false;
   }
-}
-
-/**
- * @param {KeyboardEvent} event
- * @returns {boolean}
- */
-export function isKioskSoftRestartShortcut(event) {
-  if (event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) {
-    return false;
-  }
-  return event.code === "F8" || event.code === "F9";
-}
-
-function handleGlobalSoftRestartKeyDown(event) {
-  if (!isKioskSoftRestartShortcut(event)) return;
-  if (!isKioskExhibitionPath(window.location.pathname)) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  softRestartRequestHandler?.();
-}
-
-if (typeof window !== "undefined" && !window.__gumKioskSoftRestartKeyBound) {
-  window.__gumKioskSoftRestartKeyBound = true;
-  window.addEventListener("keydown", handleGlobalSoftRestartKeyDown, {
-    capture: true,
-  });
 }

@@ -24,9 +24,10 @@ import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
 import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
 import { waitForStage3GpuReady } from "./utils/stages/stage3/stage3RevealGate.js";
+import { KioskOperatorCornerReset } from "./components/KioskOperatorCornerReset.jsx";
 import {
   performKioskSoftRestart,
-  setKioskSoftRestartRequestHandler,
+  stopKioskExhibitionAudio,
 } from "./utils/common/kioskSoftRestart.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
@@ -88,6 +89,8 @@ function AppLayout() {
 
   const isStartRoute = location.pathname === "/start";
   const isKioskRoute = location.pathname === "/kiosk";
+  const isAirportRoute = location.pathname === "/airport";
+  const isKioskExhibitionRoute = isStartRoute || isKioskRoute || isAirportRoute;
   const showKioskCanvas = isStartRoute || isKioskRoute;
   const [stage3GpuReady, setStage3GpuReady] = useState(false);
   const kioskRenderPaused = isStartRoute && !isKioskRoute && stage3GpuReady;
@@ -134,14 +137,9 @@ function AppLayout() {
   const runKioskSoftRestart = useCallback(async () => {
     await performKioskSoftRestart();
     navigate({ pathname: "/start", search: "" }, { replace: true });
+    stopKioskExhibitionAudio();
+    setTimeout(stopKioskExhibitionAudio, 0);
   }, [navigate]);
-
-  useEffect(() => {
-    setKioskSoftRestartRequestHandler(() => {
-      void runKioskSoftRestart();
-    });
-    return () => setKioskSoftRestartRequestHandler(null);
-  }, [runKioskSoftRestart]);
 
   // 긴급 배정: ?worryId=223 감지 → 서버 emergency-assign 호출 후 파라미터 제거
   useEffect(() => {
@@ -383,6 +381,13 @@ function AppLayout() {
       />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />
+      {isKioskExhibitionRoute ? (
+        <KioskOperatorCornerReset
+          onTrigger={() => {
+            void runKioskSoftRestart();
+          }}
+        />
+      ) : null}
       <div
         className={`airport-chime-indicator stage3-island-exit-toast ${showStage3IslandExitToast ? "visible" : ""}`}
       >
