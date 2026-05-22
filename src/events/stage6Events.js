@@ -62,9 +62,6 @@ export const STAGE6_AUDIO_UNLOCKED_EVENT = "gum:stage6AudioUnlocked";
 /** 인트로·전화 중 등 입력 제한 시 상단 토스트 */
 export const STAGE6_INPUT_BLOCKED_EVENT = "gum:stage6InputBlocked";
 
-/** @deprecated `STAGE6_INPUT_BLOCKED_EVENT` 사용 */
-export const STAGE6_INTRO_INPUT_BLOCKED_EVENT = STAGE6_INPUT_BLOCKED_EVENT;
-
 /** @typedef {'move' | 'click'} Stage6InputBlockedKind */
 /** @typedef {'intro' | 'phone-in-call'} Stage6InputBlockedReason */
 
@@ -92,9 +89,4 @@ export function dispatchStage6InputBlocked(reason, kind) {
       detail: { reason, kind, text },
     }),
   );
-}
-
-/** @deprecated `dispatchStage6InputBlocked` 사용 */
-export function dispatchStage6IntroInputBlocked(kind) {
-  dispatchStage6InputBlocked("intro", kind);
 }

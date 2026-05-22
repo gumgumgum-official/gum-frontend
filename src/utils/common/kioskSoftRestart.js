@@ -32,6 +32,7 @@ import {
   stopTentModalBgm,
 } from "../stages/stage3/gumCardsModalLauncher.js";
 import { dispatchMinigameClose } from "../stages/stage3/minigameLauncher.js";
+import { disposePhotoboothCameraSound } from "../stages/stage6/playPhotoboothCameraSound.js";
 import { resetStage6AudioUnlock } from "../stages/stage6/stage6AudioUnlock.js";
 import { resetStage6NotificationGate } from "../stages/stage6/stage6NotificationGate.js";
 
@@ -46,6 +47,7 @@ export function stopKioskExhibitionAudio() {
   stopStage3IntroAudio();
   stopTentModalBgm();
   stopStartPageIntroBgm();
+  disposePhotoboothCameraSound();
 }
 
 export function dispatchKioskSoftRestartUiCleanup() {

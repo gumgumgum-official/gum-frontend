@@ -48,7 +48,6 @@ import {
   STAGE6_PHONE_INDICATOR_SHOW_EVENT,
   STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
-  STAGE6_POSTER_MODAL_SHOW_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
   dispatchStage6InputBlocked,
   STAGE6_AUDIO_UNLOCKED_EVENT,
@@ -1128,28 +1127,6 @@ export function Stage6() {
 
   function endPhoneInCallNotificationsBlock() {
     unblockStage6Notifications(STAGE6_PHONE_IN_CALL_BLOCK_TAG);
-  }
-
-  /**
-   * @param {string} eventName
-   * @param {Record<string, unknown> | undefined} detail
-   * @param {string} blockTag
-   */
-  function showStage6Modal(eventName, detail, blockTag) {
-    runStage6NotificationNowOrEnqueue(() => {
-      blockStage6Notifications(blockTag);
-      window.dispatchEvent(
-        new CustomEvent(eventName, { detail: detail ?? undefined }),
-      );
-    });
-  }
-
-  /** @param {string} eventName @param {string} blockTag */
-  function showStage6ModalEvent(eventName, blockTag) {
-    runStage6NotificationNowOrEnqueue(() => {
-      blockStage6Notifications(blockTag);
-      window.dispatchEvent(new CustomEvent(eventName));
-    });
   }
 
   function collectAtmInteractiveRoot(rootModel) {

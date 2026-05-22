@@ -20,6 +20,9 @@ import {
 } from "../utils/common/tentScenePrewarm.js";
 import "./TentSceneViewer.css";
 
+/** TentSceneViewer.css `.tent-scene-viewer__content` opacity transition과 동일 */
+const TENT_SCENE_FADE_IN_MS = 2000;
+
 function getCamCfg() {
   return (
     STAGE3_OBJECTS_CONFIG.tent?.tentSceneCamera ?? {
@@ -44,7 +47,6 @@ function dispatchTentSubtitleHide() {
 }
 
 export function TentSceneViewer({ onCardOpen, skipBubbleSequence = false }) {
-  const FADE_IN_MS = 2000;
   const canvasRef = useRef(null);
   const rootRef = useRef(null);
   const onCardOpenRef = useRef(onCardOpen);
@@ -135,7 +137,10 @@ export function TentSceneViewer({ onCardOpen, skipBubbleSequence = false }) {
     };
     rootEl.addEventListener("transitionend", onFadeInEnd);
 
-    const fallbackId = setTimeout(startAfterFadeIn, FADE_IN_MS + 100);
+    const fallbackId = setTimeout(
+      startAfterFadeIn,
+      TENT_SCENE_FADE_IN_MS + 100,
+    );
 
     return () => {
       aborted = true;
@@ -145,7 +150,7 @@ export function TentSceneViewer({ onCardOpen, skipBubbleSequence = false }) {
       dispatchTentSubtitleHide();
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [FADE_IN_MS, skipBubbleSequence]);
+  }, [skipBubbleSequence]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
