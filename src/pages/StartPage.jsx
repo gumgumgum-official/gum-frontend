@@ -25,6 +25,7 @@ import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
 import { IntroStoryOverlay } from "../components/IntroStoryOverlay.jsx";
 import { KioskEnterLoadingOverlay } from "../components/KioskEnterLoadingOverlay.jsx";
+import { markStage6AudioUnlocked } from "../utils/stages/stage6/stage6AudioUnlock.js";
 
 const START_BG_URL = resolvePublicAssetUrl(
   "/static/images/background_start.png",
@@ -496,6 +497,7 @@ export function StartPage() {
     if (isCompletingKioskSession || startNavigationLockedRef.current) {
       return;
     }
+    markStage6AudioUnlocked();
 
     const enterBuf = audioBuffersRef.current.enterSfx;
     if (enterBuf) {
@@ -585,6 +587,7 @@ export function StartPage() {
     const startSfx = audioBuffersRef.current.startSfx;
     void (async () => {
       const ctx = await ensureAudioCtx();
+      if (ctx) markStage6AudioUnlocked();
       if (ctx && startSfx) {
         void playOneShot(startSfx);
         // 효과음이 끝날 때까지 기다리지 않고, 살짝 텀을 두고 바로 BGM 페이드인
