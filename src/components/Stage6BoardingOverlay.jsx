@@ -26,6 +26,8 @@ import {
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const DEFAULT_SUBTITLE_LABEL = "ANNOUNCEMENT";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
+/** 이름 입력 모달 닫힌 뒤 탑승권(티켓) 오버레이 표시까지 대기 (ms) */
+const TICKET_OVERLAY_OPEN_DELAY_MS = 1000;
 /** '탑승권 발급받기' 클릭 시 재생 (랜덤 1종) */
 const TICKET_ISSUE_SOUND_PATHS = [
   "/static/sounds/airport/ticket_sound1.mp3",
@@ -73,6 +75,7 @@ export function Stage6BoardingOverlay() {
   /** subtitle effect의 `schedule` — 언마운트/reset 시 timersRef와 함께 정리 */
   const scheduleRef = useRef(null);
   const sequenceTokenRef = useRef(0);
+  const ticketOverlayTimerRef = useRef(0);
   const latestPassengerNameRef = useRef("");
   const showSubtitleRef = useRef(false);
   const subtitleTextRef = useRef("");
@@ -123,6 +126,13 @@ export function Stage6BoardingOverlay() {
     const cancelSequence = () => {
       sequenceTokenRef.current += 1;
       clearTimers();
+    };
+
+    const clearTicketOverlayTimer = () => {
+      if (ticketOverlayTimerRef.current) {
+        window.clearTimeout(ticketOverlayTimerRef.current);
+        ticketOverlayTimerRef.current = 0;
+      }
     };
 
     const showSubtitleNow = (text) => {
@@ -247,6 +257,7 @@ export function Stage6BoardingOverlay() {
     };
 
     const resetBoardingUiForNextVisitor = () => {
+      clearTicketOverlayTimer();
       resetStage6NotificationGate();
       cancelSequence();
       setShowSubtitle(false);
@@ -301,6 +312,7 @@ export function Stage6BoardingOverlay() {
     window.addEventListener(STAGE6_SCREEN_FADE_EVENT, onScreenFade);
 
     return () => {
+      clearTicketOverlayTimer();
       clearTimers();
       scheduleRef.current = null;
       window.removeEventListener(
@@ -346,6 +358,10 @@ export function Stage6BoardingOverlay() {
     if (!isNameModalOpen && !isOverlayOpen) return;
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
+        if (ticketOverlayTimerRef.current) {
+          window.clearTimeout(ticketOverlayTimerRef.current);
+          ticketOverlayTimerRef.current = 0;
+        }
         setIsNameModalOpen(false);
         setIsOverlayOpen(false);
         unblockStage6Notifications("name-modal");
@@ -370,8 +386,14 @@ export function Stage6BoardingOverlay() {
     unblockStage6Notifications("name-modal");
     window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
     window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
-    setIsOverlayOpen(true);
-    window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_PASS_ISSUED_EVENT));
+    if (ticketOverlayTimerRef.current) {
+      window.clearTimeout(ticketOverlayTimerRef.current);
+    }
+    ticketOverlayTimerRef.current = window.setTimeout(() => {
+      ticketOverlayTimerRef.current = 0;
+      setIsOverlayOpen(true);
+      window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_PASS_ISSUED_EVENT));
+    }, TICKET_OVERLAY_OPEN_DELAY_MS);
   };
 
   const boardFlight = () => {

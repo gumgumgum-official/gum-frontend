@@ -1316,8 +1316,8 @@ export function Stage6() {
     phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
     phoneCallAudio.onended = () => {
       isPhoneInCall = false;
-      endPhoneInCallNotificationsBlock();
       hidePhoneIndicator();
+      endPhoneInCallNotificationsBlock();
       telEmissiveTarget = 0;
       telRingAgainTimeoutId = window.setTimeout(() => {
         telRingAgainTimeoutId = 0;
@@ -1343,9 +1343,9 @@ export function Stage6() {
     hideTelBubble();
     hideCharBubble();
     isPhoneInCall = true;
-    beginPhoneInCallNotificationsBlock();
     telEmissiveTarget = 0;
     showPhoneIndicator(STAGE6_PHONE_INDICATOR_MODE_IN_CALL);
+    beginPhoneInCallNotificationsBlock();
     isTelActivated = false;
     const callIdx = telCallIndex;
     const callSrc = resolvePublicAssetUrl(PHONE_CALL_SOUNDS[callIdx]);

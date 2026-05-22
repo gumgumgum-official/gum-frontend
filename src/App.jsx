@@ -419,19 +419,17 @@ function AppLayout() {
   }, [showTopHudToast]);
 
   useEffect(() => {
+    // 전화 HUD는 통화 상태 표시 — 알림 게이트(큐)를 타면 통화 중 block 시
+    // '전화 중'이 큐에 쌓였다가 종료 후 flush되어 늦게 뜨는 레이스가 난다.
     const showPhone = (e) => {
       const mode = e.detail?.mode;
-      runStage6NotificationNowOrEnqueue(() => {
-        setPhoneIndicatorMode(
-          mode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
-            ? STAGE6_PHONE_INDICATOR_MODE_IN_CALL
-            : STAGE6_PHONE_INDICATOR_MODE_RINGING,
-        );
-      });
+      setPhoneIndicatorMode(
+        mode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+          ? STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+          : STAGE6_PHONE_INDICATOR_MODE_RINGING,
+      );
     };
-    const hidePhone = () => {
-      runStage6NotificationNowOrEnqueue(() => setPhoneIndicatorMode(null));
-    };
+    const hidePhone = () => setPhoneIndicatorMode(null);
     window.addEventListener(STAGE6_PHONE_INDICATOR_SHOW_EVENT, showPhone);
     window.addEventListener(STAGE6_PHONE_INDICATOR_HIDE_EVENT, hidePhone);
     return () => {
