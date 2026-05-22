@@ -67,6 +67,8 @@ function findClip(clips, regex) {
  *   ) => void,
  *   setFacingYaw: (yRad: number) => void,
  *   setOpacity: (opacity: number) => void,
+ *   setBalloonHeld: (held: boolean) => void,
+ *   getBalloonHandAnchorWorld: (out: import("three").Vector3) => boolean,
  * }}
  */
 export function createCharacterController({
@@ -104,6 +106,13 @@ export function createCharacterController({
   let punchAction = null;
   let isPunchPlaying = false;
   let impactTimeoutId = null;
+  // 풍선을 든 채 걷는 전용 모델 — walk/idle 대신 표시된다
+  let balloonCharacterModel = null;
+  let balloonMixer = null;
+  let balloonWalkAction = null;
+  let isBalloonHeld = false;
+  /** 풍선 모델의 Hand_R Empty — 로드 시 1회 캐시(매 프레임 트리 탐색 회피) */
+  let balloonHandAnchor = null;
 
   // 경계 clamp 값 — setup()에서 1회 계산, update() 매 프레임 재사용
   let _minCx = 0,
@@ -186,6 +195,14 @@ export function createCharacterController({
 
   function setCharacterVisibility(walking) {
     if (!characterModel) return;
+    // 풍선을 든 상태: walk/idle 모델을 숨기고 풍선 모델만 표시
+    if (isBalloonHeld && balloonCharacterModel) {
+      characterModel.visible = false;
+      if (idleCharacterModel) idleCharacterModel.visible = false;
+      balloonCharacterModel.visible = true;
+      return;
+    }
+    if (balloonCharacterModel) balloonCharacterModel.visible = false;
     if (idleCharacterModel) {
       characterModel.visible = walking;
       idleCharacterModel.visible = !walking;
@@ -254,13 +271,18 @@ export function createCharacterController({
       const punchUrl = resolvePublicAssetUrl(
         config.characterPunchModelPath ?? "/models/stage3/user_punch.glb",
       );
+      const balloonUrl = resolvePublicAssetUrl(
+        config.characterBalloonModelPath ??
+          "/models/common/user_walk_v2_balloon.glb",
+      );
 
       Promise.all([
         loadGltfTemplateCached(characterUrl),
         loadGltfTemplateCached(idleUrl).catch(() => null),
         loadGltfTemplateCached(punchUrl).catch(() => null),
+        loadGltfTemplateCached(balloonUrl).catch(() => null),
       ]).then(
-        ([gltf, idleGltf, punchGltf]) => {
+        ([gltf, idleGltf, punchGltf, balloonGltf]) => {
           const scale = config.character?.scale ?? 1;
           const radiusCfg = config.character?.collisionRadius;
           collisionRadius =
@@ -395,6 +417,67 @@ export function createCharacterController({
               });
             }
             scene.add(punchCharacterModel);
+          }
+
+          if (balloonGltf) {
+            balloonCharacterModel = SkeletonUtils.clone(balloonGltf.scene);
+            balloonCharacterModel.scale.setScalar(scale);
+            balloonCharacterModel.position.set(
+              spawnX,
+              characterYPosition,
+              spawnZ,
+            );
+            if (spawnYaw != null) {
+              balloonCharacterModel.rotation.y = spawnYaw;
+            }
+            balloonCharacterModel.visible = false;
+            applyShadows(balloonCharacterModel);
+            balloonHandAnchor =
+              balloonCharacterModel.getObjectByName("Hand_R") ?? null;
+
+            // 풍선 모델은 walk 모델과 동일 리그·동일 export라 같은 scale을 쓴다.
+            // 단위 불일치(다른 export 설정)는 런타임이 아니라 재-export로 잡는다 — DEV 경고만.
+            if (import.meta.env.DEV) {
+              const walkBox = new THREE.Box3().setFromObject(characterModel);
+              const balloonBox = new THREE.Box3().setFromObject(
+                balloonCharacterModel,
+              );
+              const walkH = walkBox.max.y - walkBox.min.y;
+              const balloonH = balloonBox.max.y - balloonBox.min.y;
+              const ratio = walkH / Math.max(1e-6, balloonH);
+              if (ratio < 0.6 || ratio > 1.6) {
+                console.warn(
+                  `[Stage3] 풍선 캐릭터 모델 스케일 의심 — walk/balloon 높이비 ${ratio.toFixed(2)} (GLB export 단위 확인 필요)`,
+                );
+              }
+              if (!balloonHandAnchor) {
+                console.warn(
+                  "[Stage3] 풍선 모델에 Hand_R Empty가 없음 — 실 끝이 손 대신 머리 위로 폴백됨",
+                );
+              }
+            }
+
+            if (balloonGltf.animations?.length > 0) {
+              balloonMixer = new THREE.AnimationMixer(balloonCharacterModel);
+              const balloonWalkClip =
+                findClip(balloonGltf.animations, /walk|run|move/i) ??
+                balloonGltf.animations[0];
+              balloonWalkAction = balloonMixer.clipAction(balloonWalkClip);
+              balloonWalkAction.loop = THREE.LoopRepeat;
+              balloonWalkAction.play();
+              balloonWalkAction.paused = true;
+              balloonWalkAction.enabled = true;
+              balloonWalkAction.setEffectiveWeight(1);
+            }
+            scene.add(balloonCharacterModel);
+
+            // 모델 로딩이 끝나기 전에 이미 풍선을 잡았다면 즉시 동기화·표시
+            if (isBalloonHeld) {
+              balloonCharacterModel.position.copy(characterModel.position);
+              balloonCharacterModel.rotation.copy(characterModel.rotation);
+              if (balloonWalkAction) balloonWalkAction.paused = !isWalking;
+              setCharacterVisibility(isWalking);
+            }
           }
 
           const prewarmCamera = getCamera?.();
@@ -792,6 +875,7 @@ export function createCharacterController({
         setCharacterVisibility(movingInput);
         characterWalkAction.paused = !movingInput;
         if (idleCharacterAction) idleCharacterAction.paused = movingInput;
+        if (balloonWalkAction) balloonWalkAction.paused = !movingInput;
         isWalking = movingInput;
       }
 
@@ -800,9 +884,16 @@ export function createCharacterController({
         idleCharacterModel.rotation.copy(characterModel.rotation);
       }
 
+      // 풍선 모델은 보일 때 항상 walk 모델 위치·회전을 따라간다
+      if (isBalloonHeld && balloonCharacterModel) {
+        balloonCharacterModel.position.copy(characterModel.position);
+        balloonCharacterModel.rotation.copy(characterModel.rotation);
+      }
+
       if (characterMixer && (isWalking || !idleCharacterMixer))
         characterMixer.update(delta);
       if (idleCharacterMixer && !isWalking) idleCharacterMixer.update(delta);
+      if (balloonMixer && isBalloonHeld) balloonMixer.update(delta);
 
       syncWalkSound(moved);
 
@@ -832,6 +923,17 @@ export function createCharacterController({
       }
       punchAction = null;
       isPunchPlaying = false;
+      if (balloonMixer) {
+        balloonMixer.stopAllAction();
+        balloonMixer = null;
+      }
+      if (balloonCharacterModel) {
+        scene.remove(balloonCharacterModel);
+        balloonCharacterModel = null;
+      }
+      balloonWalkAction = null;
+      balloonHandAnchor = null;
+      isBalloonHeld = false;
       if (walkAudio) {
         walkAudio.pause();
         walkAudio.src = "";
@@ -923,6 +1025,7 @@ export function createCharacterController({
       punchCharacterModel.rotation.copy(src.rotation);
       characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
+      if (balloonCharacterModel) balloonCharacterModel.visible = false;
       punchCharacterModel.visible = true;
       punchAction.reset();
       const clip = punchAction.getClip();
@@ -956,6 +1059,42 @@ export function createCharacterController({
     setFacingYaw(yRad) {
       if (characterModel) characterModel.rotation.y = yRad;
       if (idleCharacterModel) idleCharacterModel.rotation.y = yRad;
+      if (balloonCharacterModel) balloonCharacterModel.rotation.y = yRad;
+    },
+
+    /**
+     * 풍선 들기/놓기 — true면 walk/idle 대신 풍선 전용 모델을 표시한다.
+     * @param {boolean} held
+     */
+    setBalloonHeld(held) {
+      const next = Boolean(held);
+      if (next === isBalloonHeld) return;
+      isBalloonHeld = next;
+      if (isBalloonHeld && balloonCharacterModel && characterModel) {
+        balloonCharacterModel.position.copy(characterModel.position);
+        balloonCharacterModel.rotation.copy(characterModel.rotation);
+        if (balloonWalkAction) balloonWalkAction.paused = !isWalking;
+      }
+      setCharacterVisibility(isWalking);
+    },
+
+    /**
+     * 풍선을 든 상태일 때 오른손(Hand_R Empty)의 월드 좌표를 out에 쓴다.
+     * Stage3.update()는 interactionsController를 character.update보다 먼저
+     * 호출하므로 이 값은 최대 1프레임 지연될 수 있다(풍선 실 기준 무시 가능).
+     * @param {THREE.Vector3} out
+     * @returns {boolean} 유효한 좌표를 썼으면 true
+     */
+    getBalloonHandAnchorWorld(out) {
+      if (!isBalloonHeld || !balloonCharacterModel || !balloonHandAnchor)
+        return false;
+      balloonCharacterModel.updateMatrixWorld(true);
+      balloonHandAnchor.getWorldPosition(out);
+      return (
+        Number.isFinite(out.x) &&
+        Number.isFinite(out.y) &&
+        Number.isFinite(out.z)
+      );
     },
 
     /**
@@ -972,7 +1111,11 @@ export function createCharacterController({
 
     /** 캐릭터 모델 전체 메시 opacity 일괄 설정 (에스컬레이터 fade out 용) */
     setOpacity(opacity) {
-      const targets = [characterModel, idleCharacterModel];
+      const targets = [
+        characterModel,
+        idleCharacterModel,
+        balloonCharacterModel,
+      ];
       for (const root of targets) {
         if (!root) continue;
         root.traverse((obj) => {

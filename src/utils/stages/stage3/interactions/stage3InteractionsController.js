@@ -36,7 +36,7 @@ import { resumeStage3BackgroundAmbientFromOverlay } from "../../../common/stage3
  *   getCamera: () => import("three").PerspectiveCamera | null,
  *   getCanvas: () => HTMLCanvasElement | null,
  *   getConfig: () => import("../../../../types.js").Stage3Config,
- *   getCharacter: () => { getPosition?: () => import("three").Vector3; getIsMoving?: () => boolean } | null,
+ *   getCharacter: () => { getPosition?: () => import("three").Vector3; getIsMoving?: () => boolean; setBalloonHeld?: (held: boolean) => void; getBalloonHandAnchorWorld?: (out: import("three").Vector3) => boolean } | null,
  *   getVendingMachineController: () => ReturnType<typeof import("../vendingMachine/stage3VendingMachineController.js").createStage3VendingMachineController>,
  *   getCameraIntroState: () => { completed: boolean; active: boolean },
  *   isInteractionBlocked: () => boolean,
@@ -93,6 +93,8 @@ export function createStage3InteractionsController({
 }) {
   /** @type {HTMLAudioElement | null} */
   let gameMachineClickAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let balloonPickupAudio = null;
   let unlistenMinigameClose = null;
   /** @type {THREE.Object3D | null} */
   let gameMachineRef = null;
@@ -138,12 +140,15 @@ export function createStage3InteractionsController({
   /** @type {HTMLDivElement | null} */
   let balloonHoverBubbleEl = null;
 
-  /** @type {{ meshes: import("three").Mesh[]; hintText: string; anchorWorld: import("three").Vector3; node: import("three").Object3D }[]} */
+  /** @type {{ meshes: import("three").Mesh[]; hintText: string; anchorWorld: import("three").Vector3; node: import("three").Object3D; clip: import("three").AnimationClip | null }[]} */
   const balloonHoverTargets = [];
 
   /**
    * @type {{
+   *   holder: import("three").Group,
    *   clone: import("three").Object3D,
+   *   mixer: import("three").AnimationMixer | null,
+   *   offsetVec: import("three").Vector3,
    *   node: import("three").Object3D,
    *   stringLine: import("three").Line,
    *   stringPositions: Float32Array,
@@ -152,6 +157,9 @@ export function createStage3InteractionsController({
   let heldBalloon = null;
   const _heldStringBottom = new THREE.Vector3();
   const _heldBalloonTop = new THREE.Vector3();
+  const _heldBalloonActual = new THREE.Vector3();
+  /** 손(Hand_R)에서 풍선까지 실 길이(월드 유닛) — 값이 클수록 풍선이 높이 뜸 */
+  const HELD_BALLOON_STRING_LENGTH = 0.55;
 
   let _pointerMoveRafId = 0;
   /** @type {PointerEvent | null} */
@@ -488,7 +496,7 @@ export function createStage3InteractionsController({
     if (balloonTarget) {
       event.preventDefault();
       event.stopPropagation();
-      holdBalloon(balloonTarget);
+      holdBalloon(balloonTarget, event.clientX, event.clientY);
       return;
     }
 
@@ -513,10 +521,12 @@ export function createStage3InteractionsController({
    */
   function releaseHeldBalloon() {
     if (!heldBalloon) return;
+    getCharacter()?.setBalloonHeld?.(false);
     const scene = getScene();
     heldBalloon.node.visible = true;
+    if (heldBalloon.mixer) heldBalloon.mixer.stopAllAction();
     if (scene) {
-      scene.remove(heldBalloon.clone);
+      scene.remove(heldBalloon.holder);
       scene.remove(heldBalloon.stringLine);
     }
     heldBalloon.stringLine.geometry.dispose();
@@ -524,22 +534,116 @@ export function createStage3InteractionsController({
     heldBalloon = null;
   }
 
-  /** @param {{ node: import("three").Object3D }} target */
-  function holdBalloon(target) {
+  function playBalloonPickupSound() {
+    const src = resolvePublicAssetUrl("/static/sounds/balloon/balloon.mp3");
+    if (!balloonPickupAudio) {
+      balloonPickupAudio = new window.Audio();
+      balloonPickupAudio.preload = "auto";
+      balloonPickupAudio.volume = 1;
+    }
+    balloonPickupAudio.pause();
+    balloonPickupAudio.currentTime = 0;
+    balloonPickupAudio.src = src;
+    const p = balloonPickupAudio.play();
+    if (p && typeof p.catch === "function") {
+      p.catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn("[Stage3] balloon pickup sound failed:", err);
+        }
+      });
+    }
+  }
+
+  /**
+   * @param {number} cx  screen X
+   * @param {number} cy  screen Y
+   */
+  function spawnBalloonPickupEffect(cx, cy) {
+    const count = 65;
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement("div");
+      el.className = "balloon-pickup-particle";
+      const angle = Math.random() * 2 * Math.PI;
+      const dist = 80 + Math.random() * 200;
+      const size = 8 + Math.random() * 14;
+      const duration = 0.7 + Math.random() * 0.6;
+      el.style.cssText = `left:${cx}px;top:${cy}px;background:#ffffff;width:${size}px;height:${size}px;--dx:${Math.cos(angle) * dist}px;--dy:${Math.sin(angle) * dist}px;animation-duration:${duration}s;box-shadow:0 0 16px #ffffff;`;
+      document.body.appendChild(el);
+      let tid;
+      const remove = () => {
+        clearTimeout(tid);
+        el.remove();
+      };
+      el.addEventListener("animationend", remove);
+      tid = setTimeout(remove, 2000);
+    }
+  }
+
+  /** @param {{ node: import("three").Object3D, clip?: import("three").AnimationClip | null }} target */
+  function holdBalloon(target, clickX, clickY) {
     releaseHeldBalloon();
     const scene = getScene();
     if (!scene) return;
-    target.node.visible = false;
+    // clone BEFORE hiding — clone(true) copies visible:true from the live node
     target.node.updateMatrixWorld(true);
     const clone = target.node.clone(true);
-    const p = new THREE.Vector3();
-    const q = new THREE.Quaternion();
-    const s = new THREE.Vector3();
-    target.node.matrixWorld.decompose(p, q, s);
-    clone.position.copy(p);
-    clone.quaternion.copy(q);
-    clone.scale.copy(s);
-    scene.add(clone);
+    clone.visible = true;
+    clone.traverse((child) => {
+      child.frustumCulled = false;
+    });
+    target.node.visible = false;
+
+    // sway 클립은 앵커 노드의 translation을 island-local 좌표로 구동한다.
+    // holder가 원본 부모(섬)의 월드 변환을 대신하므로, 클론은 섬에서와 똑같이
+    // 흔들리고 holder.position만 매 프레임 갱신해 풍선을 손 위로 따라오게 한다.
+    const holder = new THREE.Group();
+    if (target.node.parent) {
+      target.node.parent.matrixWorld.decompose(
+        holder.position,
+        holder.quaternion,
+        holder.scale,
+      );
+    }
+    holder.add(clone);
+    scene.add(holder);
+
+    // 풍선 기본 sway 애니메이션 — island과 동일 클립을 클론 전용 믹서로 재생
+    let mixer = null;
+    if (target.clip) {
+      mixer = new THREE.AnimationMixer(clone);
+      const action = mixer.clipAction(target.clip);
+      action.setLoop(THREE.LoopPingPong, Infinity);
+      action.clampWhenFinished = false;
+      action.timeScale = 2; // islandLoopMixer와 동일 속도
+      action.play();
+      // clip 0프레임을 즉시 적용 — offsetVec를 sway 기준점에 맞춰 풍선이
+      // 잡는 순간 손 위 목표점에 정확히 놓이게 한다(랜덤 프레임 오프셋 제거)
+      mixer.update(0);
+    }
+
+    // rest 기준 anchor-local 위치 → 월드 오프셋. 매 프레임
+    // holder.position = 목표점 − offsetVec 로 풀어 풍선을 손 위에 고정한다.
+    const offsetVec = clone.position
+      .clone()
+      .multiply(holder.scale)
+      .applyQuaternion(holder.quaternion);
+
+    playBalloonPickupSound();
+    // 파티클은 유저 캐릭터 스크린 위치에서 터짐
+    const camera = getCamera();
+    const canvas = getCanvas();
+    const charPos = getCharacter()?.getPosition?.();
+    if (camera && canvas && charPos) {
+      _heldStringBottom.copy(charPos).setY(charPos.y + 1.2);
+      camera.updateMatrixWorld(true);
+      _heldStringBottom.project(camera);
+      const rect = canvas.getBoundingClientRect();
+      const sx = (_heldStringBottom.x * 0.5 + 0.5) * rect.width + rect.left;
+      const sy = (-_heldStringBottom.y * 0.5 + 0.5) * rect.height + rect.top;
+      spawnBalloonPickupEffect(sx, sy);
+    } else {
+      spawnBalloonPickupEffect(clickX, clickY);
+    }
 
     const stringPositions = new Float32Array(6);
     const geo = new THREE.BufferGeometry();
@@ -550,7 +654,17 @@ export function createStage3InteractionsController({
     );
     scene.add(stringLine);
 
-    heldBalloon = { clone, node: target.node, stringLine, stringPositions };
+    heldBalloon = {
+      holder,
+      clone,
+      mixer,
+      offsetVec,
+      node: target.node,
+      stringLine,
+      stringPositions,
+    };
+    // 캐릭터를 풍선 든 모델로 교체 — 실은 오른손(Hand_R)에서 풍선까지 이어진다
+    getCharacter()?.setBalloonHeld?.(true);
   }
 
   /** @returns {{ node: import("three").Object3D } | null} */
@@ -793,6 +907,7 @@ export function createStage3InteractionsController({
           hintText,
           anchorWorld,
           node: balloonObj,
+          clip, // 잡았을 때도 island sway 애니메이션을 이어 재생
         });
       }
     }
@@ -1137,6 +1252,11 @@ export function createStage3InteractionsController({
       gameMachineClickAudio.src = "";
       gameMachineClickAudio = null;
     }
+    if (balloonPickupAudio) {
+      balloonPickupAudio.pause();
+      balloonPickupAudio.src = "";
+      balloonPickupAudio = null;
+    }
     if (_clockAlarmStartTimeoutId !== null) {
       clearTimeout(_clockAlarmStartTimeoutId);
       _clockAlarmStartTimeoutId = null;
@@ -1170,21 +1290,40 @@ export function createStage3InteractionsController({
       updatePortalPassTrigger();
 
       if (heldBalloon) {
-        const charPos = getCharacter()?.getPosition?.();
-        if (charPos) {
-          // string bottom: waist/chest level
-          _heldStringBottom.copy(charPos).setY(charPos.y + 1.0);
-          // balloon floats above the character
-          _heldBalloonTop.copy(charPos).setY(charPos.y + 2.5);
-          heldBalloon.clone.position.copy(_heldBalloonTop);
-          // update string geometry
+        const character = getCharacter();
+        // sway 애니메이션 진행 — clone(앵커)의 local translation을 흔든다
+        if (heldBalloon.mixer) heldBalloon.mixer.update(delta);
+        let hasAnchor = false;
+        if (character?.getBalloonHandAnchorWorld?.(_heldStringBottom)) {
+          // 실 아래끝 = 오른손(Hand_R), 풍선은 손 위로 떠오른다
+          _heldBalloonTop
+            .copy(_heldStringBottom)
+            .setY(_heldStringBottom.y + HELD_BALLOON_STRING_LENGTH);
+          hasAnchor = true;
+        } else {
+          // 풍선 모델 로딩 전 폴백 — 캐릭터 가슴~머리 위 기준
+          const charPos = character?.getPosition?.();
+          if (charPos) {
+            _heldStringBottom.copy(charPos).setY(charPos.y + 1.0);
+            _heldBalloonTop.copy(charPos).setY(charPos.y + 2.5);
+            hasAnchor = true;
+          }
+        }
+        if (hasAnchor) {
+          // holder를 손 위 목표점으로 — clone의 sway 오프셋은 그대로 유지된다
+          heldBalloon.holder.position
+            .copy(_heldBalloonTop)
+            .sub(heldBalloon.offsetVec);
+          heldBalloon.holder.updateMatrixWorld(true);
+          // 실 윗끝 = 흔들리는 앵커의 실제 월드 위치
+          heldBalloon.clone.getWorldPosition(_heldBalloonActual);
           const sp = heldBalloon.stringPositions;
           sp[0] = _heldStringBottom.x;
           sp[1] = _heldStringBottom.y;
           sp[2] = _heldStringBottom.z;
-          sp[3] = _heldBalloonTop.x;
-          sp[4] = _heldBalloonTop.y;
-          sp[5] = _heldBalloonTop.z;
+          sp[3] = _heldBalloonActual.x;
+          sp[4] = _heldBalloonActual.y;
+          sp[5] = _heldBalloonActual.z;
           heldBalloon.stringLine.geometry.attributes.position.needsUpdate = true;
         }
       }

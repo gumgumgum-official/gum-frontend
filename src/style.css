@@ -1376,3 +1376,23 @@ body {
   font-family: "Barlow Condensed", sans-serif;
   letter-spacing: 0.2em;
 }
+
+.balloon-pickup-particle {
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  animation: balloon-pickup-burst ease-out forwards;
+  z-index: 99999;
+  transform: translate(-50%, -50%);
+}
+@keyframes balloon-pickup-burst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+      scale(0.3);
+  }
+}
