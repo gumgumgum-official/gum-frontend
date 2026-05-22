@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import {
   STAGE6_SUBTITLE_HIDE_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
+import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import {
   loadGltfTemplateCached,
   resolvePublicAssetUrl,
 } from "../utils/common/gltfTemplateCache.js";
 import { TENT_SCENE_GLB_PATH } from "../utils/common/kioskExhibitionWarmup.js";
 import { preloadTentSceneSubtitleFonts } from "../utils/common/preloadGangwonEduFont.js";
+import {
+  getTentSceneEnvironmentTexture,
+  takePreparedTentModel,
+  warmTentSceneVisualAssets,
+} from "../utils/common/tentScenePrewarm.js";
 import "./TentSceneViewer.css";
 
 function getCamCfg() {
@@ -158,8 +163,16 @@ export function TentSceneViewer({
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const isElectronLike = isElectronLikeUserAgent();
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: false,
+      powerPreference: "high-performance",
+    });
+    const pixelRatio = isElectronLike
+      ? Math.min(1.25, window.devicePixelRatio || 1)
+      : Math.min(1.5, window.devicePixelRatio || 1);
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(w, h, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.33;
@@ -169,14 +182,12 @@ export function TentSceneViewer({
     scene.background = new THREE.Color(0x0e0c1c);
     scene.environmentIntensity = 0.85;
     let unmounted = false;
-    new EXRLoader().load("/hdri/sunny_rose_garden_1k.exr", (tex) => {
-      if (unmounted) {
-        tex.dispose();
-        return;
-      }
-      tex.mapping = THREE.EquirectangularReflectionMapping;
-      scene.environment = tex;
-    });
+    void getTentSceneEnvironmentTexture()
+      .then((tex) => {
+        if (unmounted) return;
+        scene.environment = tex;
+      })
+      .catch((err) => console.warn("[TentScene] HDRI 로드 실패:", err));
 
     const cfg = getCamCfg();
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
@@ -189,17 +200,46 @@ export function TentSceneViewer({
     controls.enabled = false;
     controls.update();
 
-    const tentUrl = resolvePublicAssetUrl(TENT_SCENE_GLB_PATH);
-    void loadGltfTemplateCached(tentUrl)
-      .then((gltf) => {
-        if (unmounted) return;
-        const model = gltf.scene.clone(true);
+    const addModelToScene = (model) => {
+      if (unmounted) {
         model.traverse((obj) => {
-          if (obj.isLight) obj.intensity *= 0.0005;
+          const mesh = /** @type {any} */ (obj);
+          if (mesh.geometry) mesh.geometry.dispose();
+          const mats = mesh.material
+            ? Array.isArray(mesh.material)
+              ? mesh.material
+              : [mesh.material]
+            : [];
+          mats.forEach((m) => m.dispose());
         });
-        scene.add(model);
-      })
-      .catch((err) => console.error("[TentScene] GLB 로드 실패:", err));
+        return;
+      }
+      scene.add(model);
+    };
+
+    const prepared = takePreparedTentModel();
+    if (prepared) {
+      addModelToScene(prepared);
+    } else {
+      const tentUrl = resolvePublicAssetUrl(TENT_SCENE_GLB_PATH);
+      void warmTentSceneVisualAssets()
+        .then(() => takePreparedTentModel())
+        .then((model) => {
+          if (model) {
+            addModelToScene(model);
+            return;
+          }
+          return loadGltfTemplateCached(tentUrl).then((gltf) => {
+            if (unmounted) return;
+            const model = gltf.scene.clone(true);
+            model.traverse((obj) => {
+              if (obj.isLight) obj.intensity *= 0.0005;
+            });
+            addModelToScene(model);
+          });
+        })
+        .catch((err) => console.error("[TentScene] GLB 로드 실패:", err));
+    }
 
     let animId;
     const tick = () => {
@@ -224,7 +264,6 @@ export function TentSceneViewer({
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", onResize);
       controls.dispose();
-      scene.environment?.dispose();
       scene.traverse((obj) => {
         const mesh = /** @type {any} */ (obj);
         if (mesh.geometry) mesh.geometry.dispose();
