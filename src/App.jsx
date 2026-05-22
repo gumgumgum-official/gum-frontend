@@ -44,6 +44,8 @@ import {
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
   STAGE6_INPUT_BLOCKED_EVENT,
+  STAGE6_INTRO_CLICK_HINT_EVENT,
+  STAGE6_INTRO_CLICK_HINT_MESSAGE,
 } from "./events/stage6Events.js";
 import {
   STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
@@ -125,6 +127,8 @@ function AppLayout() {
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
   const [topHudToastMessage, setTopHudToastMessage] = useState(null);
   const topHudToastTimerRef = useRef(null);
+  const [introClickHintMessage, setIntroClickHintMessage] = useState(null);
+  const introClickHintTimerRef = useRef(null);
 
   const showTopHudToast = useCallback((message) => {
     setTopHudToastMessage(message);
@@ -326,6 +330,40 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
+    const INTRO_CLICK_HINT_VISIBLE_MS = 2500;
+
+    const showIntroClickHint = (/** @type {CustomEvent} */ event) => {
+      const message =
+        typeof event?.detail?.message === "string" && event.detail.message
+          ? event.detail.message
+          : STAGE6_INTRO_CLICK_HINT_MESSAGE;
+      runStage6NotificationNowOrEnqueue(() => {
+        setIntroClickHintMessage(message);
+        if (introClickHintTimerRef.current) {
+          clearTimeout(introClickHintTimerRef.current);
+        }
+        introClickHintTimerRef.current = window.setTimeout(() => {
+          setIntroClickHintMessage(null);
+          introClickHintTimerRef.current = null;
+        }, INTRO_CLICK_HINT_VISIBLE_MS);
+      });
+    };
+
+    window.addEventListener(STAGE6_INTRO_CLICK_HINT_EVENT, showIntroClickHint);
+    return () => {
+      window.removeEventListener(
+        STAGE6_INTRO_CLICK_HINT_EVENT,
+        showIntroClickHint,
+      );
+      if (introClickHintTimerRef.current) {
+        clearTimeout(introClickHintTimerRef.current);
+        introClickHintTimerRef.current = null;
+      }
+      setIntroClickHintMessage(null);
+    };
+  }, []);
+
+  useEffect(() => {
     const onIslandExitBlocked = () => {
       showTopHudToast("하핳.. 거기로는 못 가요😅");
     };
@@ -383,13 +421,17 @@ function AppLayout() {
   useEffect(() => {
     const showPhone = (e) => {
       const mode = e.detail?.mode;
-      setPhoneIndicatorMode(
-        mode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
-          ? STAGE6_PHONE_INDICATOR_MODE_IN_CALL
-          : STAGE6_PHONE_INDICATOR_MODE_RINGING,
-      );
+      runStage6NotificationNowOrEnqueue(() => {
+        setPhoneIndicatorMode(
+          mode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+            ? STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+            : STAGE6_PHONE_INDICATOR_MODE_RINGING,
+        );
+      });
     };
-    const hidePhone = () => setPhoneIndicatorMode(null);
+    const hidePhone = () => {
+      runStage6NotificationNowOrEnqueue(() => setPhoneIndicatorMode(null));
+    };
     window.addEventListener(STAGE6_PHONE_INDICATOR_SHOW_EVENT, showPhone);
     window.addEventListener(STAGE6_PHONE_INDICATOR_HIDE_EVENT, hidePhone);
     return () => {
@@ -447,6 +489,11 @@ function AppLayout() {
         >
           🔔 띵-동
         </div>
+        {introClickHintMessage ? (
+          <div className="airport-chime-indicator visible">
+            {introClickHintMessage}
+          </div>
+        ) : null}
         <div
           className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
         >

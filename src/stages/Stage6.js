@@ -26,6 +26,7 @@ import {
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
+  STAGE6_INTRO_CLICK_HINT_EVENT,
   AIRPORT_SUBTITLE_HIDE_EVENT,
   AIRPORT_SUBTITLE_SHOW_EVENT,
   AIRPORT_SUBTITLE_UPDATE_EVENT,
@@ -37,7 +38,6 @@ import {
   STAGE6_INTERACTION_LOCK_EVENT,
   STAGE6_INTERACTION_UNLOCK_EVENT,
   STAGE6_NAME_MODAL_HIDE_EVENT,
-  STAGE6_NAME_MODAL_SHOW_EVENT,
   STAGE6_SUBTITLE_HIDE_EVENT,
   STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_HIDE_EVENT,
@@ -65,6 +65,8 @@ import {
   blockStage6Notifications,
   dispatchGatedStage6WindowEvent,
   isStage6ClickBubbleSuppressed,
+  isStage6PhotoboothModalOpen,
+  openStage6NameModal,
   resetStage6NotificationGate,
   runStage6NotificationNowOrEnqueue,
   STAGE6_PHONE_IN_CALL_BLOCK_TAG,
@@ -274,6 +276,8 @@ export function Stage6() {
   let isPhoneInCall = false;
   /** 벨 자막 재생 전에 수화기를 들면 `activateTelRinging` 자막·큐 재생 생략 */
   let skipTelRingSubtitle = false;
+  /** 포토부스 모달 닫힐 때까지 전화 벨·HUD·자막 표시 연기 */
+  let deferTelRingUntilPhotoboothClosed = false;
   let telEmissiveProgress = 0;
   let telEmissiveTarget = 0;
   let telCallIndex = 0;
@@ -494,6 +498,18 @@ export function Stage6() {
     window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
   }
 
+  function finishAirportIntroSubtitles() {
+    activeSubtitleCueIndex = -1;
+    isAirportSubtitleVisible = false;
+    isAnnouncementActive = false;
+    dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
+    dispatchGatedStage6WindowEvent(STAGE6_INTRO_CLICK_HINT_EVENT);
+    telActivateTimeoutId = window.setTimeout(() => {
+      telActivateTimeoutId = 0;
+      activateTelRinging();
+    }, STAGE6_TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
+  }
+
   function playAirportAnnounceIntro() {
     // Cancel any previous watchdog from an earlier (possibly double-triggered) call
     if (announceWatchdogId) {
@@ -520,12 +536,7 @@ export function Stage6() {
       let cueIdx = 0;
       const showNextCue = () => {
         if (!isStage6Active || cueIdx >= cues.length) {
-          isAnnouncementActive = false;
-          dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
-          telActivateTimeoutId = window.setTimeout(() => {
-            telActivateTimeoutId = 0;
-            activateTelRinging();
-          }, STAGE6_TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
+          finishAirportIntroSubtitles();
           return;
         }
         const cue = cues[cueIdx];
@@ -558,14 +569,7 @@ export function Stage6() {
       );
     };
     airportAnnounceIntroAudio.onended = () => {
-      activeSubtitleCueIndex = -1;
-      isAirportSubtitleVisible = false;
-      isAnnouncementActive = false;
-      dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
-      telActivateTimeoutId = window.setTimeout(() => {
-        telActivateTimeoutId = 0;
-        activateTelRinging();
-      }, STAGE6_TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
+      finishAirportIntroSubtitles();
     };
     const announcePlayPromise = airportAnnounceIntroAudio.play();
     if (
@@ -1014,11 +1018,10 @@ export function Stage6() {
   }
 
   function isAtmHitTarget(hit) {
-    return (
-      hit?.intName === ATM_OBJECT_NAME ||
-      normalizeIntNameToken(hit?.target) ===
-        normalizeIntNameToken(ATM_OBJECT_NAME)
-    );
+    if (!hit) return false;
+    if (hit.intName === ATM_OBJECT_NAME) return true;
+    const token = normalizeIntNameToken(hit.target);
+    return token === "atm" || token === "intatm";
   }
 
   function dispatchStage6SubtitleSequence(messages, options) {
@@ -1253,8 +1256,25 @@ export function Stage6() {
     });
   }
 
+  function suppressTelRingPresentationForPhotobooth() {
+    deferTelRingUntilPhotoboothClosed = true;
+    stopPhoneRing();
+    hidePhoneIndicator();
+    hideTelBubble();
+    hideStage6SubtitlesNow();
+    if (!isPhoneInCall) {
+      isTelActivated = false;
+      telEmissiveTarget = 0;
+    }
+  }
+
   function activateTelRinging() {
     if (!isStage6Active || isTelActivated) return;
+    if (isStage6PhotoboothModalOpen()) {
+      deferTelRingUntilPhotoboothClosed = true;
+      return;
+    }
+    deferTelRingUntilPhotoboothClosed = false;
     isTelActivated = true;
     skipTelRingSubtitle = false;
     telEmissiveTarget = 1;
@@ -1262,6 +1282,26 @@ export function Stage6() {
     playPhoneRing();
     showTelBubble("click!");
     dispatchTelRingSubtitleIfNeeded();
+  }
+
+  function handlePhotoboothModalOpened() {
+    if (isPhoneInCall) return;
+    if (deferTelRingUntilPhotoboothClosed || isTelRinging || isTelActivated) {
+      suppressTelRingPresentationForPhotobooth();
+    }
+  }
+
+  function handlePhotoboothModalClosed() {
+    if (
+      !deferTelRingUntilPhotoboothClosed ||
+      !isStage6Active ||
+      isPhoneInCall
+    ) {
+      deferTelRingUntilPhotoboothClosed = false;
+      return;
+    }
+    deferTelRingUntilPhotoboothClosed = false;
+    activateTelRinging();
   }
 
   function startPhoneCallAfterHangup(callSrc) {
@@ -1494,6 +1534,7 @@ export function Stage6() {
       isTelRinging = false;
       isPhoneInCall = false;
       skipTelRingSubtitle = false;
+      deferTelRingUntilPhotoboothClosed = false;
       telEmissiveTarget = 0;
       telEmissiveProgress = 0;
       telCallIndex = 0;
@@ -1537,6 +1578,14 @@ export function Stage6() {
         onInteractionUnlock,
       );
       window.addEventListener("keydown", handleKeyDown, { capture: true });
+      window.addEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+        handlePhotoboothModalOpened,
+      );
+      window.addEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
+        handlePhotoboothModalClosed,
+      );
       onPointerDown = (event) => {
         if (getStage6InputBlockedReason()) {
           notifyStage6InputBlocked("click");
@@ -1576,7 +1625,7 @@ export function Stage6() {
               },
             ]);
           } else {
-            showStage6ModalEvent(STAGE6_NAME_MODAL_SHOW_EVENT, "name-modal");
+            openStage6NameModal();
           }
         } else {
           registerNonAtmInteraction(hit);
@@ -2156,6 +2205,15 @@ export function Stage6() {
         charHoverCryAudio = null;
       }
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+        handlePhotoboothModalOpened,
+      );
+      window.removeEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
+        handlePhotoboothModalClosed,
+      );
+      deferTelRingUntilPhotoboothClosed = false;
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
       window.dispatchEvent(new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT));
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
@@ -2224,6 +2282,7 @@ export function Stage6() {
       isTelRinging = false;
       isPhoneInCall = false;
       skipTelRingSubtitle = false;
+      deferTelRingUntilPhotoboothClosed = false;
       telRootRef = null;
       telEmissiveMaterials.length = 0;
       telEmissiveProgress = 0;

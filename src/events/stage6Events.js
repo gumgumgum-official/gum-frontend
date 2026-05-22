@@ -39,6 +39,19 @@ export const AIRPORT_SUBTITLE_HIDE_EVENT =
 export const AIRPORT_CHIME_SHOW_EVENT = "gum:airportAnnouncementChime:show";
 export const AIRPORT_CHIME_HIDE_EVENT = "gum:airportAnnouncementChime:hide";
 
+/** 공항 인트로(안내 자막) 종료 후 상단 HUD — `airport-chime-indicator` 스타일 */
+export const STAGE6_INTRO_CLICK_HINT_EVENT = "gum:stage6IntroClickHint";
+
+export const STAGE6_INTRO_CLICK_HINT_MESSAGE = "클릭해 보세요!";
+
+export function dispatchStage6IntroClickHint() {
+  window.dispatchEvent(
+    new CustomEvent(STAGE6_INTRO_CLICK_HINT_EVENT, {
+      detail: { message: STAGE6_INTRO_CLICK_HINT_MESSAGE },
+    }),
+  );
+}
+
 export const STAGE6_PHONE_INDICATOR_SHOW_EVENT =
   "gum:stage6-phone-indicator:show";
 export const STAGE6_PHONE_INDICATOR_HIDE_EVENT =

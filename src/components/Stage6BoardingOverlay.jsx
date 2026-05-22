@@ -19,7 +19,10 @@ import {
   KIOSK_NEW_VISITOR_EVENT,
   KIOSK_SOFT_RESTART_EVENT,
 } from "../events/kioskEvents.js";
-import { unblockStage6Notifications } from "../utils/stages/stage6/stage6NotificationGate.js";
+import {
+  resetStage6NotificationGate,
+  unblockStage6Notifications,
+} from "../utils/stages/stage6/stage6NotificationGate.js";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
 const DEFAULT_SUBTITLE_LABEL = "ANNOUNCEMENT";
 const STAGE6_TICKET_IMAGE_SRC = "/assets/ticket/ticket.svg";
@@ -244,6 +247,7 @@ export function Stage6BoardingOverlay() {
     };
 
     const resetBoardingUiForNextVisitor = () => {
+      resetStage6NotificationGate();
       cancelSequence();
       setShowSubtitle(false);
       setFadeOutSubtitle(false);

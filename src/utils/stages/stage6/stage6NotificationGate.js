@@ -2,6 +2,8 @@
  * Stage6 자막·chime 등 UI 알림 — 모달/애니메이션 중에는 큐에 쌓았다가 해제 시 순서대로 재생.
  */
 
+import { STAGE6_NAME_MODAL_SHOW_EVENT } from "../../../events/stage6Events.js";
+
 /** @type {Map<string, number>} */
 const blockRefcounts = new Map();
 /** @type {Array<() => void>} */
@@ -11,10 +13,16 @@ let flushScheduled = false;
 /** 전화 통화 중 자막·모달 큐잉 */
 export const STAGE6_PHONE_IN_CALL_BLOCK_TAG = "phone-in-call";
 
+export const STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG = "photobooth-modal";
+
 const CLICK_BUBBLE_SUPPRESS_TAGS = new Set([
-  "photobooth-modal",
+  STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG,
   "poster-modal",
 ]);
+
+export function isStage6PhotoboothModalOpen() {
+  return blockRefcounts.has(STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG);
+}
 
 export function isStage6NotificationsBlocked() {
   return blockRefcounts.size > 0;
@@ -30,6 +38,12 @@ export function isStage6ClickBubbleSuppressed() {
 export function blockStage6Notifications(tag) {
   if (!tag) return;
   blockRefcounts.set(tag, (blockRefcounts.get(tag) ?? 0) + 1);
+}
+
+/** 이미 같은 tag로 막혀 있으면 refcount를 올리지 않음 (모달 재오픈 시 큐 영구 블록 방지) */
+export function blockStage6NotificationsOnce(tag) {
+  if (!tag || blockRefcounts.has(tag)) return;
+  blockStage6Notifications(tag);
 }
 
 export function unblockStage6Notifications(tag) {
@@ -72,4 +86,12 @@ export function resetStage6NotificationGate() {
   blockRefcounts.clear();
   pendingRuns.length = 0;
   flushScheduled = false;
+}
+
+const NAME_MODAL_BLOCK_TAG = "name-modal";
+
+/** 탑승권 이름 모달 — 알림 큐에 막히지 않고 즉시 연다 */
+export function openStage6NameModal() {
+  blockStage6NotificationsOnce(NAME_MODAL_BLOCK_TAG);
+  window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
 }

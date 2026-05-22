@@ -32,6 +32,7 @@ import {
   stopTentModalBgm,
 } from "../stages/stage3/gumCardsModalLauncher.js";
 import { dispatchMinigameClose } from "../stages/stage3/minigameLauncher.js";
+import { resetStage6NotificationGate } from "../stages/stage6/stage6NotificationGate.js";
 
 /** 우측 상단 연속 탭: 횟수·허용 시간(ms) */
 export const KIOSK_SOFT_RESTART_CORNER_TAP_COUNT = 5;
@@ -49,6 +50,7 @@ export function stopKioskExhibitionAudio() {
 export function dispatchKioskSoftRestartUiCleanup() {
   // 모달 close 이벤트가 Stage3 배경음을 resume 하기 전에 먼저 정지
   stopKioskExhibitionAudio();
+  resetStage6NotificationGate();
   resetStage3KioskVisitorSession();
   dispatchKioskNewVisitorUiReset();
   window.dispatchEvent(new CustomEvent(KIOSK_SOFT_RESTART_EVENT));
