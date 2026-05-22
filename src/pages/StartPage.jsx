@@ -10,9 +10,16 @@ import {
   getMonitorDeviceId,
   postMonitorComplete,
 } from "../lib/monitorCurrentApi.js";
+import { dispatchKioskNewVisitorUiReset } from "../events/kioskEvents.js";
 import { resetClientForNextKioskVisitor } from "../utils/common/resetClientForNextKioskVisitor.js";
+import { resetStage3KioskVisitorSession } from "../utils/stages/stage3/stage3KioskSession.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
-import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import {
+  warmKioskExhibitionAssets,
+  waitForKioskExhibitionCriticalGlb,
+} from "../utils/common/kioskExhibitionWarmup.js";
+import { KIOSK_SOFT_RESTART_EVENT } from "../events/kioskEvents.js";
+import { registerStartPageIntroBgmStop } from "../utils/common/startPageIntroAudio.js";
 import { waitForStage3GpuReady } from "../utils/stages/stage3/stage3RevealGate.js";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 import { clearGgumddiMyVotesFromLocalStorage } from "../lib/voteApi.js";
@@ -72,26 +79,26 @@ export function StartPage() {
   /** Stage6 완주 후: reset + Stage3 GPU 웜업이 끝날 때까지(다음 `/start`로 replace 전) */
   const [isCompletingKioskSession, setIsCompletingKioskSession] =
     useState(false);
-
   const stopIntroBgm = useCallback(() => {
     if (introBgmStopTimerRef.current) {
       window.clearTimeout(introBgmStopTimerRef.current);
       introBgmStopTimerRef.current = null;
     }
     const { source, gain } = introBgmNodesRef.current;
-    if (!source || !gain) return;
-    try {
-      source.stop();
-    } catch {
-      // ignore
+    if (source && gain) {
+      try {
+        source.stop();
+      } catch {
+        // ignore
+      }
+      try {
+        source.disconnect();
+        gain.disconnect();
+      } catch {
+        // ignore
+      }
+      introBgmNodesRef.current = { source: null, gain: null };
     }
-    try {
-      source.disconnect();
-      gain.disconnect();
-    } catch {
-      // ignore
-    }
-    introBgmNodesRef.current = { source: null, gain: null };
 
     const html = htmlAudioRef.current;
     if (html.introBgmFadeTimer) {
@@ -335,7 +342,9 @@ export function StartPage() {
   );
 
   useEffect(() => {
+    registerStartPageIntroBgmStop(stopIntroBgm);
     return () => {
+      registerStartPageIntroBgmStop(null);
       stopIntroBgm();
     };
   }, [stopIntroBgm]);
@@ -350,7 +359,7 @@ export function StartPage() {
     const params = new URLSearchParams(location.search);
     if (params.get("complete") === "1") return;
     getGLBLoader().preloadDecoders();
-    warmStage3GltfTemplateUrls();
+    warmKioskExhibitionAssets({ priority: "idle" });
     // 인트로 이미지 HTTP 캐시 워밍업 — 첫 브라우저 로드 시 reveal 버벅임 방지
     const introImageUrls = [
       "/assets/intro_story/1.svg",
@@ -468,6 +477,21 @@ export function StartPage() {
     resolve();
   }, []);
 
+  useEffect(() => {
+    const onSoftRestart = () => {
+      stopIntroBgm();
+      setIsIntroOpen(false);
+      setIsStartFadingOut(false);
+      setIsEnterLoadingVideo(false);
+      setIsPreparingKiosk(false);
+      startNavigationLockedRef.current = false;
+      loadingVideoResolveRef.current = null;
+    };
+    window.addEventListener(KIOSK_SOFT_RESTART_EVENT, onSoftRestart);
+    return () =>
+      window.removeEventListener(KIOSK_SOFT_RESTART_EVENT, onSoftRestart);
+  }, [stopIntroBgm]);
+
   const handleIntroEnter = useCallback(async () => {
     if (isCompletingKioskSession || startNavigationLockedRef.current) {
       return;
@@ -522,6 +546,7 @@ export function StartPage() {
         });
       });
       await Promise.all([
+        waitForKioskExhibitionCriticalGlb(),
         Promise.race([waitForStage3GpuReady(), gpuTimeout]),
         Promise.race([videoPromise, videoTimeout]),
       ]);
@@ -610,7 +635,10 @@ export function StartPage() {
         void (async () => {
           try {
             await resetClientForNextKioskVisitor();
+            resetStage3KioskVisitorSession();
+            dispatchKioskNewVisitorUiReset();
             getGLBLoader().preloadDecoders();
+            await waitForKioskExhibitionCriticalGlb();
             await waitForStage3GpuReady();
             setToastMessage(null);
             params.delete("complete");

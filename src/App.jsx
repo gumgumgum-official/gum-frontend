@@ -23,6 +23,10 @@ import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
 import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
+import { waitForStage3GpuReady } from "./utils/stages/stage3/stage3RevealGate.js";
+import { KioskOperatorCornerReset } from "./components/KioskOperatorCornerReset.jsx";
+import { performKioskSoftRestart } from "./utils/common/kioskSoftRestart.js";
+import { beginStage3KioskVisitorSession } from "./utils/stages/stage3/stage3KioskSession.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
   getGumServerBaseUrl,
@@ -40,7 +44,15 @@ import {
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
 } from "./events/stage6Events.js";
-import { STAGE3_ISLAND_EXIT_BLOCKED_EVENT } from "./events/stage3Events.js";
+import {
+  STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+  STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT,
+  STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+  STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+  STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+  STAGE3_NOTICE_MODAL_CLOSE_EVENT,
+  STAGE3_NOTICE_MODAL_SHOW_EVENT,
+} from "./events/stage3Events.js";
 import {
   runStage6NotificationNowOrEnqueue,
   unblockStage6Notifications,
@@ -83,7 +95,11 @@ function AppLayout() {
 
   const isStartRoute = location.pathname === "/start";
   const isKioskRoute = location.pathname === "/kiosk";
+  const isAirportRoute = location.pathname === "/airport";
+  const isKioskExhibitionRoute = isStartRoute || isKioskRoute || isAirportRoute;
   const showKioskCanvas = isStartRoute || isKioskRoute;
+  const [stage3GpuReady, setStage3GpuReady] = useState(false);
+  const kioskRenderPaused = isStartRoute && !isKioskRoute && stage3GpuReady;
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showGameMachineModalShell, setShowGameMachineModalShell] =
@@ -106,9 +122,11 @@ function AppLayout() {
     useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
-  const [showStage3IslandExitToast, setShowStage3IslandExitToast] =
-    useState(false);
-  const stage3IslandExitToastTimerRef = useRef(null);
+  const [stage3TopToast, setStage3TopToast] = useState({
+    visible: false,
+    message: "",
+  });
+  const stage3TopToastTimerRef = useRef(null);
 
   const closeGameMachineModalShell = useCallback(() => {
     setShowGameMachineModalShell(false);
@@ -123,6 +141,11 @@ function AppLayout() {
     playUiClickSound();
     closeGameMachineModalShell();
   }, [closeGameMachineModalShell]);
+
+  const runKioskSoftRestart = useCallback(async () => {
+    await performKioskSoftRestart();
+    navigate({ pathname: "/start", search: "" }, { replace: true });
+  }, [navigate]);
 
   // 긴급 배정: ?worryId=223 감지 → 서버 emergency-assign 호출 후 파라미터 제거
   useEffect(() => {
@@ -146,9 +169,26 @@ function AppLayout() {
   useEffect(() => {
     if (isKioskRoute && prevPathnameRef.current !== "/kiosk") {
       requestStage3Reveal();
+      beginStage3KioskVisitorSession();
     }
     prevPathnameRef.current = location.pathname;
   }, [location.pathname, isKioskRoute]);
+
+  // /start 대기 중(hidden 캔버스): GPU 워밍업 완료 후에만 렌더 정지
+  useEffect(() => {
+    if (!showKioskCanvas) {
+      setStage3GpuReady(false);
+      return;
+    }
+    let cancelled = false;
+    setStage3GpuReady(false);
+    void waitForStage3GpuReady().then(() => {
+      if (!cancelled) setStage3GpuReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showKioskCanvas, location.pathname]);
 
   // Stage3 → Stage6 전환 이벤트 (/kiosk에서만)
   useEffect(() => {
@@ -167,22 +207,31 @@ function AppLayout() {
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
     const closeHandler = () => setShowNoticeModal(false);
-    window.addEventListener("gum:showNoticeModal", showHandler);
-    window.addEventListener("gum:closeNoticeModal", closeHandler);
+    window.addEventListener(STAGE3_NOTICE_MODAL_SHOW_EVENT, showHandler);
+    window.addEventListener(STAGE3_NOTICE_MODAL_CLOSE_EVENT, closeHandler);
     return () => {
-      window.removeEventListener("gum:showNoticeModal", showHandler);
-      window.removeEventListener("gum:closeNoticeModal", closeHandler);
+      window.removeEventListener(STAGE3_NOTICE_MODAL_SHOW_EVENT, showHandler);
+      window.removeEventListener(STAGE3_NOTICE_MODAL_CLOSE_EVENT, closeHandler);
     };
   }, []);
 
   useEffect(() => {
     const showHandler = () => setShowGameMachineModalShell(true);
     const closeHandler = () => closeGameMachineModalShell();
-    window.addEventListener("gum:showGameMachineModal", showHandler);
-    window.addEventListener("gum:closeGameMachineModal", closeHandler);
+    window.addEventListener(STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT, showHandler);
+    window.addEventListener(
+      STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+      closeHandler,
+    );
     return () => {
-      window.removeEventListener("gum:showGameMachineModal", showHandler);
-      window.removeEventListener("gum:closeGameMachineModal", closeHandler);
+      window.removeEventListener(
+        STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT,
+        showHandler,
+      );
+      window.removeEventListener(
+        STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+        closeHandler,
+      );
     };
   }, [closeGameMachineModalShell]);
 
@@ -268,28 +317,52 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showIslandExitToast = () => {
-      setShowStage3IslandExitToast(true);
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
+    const showStage3TopToast = (message) => {
+      setStage3TopToast({ visible: true, message });
+      if (stage3TopToastTimerRef.current) {
+        clearTimeout(stage3TopToastTimerRef.current);
       }
-      stage3IslandExitToastTimerRef.current = window.setTimeout(() => {
-        setShowStage3IslandExitToast(false);
-        stage3IslandExitToastTimerRef.current = null;
+      stage3TopToastTimerRef.current = window.setTimeout(() => {
+        setStage3TopToast((prev) => ({ ...prev, visible: false }));
+        stage3TopToastTimerRef.current = null;
       }, 2000);
+    };
+    const onIslandExitBlocked = () =>
+      showStage3TopToast("하핳.. 거기로는 못 가요😅");
+    const onStage3TopToastMessage = (/** @type {CustomEvent} */ event) => {
+      const message = event.detail?.message;
+      if (typeof message === "string" && message.length > 0) {
+        showStage3TopToast(message);
+      }
     };
     window.addEventListener(
       STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
-      showIslandExitToast,
+      onIslandExitBlocked,
+    );
+    window.addEventListener(
+      STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+      onStage3TopToastMessage,
+    );
+    window.addEventListener(
+      STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+      onStage3TopToastMessage,
     );
     return () => {
       window.removeEventListener(
         STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
-        showIslandExitToast,
+        onIslandExitBlocked,
       );
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
-        stage3IslandExitToastTimerRef.current = null;
+      window.removeEventListener(
+        STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+        onStage3TopToastMessage,
+      );
+      window.removeEventListener(
+        STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+        onStage3TopToastMessage,
+      );
+      if (stage3TopToastTimerRef.current) {
+        clearTimeout(stage3TopToastTimerRef.current);
+        stage3TopToastTimerRef.current = null;
       }
     };
   }, []);
@@ -348,10 +421,17 @@ function AppLayout() {
       />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />
+      {isKioskExhibitionRoute ? (
+        <KioskOperatorCornerReset
+          onTrigger={() => {
+            void runKioskSoftRestart();
+          }}
+        />
+      ) : null}
       <div
-        className={`airport-chime-indicator stage3-island-exit-toast ${showStage3IslandExitToast ? "visible" : ""}`}
+        className={`airport-chime-indicator stage3-island-exit-toast ${stage3TopToast.visible ? "visible" : ""}`}
       >
-        하핳.. 거기로는 못 가요😅
+        {stage3TopToast.message}
       </div>
       <div
         className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
@@ -373,7 +453,11 @@ function AppLayout() {
             pointerEvents: isKioskRoute ? "auto" : "none",
           }}
         >
-          <ThreeCanvas allowedStages={KIOSK_ALLOWED_STAGES} initialStage={3} />
+          <ThreeCanvas
+            allowedStages={KIOSK_ALLOWED_STAGES}
+            initialStage={3}
+            renderPaused={kioskRenderPaused}
+          />
         </div>
       )}
       <Routes>

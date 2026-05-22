@@ -6,6 +6,10 @@ import {
   resumeStage3BackgroundAmbientFromOverlay,
 } from "../../../common/stage3IntroAudio.js";
 import { playRandomNoticePaperSound } from "../playNoticePaperSound.js";
+import {
+  STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT,
+  STAGE3_NOTICE_MODAL_SHOW_EVENT,
+} from "../../../../events/stage3Events.js";
 import { NOTICE_MODAL_USER_CLOSED_EVENT } from "../../../../config/stages/stage3/stage3Overlay.js";
 import { onGumCardsModalClose } from "../gumCardsModalLauncher.js";
 
@@ -56,7 +60,7 @@ export function createStage3OverlayController({
     hideInteractionBubbles();
     syncStampPanelVisibilityByOverlay();
     playRandomNoticePaperSound(getConfig().notice?.paperSoundPaths);
-    window.dispatchEvent(new CustomEvent("gum:showNoticeModal"));
+    window.dispatchEvent(new CustomEvent(STAGE3_NOTICE_MODAL_SHOW_EVENT));
   }
 
   function showGameMachineModal() {
@@ -65,7 +69,7 @@ export function createStage3OverlayController({
     hideInteractionBubbles();
     syncStampPanelVisibilityByOverlay();
     pauseStage3BackgroundAmbientForOverlay();
-    window.dispatchEvent(new CustomEvent("gum:showGameMachineModal"));
+    window.dispatchEvent(new CustomEvent(STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT));
   }
 
   function onOpenTentModal() {

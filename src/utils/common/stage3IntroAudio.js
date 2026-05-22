@@ -148,6 +148,12 @@ function ensureStage3FadeOutHook() {
     a.removeEventListener("loadedmetadata", onMeta);
 }
 
+/** 키오스크 소프트 리셋·다음 이용자 진입 시 새 섬 인트로(새소리 2회) 재생 허용 */
+export function resetStage3IntroPlayState() {
+  hasPlayedStage3Intro = false;
+  stage3IntroPlayCount = 0;
+}
+
 /**
  * 다른 스테이지로 나갈 때 호출 (인트로 + 배경 루프 정리)
  */

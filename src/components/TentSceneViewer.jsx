@@ -7,7 +7,11 @@ import {
   STAGE6_SUBTITLE_HIDE_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
-import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../utils/common/gltfTemplateCache.js";
+import { TENT_SCENE_GLB_PATH } from "../utils/common/kioskExhibitionWarmup.js";
 import { preloadTentSceneSubtitleFonts } from "../utils/common/preloadGangwonEduFont.js";
 import "./TentSceneViewer.css";
 
@@ -185,15 +189,17 @@ export function TentSceneViewer({
     controls.enabled = false;
     controls.update();
 
-    getGLBLoader().load("/models/stage3/tent_gum_scene.glb", {
-      onLoad: (gltf) => {
-        gltf.scene.traverse((obj) => {
+    const tentUrl = resolvePublicAssetUrl(TENT_SCENE_GLB_PATH);
+    void loadGltfTemplateCached(tentUrl)
+      .then((gltf) => {
+        if (unmounted) return;
+        const model = gltf.scene.clone(true);
+        model.traverse((obj) => {
           if (obj.isLight) obj.intensity *= 0.0005;
         });
-        scene.add(gltf.scene);
-      },
-      onError: (err) => console.error("[TentScene] GLB 로드 실패:", err),
-    });
+        scene.add(model);
+      })
+      .catch((err) => console.error("[TentScene] GLB 로드 실패:", err));
 
     let animId;
     const tick = () => {

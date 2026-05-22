@@ -26,6 +26,7 @@ import { createStage3OverlayController } from "../utils/stages/stage3/overlay/st
 import { createStage3InputController } from "../utils/stages/stage3/input/stage3InputController.js";
 import { teardownStage3Scene } from "../utils/stages/stage3/lifecycle/stage3SceneTeardown.js";
 import { STAGE3_CONFIG } from "../config/stages/stage3/stage3.js";
+import { dispatchStage3NoticeModalClose } from "../events/stage3Events.js";
 import { STAGE3_ENTRY_SUBTITLE_START_DELAY_MS } from "../config/stages/stage3/stage3Stamp.js";
 import { STAGE3_MOVEMENT_KEY_CODES } from "../config/stages/stage3/stage3Keyboard.js";
 import {
@@ -47,19 +48,27 @@ import {
 import { GUM_CARDS_STICK_EVENT } from "../events/gumCardsEvents.js";
 import {
   playStage3IntroAudioTwice,
+  resetStage3IntroPlayState,
   startStage3BackgroundAmbientImmediately,
   stopStage3IntroAudio,
 } from "../utils/common/stage3IntroAudio.js";
+import { registerStage3KioskSession } from "../utils/stages/stage3/stage3KioskSession.js";
 import { disposeNoticePaperAudio } from "../utils/stages/stage3/playNoticePaperSound.js";
 import { disposePortalTransitionSound } from "../utils/stages/stage3/playPortalTransitionSound.js";
 import { disposeStage3CrackSound } from "../utils/stages/stage3/playCrackSound.js";
 import { updateFountain } from "../utils/stages/stage3/fountainEffect.js";
 import {
+  isStage3Revealed,
   notifyStage3GpuReady,
-  onceStage3Revealed,
   requestStage3Reveal,
+  resetStage3RevealForNextKioskEntry,
   resetStage3RevealGate,
 } from "../utils/stages/stage3/stage3RevealGate.js";
+import { isStage3IntroPresentationLocked } from "../utils/stages/stage3/stage3IntroPresentationLock.js";
+import {
+  notifyStage3IntroInputBlocked,
+  resetStage3IntroInputBlockedNotify,
+} from "../utils/stages/stage3/stage3IntroInputBlockedNotify.js";
 
 /**
  * `skipStage3Intro`가 true면 `/dev` 등에서 상공 카메라·인트로 사운드를 생략한다.
@@ -80,6 +89,8 @@ export function Stage3(options = {}) {
   /** 배경 로드 시 저장. 0키로 재낙하 시 사용 */
   let stage3GroundY = 0;
   let backgroundModel = null;
+  /** `/kiosk` begin이 island GLB 로드보다 먼저 온 경우( GPU 타임아웃 등) 재시도 */
+  let kioskSessionBeginPending = false;
   /** @type {import("three").CanvasTexture | null} */
   let skyBackgroundTexture = null;
   /** `Portal_Vortex` ShaderMaterial — cleanup 시 null */
@@ -107,7 +118,15 @@ export function Stage3(options = {}) {
 
   let textDestroyed = false;
   let cameraShakeEndTime = 0;
-  const keyboard = createKeyboardInput(STAGE3_MOVEMENT_KEY_CODES);
+  /** @type {() => boolean} */
+  let isIntroPresentationLocked = () => false;
+  const keyboard = createKeyboardInput(STAGE3_MOVEMENT_KEY_CODES, {
+    guardKeyDown() {
+      if (!isIntroPresentationLocked()) return true;
+      notifyStage3IntroInputBlocked("move");
+      return false;
+    },
+  });
   let character = null;
   let gumFollowers = null;
   /** @type {import("three").WebGLRenderer | null} */
@@ -136,6 +155,75 @@ export function Stage3(options = {}) {
     }, STAGE3_ENTRY_SUBTITLE_START_DELAY_MS);
   }
 
+  function resetKioskVisitorSession() {
+    if (!isStage3Active) return;
+    kioskSessionBeginPending = false;
+    clearStage3EntrySubtitleTimer();
+    stopStage3IntroAudio();
+    resetStage3IntroPlayState();
+    if (sceneRef) {
+      letterController.cleanup(sceneRef);
+    }
+    letterController.resetPlayState();
+    monitorController.resetForSetup();
+    cameraIntroController.reset();
+    textDestroyed = false;
+    stampController.resetForSetup();
+    overlayController.resetForCleanup();
+    pendingGumStickCardNums.length = 0;
+    gumFollowers?.clearStickFollowers?.();
+    resetStage3RevealForNextKioskEntry();
+    resetStage3IntroInputBlockedNotify();
+  }
+
+  function startStage3KioskCameraIntro() {
+    if (!isStage3Active || !cameraRef || stage3IslandBounds.isEmpty()) {
+      return;
+    }
+    if (skipStage3Intro) {
+      Promise.resolve().then(() => {
+        if (!isStage3Active) return;
+        cameraIntroController.skipToGameplayCamera();
+        startStage3BackgroundAmbientImmediately();
+        stampController.skipStampEntryPresentationForDev();
+      });
+      return;
+    }
+    if (cameraIntroController.getState().active) return;
+    cameraIntroController.reset();
+    resetStage3IntroPlayState();
+    cameraIntroController.start(stage3IslandCenter, stage3IslandBounds);
+    scheduleStage3EntrySubtitles();
+  }
+
+  function beginKioskVisitorSession() {
+    if (!isStage3Active) {
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] beginKioskVisitorSession: stage inactive");
+      }
+      return;
+    }
+    if (!sceneRef) {
+      if (import.meta.env.DEV) {
+        console.warn("[Stage3] beginKioskVisitorSession: scene not ready");
+      }
+      return;
+    }
+    if (!backgroundModel) {
+      kioskSessionBeginPending = true;
+      if (import.meta.env.DEV) {
+        console.warn(
+          "[Stage3] beginKioskVisitorSession: background not ready — will retry after island GLB loads",
+        );
+      }
+      return;
+    }
+    kioskSessionBeginPending = false;
+    monitorController.startSession();
+    monitorController.onBackgroundReady();
+    startStage3KioskCameraIntro();
+  }
+
   function handleGumCardsStickEvent(ev) {
     const cardNum = ev.detail?.cardNum;
     if (typeof cardNum !== "string") return;
@@ -146,6 +234,8 @@ export function Stage3(options = {}) {
     }
   }
   const _letterHitOriginFallback = new THREE.Vector3(0, 0, 0);
+  const stage3IslandCenter = new THREE.Vector3();
+  const stage3IslandBounds = new THREE.Box3();
 
   /** @type {ReturnType<typeof createStage3OverlayController>} */
   let overlayController;
@@ -179,6 +269,13 @@ export function Stage3(options = {}) {
       if (isStage3Active) playStage3IntroAudioTwice();
     },
   });
+
+  isIntroPresentationLocked = () =>
+    isStage3IntroPresentationLocked({
+      getCameraIntroState: () => cameraIntroController.getState(),
+      isStampIntroAnimating: () => stampController.isStampIntroAnimating(),
+      isInteractionLocked: () => stampController.isInteractionLocked(),
+    });
 
   /** @type {ReturnType<typeof createStage3LetterController>} */
   let letterController;
@@ -250,6 +347,7 @@ export function Stage3(options = {}) {
     hasBlockingOverlayOpen: () => overlayController.hasBlockingOverlayOpen(),
     isStampIntroAnimating: () => stampController.isStampIntroAnimating(),
     isInteractionLocked: () => stampController.isInteractionLocked(),
+    isIntroPresentationLocked,
     onStampKeyToggle: () => stampController.handleStampKeyToggle(),
     onEnterHit: () => onEnterHit(),
     onResetLetterFall: () => letterController.resetFall(),
@@ -267,6 +365,7 @@ export function Stage3(options = {}) {
       stampController.isStampIntroAnimating() ||
       stampController.isInteractionLocked() ||
       overlayController.hasBlockingOverlayOpen(),
+    isIntroPresentationLocked,
     getPortalTransitionInProgress: () => portalController.isInProgress(),
     isPortalOpenForStageTransition: () => stampController.isPortalOpenReady(),
     onTryEnterPortal: () => {
@@ -318,6 +417,8 @@ export function Stage3(options = {}) {
     hasBlockingOverlayOpen: () => overlayController.hasBlockingOverlayOpen(),
     isStampPanelSettledInCorner: () =>
       stampController.isStampPanelSettledInCorner(),
+    isWorryEnterBubbleUnlocked: () =>
+      stampController.isWorryEnterBubbleUnlocked(),
     attachIntClickHintBubble: (el) =>
       interactionsController.attachIntClickHintBubble(el),
     detachIntClickHintBubble: () =>
@@ -367,6 +468,9 @@ export function Stage3(options = {}) {
     },
     setBackgroundModel: (model) => {
       backgroundModel = model;
+      if (kioskSessionBeginPending) {
+        beginKioskVisitorSession();
+      }
     },
     setFountainState: (state) => {
       fountainState = state;
@@ -390,20 +494,11 @@ export function Stage3(options = {}) {
       monitorController.onBackgroundReady();
     },
     onCameraIntroStart: (center, bounds) => {
-      onceStage3Revealed(() => {
-        if (!isStage3Active) return;
-        if (skipStage3Intro) {
-          Promise.resolve().then(() => {
-            if (!isStage3Active) return;
-            cameraIntroController.skipToGameplayCamera();
-            startStage3BackgroundAmbientImmediately();
-            stampController.skipStampEntryPresentationForDev();
-          });
-          return;
-        }
-        cameraIntroController.start(center, bounds);
-        scheduleStage3EntrySubtitles();
-      });
+      stage3IslandCenter.copy(center);
+      stage3IslandBounds.copy(bounds);
+      if (isStage3Revealed()) {
+        startStage3KioskCameraIntro();
+      }
     },
     scheduleDeferredSetup: (task) => deferredSetup.schedule(task),
     registerIslandInteractions: (model, animations) => {
@@ -497,13 +592,14 @@ export function Stage3(options = {}) {
         },
       });
 
-      // 캔버스가 보여질 때까지 monitor start 지연 (start화면 hidden 상태에서 busy 방지)
-      onceStage3Revealed(() => {
-        monitorController.startSession();
+      registerStage3KioskSession({
+        reset: resetKioskVisitorSession,
+        begin: beginKioskVisitorSession,
       });
       // 이미 visible 상태(dev·kiosk 직접 진입)면 즉시 reveal 게이트를 연다.
       if (window.getComputedStyle(canvas).visibility !== "hidden") {
         requestStage3Reveal();
+        beginKioskVisitorSession();
       }
 
       loadStage3Background({
@@ -584,6 +680,8 @@ export function Stage3(options = {}) {
 
     cleanup(scene) {
       isStage3Active = false;
+      registerStage3KioskSession(null);
+      stage3IslandBounds.makeEmpty();
       resetStage3RevealGate();
       clearStage3EntrySubtitleTimer();
       stopStage3IntroAudio();
@@ -614,7 +712,7 @@ export function Stage3(options = {}) {
         interactionsController.unbindCanvas(canvasRef);
         canvasRef = null;
       }
-      window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
+      dispatchStage3NoticeModalClose();
       closeMinigame({
         camera: cameraRef ?? this.camera,
         orbitControls: debugControls?.getOrbitControls?.() ?? null,

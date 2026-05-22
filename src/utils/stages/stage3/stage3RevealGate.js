@@ -28,6 +28,10 @@ export function waitForStage3GpuReady() {
   });
 }
 
+export function isStage3Revealed() {
+  return _revealed;
+}
+
 export function requestStage3Reveal() {
   if (_revealed) return;
   _revealed = true;
@@ -51,4 +55,9 @@ export function resetStage3RevealGate() {
   _gpuReadyCallbacks.length = 0;
   _revealed = false;
   _revealCallbacks.length = 0;
+}
+
+/** 소프트 리셋 후 `/kiosk` 재진입 시 reveal·begin 이 다시 동작하도록 (GPU ready 는 유지) */
+export function resetStage3RevealForNextKioskEntry() {
+  _revealed = false;
 }

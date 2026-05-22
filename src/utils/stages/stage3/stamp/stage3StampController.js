@@ -2,12 +2,18 @@
  * Stage3 스탬프 패널 UI·이스터에그 진행·진입 자막
  */
 import { STAGE6_SUBTITLE_SEQUENCE_EVENT } from "../../../../events/stage6Events.js";
+import { dispatchStage3IntroMovementHint } from "../../../../events/stage3Events.js";
+import {
+  STAGE3_INTRO_MOVEMENT_HINT_TOAST_FADE_MS,
+  STAGE3_WORRY_ENTER_BUBBLE_AFTER_MOVEMENT_HINT_MS,
+} from "../../../../config/stages/stage3/stage3Bubbles.js";
 import {
   STAMP_POSTER_IMAGE_PATH,
   STAGE3_STAMP_INTRO_CENTER_IN_MS,
   STAGE3_STAMP_INTRO_HOLD_MS,
   STAGE3_STAMP_INTRO_FLY_MS,
   STAGE3_ENTRY_SUBTITLE_TOTAL_MS,
+  STAGE3_ENTRY_MOVEMENT_HINT_DELAY_MS,
   REQUIRED_EGG_COUNT,
   MAIN_EASTER_EGG_CANONICAL,
   RAY_TARGET_TO_EGG_KEY,
@@ -54,6 +60,12 @@ export function createStage3StampController({
   let stage3StampIntroFlyTimerId = null;
   let stage3StampIntroAnimating = false;
   let stage3InteractionLocked = true;
+  let stage3EntryMovementHintDispatched = false;
+  /** @type {number | null} */
+  let stage3EntryMovementHintTimerId = null;
+  let worryEnterBubbleUnlocked = false;
+  /** @type {number | null} */
+  let worryEnterBubbleUnlockTimerId = null;
 
   function dispatchSubtitleSequence(messages, options = {}) {
     window.dispatchEvent(
@@ -180,6 +192,44 @@ export function createStage3StampController({
     panel.style.removeProperty("transform-origin");
   }
 
+  function clearEntryMovementHintTimer() {
+    if (stage3EntryMovementHintTimerId != null) {
+      window.clearTimeout(stage3EntryMovementHintTimerId);
+      stage3EntryMovementHintTimerId = null;
+    }
+  }
+
+  function clearWorryEnterBubbleUnlockTimer() {
+    if (worryEnterBubbleUnlockTimerId != null) {
+      window.clearTimeout(worryEnterBubbleUnlockTimerId);
+      worryEnterBubbleUnlockTimerId = null;
+    }
+  }
+
+  function scheduleWorryEnterBubbleUnlockAfterMovementHint() {
+    clearWorryEnterBubbleUnlockTimer();
+    const delayMs =
+      STAGE3_INTRO_MOVEMENT_HINT_TOAST_FADE_MS +
+      STAGE3_WORRY_ENTER_BUBBLE_AFTER_MOVEMENT_HINT_MS;
+    worryEnterBubbleUnlockTimerId = window.setTimeout(() => {
+      worryEnterBubbleUnlockTimerId = null;
+      if (!getIsStageActive()) return;
+      worryEnterBubbleUnlocked = true;
+    }, delayMs);
+  }
+
+  function scheduleEntryMovementHint() {
+    if (stage3EntryMovementHintDispatched || !getIsStageActive()) return;
+    stage3EntryMovementHintDispatched = true;
+    clearEntryMovementHintTimer();
+    stage3EntryMovementHintTimerId = window.setTimeout(() => {
+      stage3EntryMovementHintTimerId = null;
+      if (!getIsStageActive()) return;
+      dispatchStage3IntroMovementHint();
+      scheduleWorryEnterBubbleUnlockAfterMovementHint();
+    }, STAGE3_ENTRY_MOVEMENT_HINT_DELAY_MS);
+  }
+
   /** @param {HTMLElement} panel */
   function settleStampPanelAfterIntroFly(panel) {
     panel.getAnimations().forEach((anim) => anim.cancel());
@@ -259,9 +309,13 @@ export function createStage3StampController({
       stage3StampIntroFlyTimerId = null;
       finishFly();
     }, STAGE3_STAMP_INTRO_FLY_MS + 120);
+
+    scheduleEntryMovementHint();
   }
 
   function clearStampIntroTimers() {
+    clearEntryMovementHintTimer();
+    clearWorryEnterBubbleUnlockTimer();
     if (stage3StampIntroHoldTimerId != null) {
       window.clearTimeout(stage3StampIntroHoldTimerId);
       stage3StampIntroHoldTimerId = null;
@@ -285,6 +339,7 @@ export function createStage3StampController({
 
   function playStampPanelEntryAnimation() {
     if (!stampUiRoot || !getIsStageActive()) return;
+    /** @type {HTMLElement | null} */
     const panel = stampUiRoot.querySelector(".stage3-stamp-panel");
     if (!panel) return;
     clearStampIntroTimers();
@@ -548,12 +603,16 @@ export function createStage3StampController({
     isStampPosterZoomOpen = false;
     worryCompletionCelebrationDone = false;
     stage3IntroFlowStarted = false;
+    stage3EntryMovementHintDispatched = false;
+    worryEnterBubbleUnlocked = false;
     pendingEggDiscoverySubtitle = null;
     if (stage3EntryStampRevealTimerId != null) {
       window.clearTimeout(stage3EntryStampRevealTimerId);
       stage3EntryStampRevealTimerId = null;
     }
     clearStampIntroTimers();
+    clearEntryMovementHintTimer();
+    clearWorryEnterBubbleUnlockTimer();
   }
 
   function cleanup() {
@@ -585,6 +644,7 @@ export function createStage3StampController({
     /** 진입 자막 후 미니맵이 좌상단에 안착한 뒤 */
     isStampPanelSettledInCorner: () =>
       stampPanelRevealReady && !stage3StampIntroAnimating,
+    isWorryEnterBubbleUnlocked: () => worryEnterBubbleUnlocked,
     isInteractionLocked: () => stage3InteractionLocked,
     isPosterZoomOpen: () => isStampPosterZoomOpen,
     isPortalOpenReady: () =>
