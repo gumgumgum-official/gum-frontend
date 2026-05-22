@@ -19,6 +19,11 @@ export function markStage6AudioUnlocked() {
 
 export function resetStage6AudioUnlock() {
   stage6AudioUnlocked = false;
+  if (primeAudio) {
+    primeAudio.pause();
+    primeAudio.src = "";
+    primeAudio = null;
+  }
 }
 
 /**

@@ -21,6 +21,8 @@ export const STAGE6_PHONE_IN_CALL_BLOCK_TAG = "phone-in-call";
 
 export const STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG = "photobooth-modal";
 
+export const STAGE6_NAME_MODAL_BLOCK_TAG = "name-modal";
+
 const CLICK_BUBBLE_SUPPRESS_TAGS = new Set([
   STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG,
   STAGE6_POSTER_MODAL_BLOCK_TAG,
@@ -94,11 +96,9 @@ export function resetStage6NotificationGate() {
   flushScheduled = false;
 }
 
-const NAME_MODAL_BLOCK_TAG = "name-modal";
-
 /** 탑승권 이름 모달 — 알림 큐에 막히지 않고 즉시 연다 */
 export function openStage6NameModal() {
-  blockStage6NotificationsOnce(NAME_MODAL_BLOCK_TAG);
+  blockStage6NotificationsOnce(STAGE6_NAME_MODAL_BLOCK_TAG);
   window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
 }
 

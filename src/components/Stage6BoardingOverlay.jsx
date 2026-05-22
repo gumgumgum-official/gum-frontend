@@ -22,6 +22,7 @@ import {
 } from "../events/kioskEvents.js";
 import {
   resetStage6NotificationGate,
+  STAGE6_NAME_MODAL_BLOCK_TAG,
   unblockStage6Notifications,
 } from "../utils/stages/stage6/stage6NotificationGate.js";
 const DEFAULT_PASSENGER_NAME = "소중한 손님";
@@ -253,7 +254,7 @@ export function Stage6BoardingOverlay() {
 
     const onStage6NameModalHide = () => {
       setIsNameModalOpen(false);
-      unblockStage6Notifications("name-modal");
+      unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
       window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
 
@@ -273,7 +274,7 @@ export function Stage6BoardingOverlay() {
       setPassengerName("");
       setNameInputValue("");
       latestPassengerNameRef.current = "";
-      unblockStage6Notifications("name-modal");
+      unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
       window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
     };
 
@@ -365,7 +366,7 @@ export function Stage6BoardingOverlay() {
         }
         setIsNameModalOpen(false);
         setIsOverlayOpen(false);
-        unblockStage6Notifications("name-modal");
+        unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
         window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT));
       }
       if (event.key === "Enter" && isNameModalOpen) {
@@ -384,7 +385,7 @@ export function Stage6BoardingOverlay() {
     setPassengerName(nextPassengerName);
     setNameInputValue(nextPassengerName);
     setIsNameModalOpen(false);
-    unblockStage6Notifications("name-modal");
+    unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
     window.dispatchEvent(new CustomEvent(STAGE6_INTERACTION_LOCK_EVENT));
     window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
     if (ticketOverlayTimerRef.current) {
@@ -453,7 +454,7 @@ export function Stage6BoardingOverlay() {
         aria-label="Passenger name input"
         onClick={() => {
           setIsNameModalOpen(false);
-          unblockStage6Notifications("name-modal");
+          unblockStage6Notifications(STAGE6_NAME_MODAL_BLOCK_TAG);
           window.dispatchEvent(
             new CustomEvent(STAGE6_INTERACTION_UNLOCK_EVENT),
           );

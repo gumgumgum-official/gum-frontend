@@ -48,14 +48,6 @@ export const STAGE6_INTRO_CLICK_HINT_MESSAGE = "클릭해 보세요!";
 /** 공항 안내 자막·방송 인트로 종료 — 입력 제한 토스트 정리용 */
 export const STAGE6_INTRO_FINISHED_EVENT = "gum:stage6IntroFinished";
 
-export function dispatchStage6IntroClickHint() {
-  window.dispatchEvent(
-    new CustomEvent(STAGE6_INTRO_CLICK_HINT_EVENT, {
-      detail: { message: STAGE6_INTRO_CLICK_HINT_MESSAGE },
-    }),
-  );
-}
-
 export const STAGE6_PHONE_INDICATOR_SHOW_EVENT =
   "gum:stage6-phone-indicator:show";
 export const STAGE6_PHONE_INDICATOR_HIDE_EVENT =
