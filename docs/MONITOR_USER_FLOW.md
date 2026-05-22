@@ -46,4 +46,4 @@
 | 클라이언트 | `warmKioskExhibitionAssets()` — `/start` idle에 Stage3·텐트 GLB·타로/포스터 PNG 선로드. GLTF 메모리 캐시는 유지. |
 | `/start` 대기 | 키오스크 캔버스는 hidden이며, GPU 워밍업(`notifyStage3GpuReady`) 이후 Three.js 렌더를 일시 정지해 GPU 낭비를 줄임. |
 | 배포 | 정적 서버에서 `/models/**`, `/assets/**` 등에 `Cache-Control: public, max-age=31536000` (에셋 교체 시 파일명/URL 변경). |
-| 이상·멈춤 복구 | F5 대신 **소프트 리셋**: 화면 **우측 상단 2초 안에 5번 연속 탭** (보이지 않는 히트 영역). |
+| 이상·멈춤 복구 | F5 대신 **소프트 리셋**: 화면 **우측 상단 2초 안에 5번 연속 탭** (보이지 않는 히트 영역). 3D 편지·모니터 폴링·섬 인트로까지 초기화 후 `/start` 복귀. |

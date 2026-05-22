@@ -15,6 +15,7 @@ import { postMonitorComplete } from "../../lib/monitorCurrentApi.js";
 import { getGLBLoader } from "./assetLoaders.js";
 import { warmKioskExhibitionAssets } from "./kioskExhibitionWarmup.js";
 import { resetClientForNextKioskVisitor } from "./resetClientForNextKioskVisitor.js";
+import { resetStage3KioskVisitorSession } from "../stages/stage3/stage3KioskSession.js";
 import { stopStartPageIntroBgm } from "./startPageIntroAudio.js";
 import { stopStage3IntroAudio } from "./stage3IntroAudio.js";
 import {
@@ -39,6 +40,7 @@ export function stopKioskExhibitionAudio() {
 export function dispatchKioskSoftRestartUiCleanup() {
   // 모달 close 이벤트가 Stage3 배경음을 resume 하기 전에 먼저 정지
   stopKioskExhibitionAudio();
+  resetStage3KioskVisitorSession();
   window.dispatchEvent(new CustomEvent(KIOSK_SOFT_RESTART_EVENT));
   window.dispatchEvent(new CustomEvent("gum:closeNoticeModal"));
   window.dispatchEvent(new CustomEvent("gum:closeGameMachineModal"));

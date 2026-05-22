@@ -29,6 +29,7 @@ import {
   performKioskSoftRestart,
   stopKioskExhibitionAudio,
 } from "./utils/common/kioskSoftRestart.js";
+import { beginStage3KioskVisitorSession } from "./utils/stages/stage3/stage3KioskSession.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
   getGumServerBaseUrl,
@@ -163,6 +164,7 @@ function AppLayout() {
   useEffect(() => {
     if (isKioskRoute && prevPathnameRef.current !== "/kiosk") {
       requestStage3Reveal();
+      beginStage3KioskVisitorSession();
     }
     prevPathnameRef.current = location.pathname;
   }, [location.pathname, isKioskRoute]);

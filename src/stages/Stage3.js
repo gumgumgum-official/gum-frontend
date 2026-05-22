@@ -47,17 +47,20 @@ import {
 import { GUM_CARDS_STICK_EVENT } from "../events/gumCardsEvents.js";
 import {
   playStage3IntroAudioTwice,
+  resetStage3IntroPlayState,
   startStage3BackgroundAmbientImmediately,
   stopStage3IntroAudio,
 } from "../utils/common/stage3IntroAudio.js";
+import { registerStage3KioskSession } from "../utils/stages/stage3/stage3KioskSession.js";
 import { disposeNoticePaperAudio } from "../utils/stages/stage3/playNoticePaperSound.js";
 import { disposePortalTransitionSound } from "../utils/stages/stage3/playPortalTransitionSound.js";
 import { disposeStage3CrackSound } from "../utils/stages/stage3/playCrackSound.js";
 import { updateFountain } from "../utils/stages/stage3/fountainEffect.js";
 import {
+  isStage3Revealed,
   notifyStage3GpuReady,
-  onceStage3Revealed,
   requestStage3Reveal,
+  resetStage3RevealForNextKioskEntry,
   resetStage3RevealGate,
 } from "../utils/stages/stage3/stage3RevealGate.js";
 
@@ -136,6 +139,51 @@ export function Stage3(options = {}) {
     }, STAGE3_ENTRY_SUBTITLE_START_DELAY_MS);
   }
 
+  function resetKioskVisitorSession() {
+    if (!isStage3Active) return;
+    clearStage3EntrySubtitleTimer();
+    stopStage3IntroAudio();
+    resetStage3IntroPlayState();
+    if (sceneRef) {
+      letterController.cleanup(sceneRef);
+    }
+    letterController.resetPlayState();
+    monitorController.resetForSetup();
+    cameraIntroController.reset();
+    textDestroyed = false;
+    stampController.resetForSetup();
+    overlayController.resetForCleanup();
+    pendingGumStickCardNums.length = 0;
+    resetStage3RevealForNextKioskEntry();
+  }
+
+  function startStage3KioskCameraIntro() {
+    if (!isStage3Active || !cameraRef || stage3IslandBounds.isEmpty()) {
+      return;
+    }
+    if (skipStage3Intro) {
+      Promise.resolve().then(() => {
+        if (!isStage3Active) return;
+        cameraIntroController.skipToGameplayCamera();
+        startStage3BackgroundAmbientImmediately();
+        stampController.skipStampEntryPresentationForDev();
+      });
+      return;
+    }
+    if (cameraIntroController.getState().active) return;
+    cameraIntroController.reset();
+    resetStage3IntroPlayState();
+    cameraIntroController.start(stage3IslandCenter, stage3IslandBounds);
+    scheduleStage3EntrySubtitles();
+  }
+
+  function beginKioskVisitorSession() {
+    if (!isStage3Active || !backgroundModel || !sceneRef) return;
+    monitorController.startSession();
+    monitorController.onBackgroundReady();
+    startStage3KioskCameraIntro();
+  }
+
   function handleGumCardsStickEvent(ev) {
     const cardNum = ev.detail?.cardNum;
     if (typeof cardNum !== "string") return;
@@ -146,6 +194,8 @@ export function Stage3(options = {}) {
     }
   }
   const _letterHitOriginFallback = new THREE.Vector3(0, 0, 0);
+  const stage3IslandCenter = new THREE.Vector3();
+  const stage3IslandBounds = new THREE.Box3();
 
   /** @type {ReturnType<typeof createStage3OverlayController>} */
   let overlayController;
@@ -390,20 +440,11 @@ export function Stage3(options = {}) {
       monitorController.onBackgroundReady();
     },
     onCameraIntroStart: (center, bounds) => {
-      onceStage3Revealed(() => {
-        if (!isStage3Active) return;
-        if (skipStage3Intro) {
-          Promise.resolve().then(() => {
-            if (!isStage3Active) return;
-            cameraIntroController.skipToGameplayCamera();
-            startStage3BackgroundAmbientImmediately();
-            stampController.skipStampEntryPresentationForDev();
-          });
-          return;
-        }
-        cameraIntroController.start(center, bounds);
-        scheduleStage3EntrySubtitles();
-      });
+      stage3IslandCenter.copy(center);
+      stage3IslandBounds.copy(bounds);
+      if (isStage3Revealed()) {
+        startStage3KioskCameraIntro();
+      }
     },
     scheduleDeferredSetup: (task) => deferredSetup.schedule(task),
     registerIslandInteractions: (model, animations) => {
@@ -497,13 +538,14 @@ export function Stage3(options = {}) {
         },
       });
 
-      // 캔버스가 보여질 때까지 monitor start 지연 (start화면 hidden 상태에서 busy 방지)
-      onceStage3Revealed(() => {
-        monitorController.startSession();
+      registerStage3KioskSession({
+        reset: resetKioskVisitorSession,
+        begin: beginKioskVisitorSession,
       });
       // 이미 visible 상태(dev·kiosk 직접 진입)면 즉시 reveal 게이트를 연다.
       if (window.getComputedStyle(canvas).visibility !== "hidden") {
         requestStage3Reveal();
+        beginKioskVisitorSession();
       }
 
       loadStage3Background({
@@ -584,6 +626,8 @@ export function Stage3(options = {}) {
 
     cleanup(scene) {
       isStage3Active = false;
+      registerStage3KioskSession(null);
+      stage3IslandBounds.makeEmpty();
       resetStage3RevealGate();
       clearStage3EntrySubtitleTimer();
       stopStage3IntroAudio();
