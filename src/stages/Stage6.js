@@ -61,7 +61,6 @@ import {
   unblockStage6Notifications,
 } from "../utils/stages/stage6/stage6NotificationGate.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
-import { createStage6CameraDebugOverlay } from "../utils/stages/stage6/stage6CameraDebugOverlay.js";
 const INT_PREFIX = "INT_";
 const CHAR_ROOT_NAMES = [
   "INT_Gum_Cry",
@@ -332,7 +331,6 @@ export function Stage6() {
   let isAirportChimeVisible = false;
 
   const bagPhysics = createBagPhysics();
-  let cameraDebugOverlay = null;
 
   function applyStage6SceneBackground(scene) {
     scene.background = new THREE.Color(config.background.color);
@@ -1295,14 +1293,6 @@ export function Stage6() {
       }
       cameraRef = this.camera;
 
-      if (import.meta.env.DEV) {
-        cameraDebugOverlay = createStage6CameraDebugOverlay({
-          camera: this.camera,
-          domElement: canvas,
-          config,
-        });
-      }
-
       scene.background = null;
       character = createCharacterController({
         scene,
@@ -1750,8 +1740,6 @@ export function Stage6() {
     },
 
     update(delta) {
-      if (cameraDebugOverlay) cameraDebugOverlay.update();
-
       atmEmissiveProgress = THREE.MathUtils.damp(
         atmEmissiveProgress,
         atmEmissiveTarget,
@@ -1959,10 +1947,6 @@ export function Stage6() {
     cleanup(scene) {
       isStage6Active = false;
       keyboard.unmount();
-      if (cameraDebugOverlay) {
-        cameraDebugOverlay.dispose();
-        cameraDebugOverlay = null;
-      }
       if (characterAnimUnblockTimeoutId) {
         window.clearTimeout(characterAnimUnblockTimeoutId);
         characterAnimUnblockTimeoutId = 0;
