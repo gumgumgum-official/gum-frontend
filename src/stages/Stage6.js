@@ -17,7 +17,6 @@ import {
   clearRetainedStage3Whiteout,
   hasRetainedStage3Whiteout,
   releaseRetainedStage3Whiteout,
-  STAGE3_WHITEOUT_FADE_OUT_MS,
 } from "../utils/stages/stage3/stage3ToStage6Whiteout.js";
 import {
   STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES,
@@ -1592,8 +1591,6 @@ export function Stage6() {
 
           objects.push(model);
           scene.add(model);
-          // Check before revealStage6Scene nulls retainedOverlayEl
-          const hadWhiteoutOverlay = hasRetainedStage3Whiteout();
           revealStage6Scene(scene);
 
           // 애니메이션 시스템 초기화 (§5: mixer 1개, gltf.scene 전체)
@@ -1677,22 +1674,8 @@ export function Stage6() {
             suppressIslandExitToast: true,
           });
 
-          // GLB 씬이 준비된 뒤 오디오 시작. 화이트아웃 페이드(1.45s) 중에 chime이
-          // 먼저 들리지 않도록, 페이드 종료 직후(+50ms 여유)에 chime이 재생되도록 대기.
-          // scheduleAirplaneCallSign 내부에 AIRPLANE_CALL_SIGN_DELAY_MS(420ms) 내장.
-          const announceStartDelay = hadWhiteoutOverlay
-            ? Math.max(
-                0,
-                STAGE3_WHITEOUT_FADE_OUT_MS - AIRPLANE_CALL_SIGN_DELAY_MS + 50,
-              )
-            : 0;
-          if (announceStartDelay > 0) {
-            window.setTimeout(() => {
-              if (isStage6Active) scheduleAirplaneCallSign();
-            }, announceStartDelay);
-          } else {
-            scheduleAirplaneCallSign();
-          }
+          // GLB 씬이 실제로 준비된 뒤에 공항 안내 오디오/자막 시퀀스를 시작
+          scheduleAirplaneCallSign();
         })
         .catch((err) => {
           console.error(

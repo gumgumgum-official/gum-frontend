@@ -4,9 +4,6 @@
 import gsap from "gsap";
 import { PORTAL_WHITEOUT_FADE_OUT_SEC } from "../../../config/stages/stage3/stage3Portal.js";
 
-/** 화이트아웃 페이드 아웃 시간(ms) — Stage6 오디오 시작 타이밍 보정에 사용 */
-export const STAGE3_WHITEOUT_FADE_OUT_MS = PORTAL_WHITEOUT_FADE_OUT_SEC * 1000;
-
 /** @type {HTMLDivElement | null} */
 let retainedOverlayEl = null;
 
