@@ -241,7 +241,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     src={NOTICE_POSTER.party}
                     alt="껌딱지 마을 잔치"
                     draggable={false}
-                    loading="lazy"
                     style={{
                       width: "100%",
                       height: "100%",
@@ -307,7 +306,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     src={NOTICE_POSTER.bestGum}
                     alt="투표 포스터"
                     draggable={false}
-                    loading="lazy"
                     style={{
                       width: "100%",
                       height: "100%",
@@ -371,7 +369,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                     src={NOTICE_POSTER.guestbook}
                     alt="방명록 포스터"
                     draggable={false}
-                    loading="lazy"
                     style={{
                       width: "100%",
                       height: "100%",
@@ -461,7 +458,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                         src={NOTICE_POSTER.party}
                         alt="껌딱지 마을 잔치"
                         draggable={false}
-                        loading="lazy"
                         style={{
                           width: "100%",
                           maxHeight: "80vh",

@@ -90,7 +90,7 @@ function AppLayout() {
     useState(false);
   const [showStage6PosterModal, setShowStage6PosterModal] = useState(false);
   const [stage6PosterImageSrc, setStage6PosterImageSrc] = useState(
-    "/assets/poster/stamp_poster.webp",
+    "/assets/poster/stamp_poster.png",
   );
   const [showStage6PhotoboothModal, setShowStage6PhotoboothModal] =
     useState(false);
@@ -191,7 +191,7 @@ function AppLayout() {
       const imageSrc =
         typeof event?.detail?.imageSrc === "string" && event.detail.imageSrc
           ? event.detail.imageSrc
-          : "/assets/poster/stamp_poster.webp";
+          : "/assets/poster/stamp_poster.png";
       setStage6PosterImageSrc(imageSrc);
       setShowStage6PosterModal(true);
     };
