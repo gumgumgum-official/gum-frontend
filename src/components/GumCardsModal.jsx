@@ -26,7 +26,12 @@ function GumCardComponent(props) {
     >
       <div className="gum-card-inner">
         <div className="gum-card-front">
-          <img className="gum-card-img" src={card.img} alt={card.name} />
+          <img
+            className="gum-card-img"
+            src={card.img}
+            alt={card.name}
+            loading="lazy"
+          />
           <div className="gum-card-front-overlay" />
           <div
             className="gum-card-front-dot"

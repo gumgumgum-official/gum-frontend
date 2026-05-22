@@ -500,6 +500,12 @@ export function Stage6() {
         airportAnnounceIntroAudio.onplay = null;
         airportAnnounceIntroAudio.ontimeupdate = null;
         airportAnnounceIntroAudio.onended = null;
+        try {
+          airportAnnounceIntroAudio.pause();
+          airportAnnounceIntroAudio.currentTime = 0;
+        } catch (_e) {
+          /* ignored */
+        }
       }
       const cues = STAGE6_AIRPORT_ANNOUNCEMENT_SUBTITLE_CUES ?? [];
       let cueIdx = 0;
@@ -652,6 +658,12 @@ export function Stage6() {
         if (airplaneCallSignAudio) {
           airplaneCallSignAudio.ontimeupdate = null;
           airplaneCallSignAudio.onended = null;
+          try {
+            airplaneCallSignAudio.pause();
+            airplaneCallSignAudio.currentTime = 0;
+          } catch (_e) {
+            /* ignored */
+          }
         }
         if (isAirportChimeVisible) {
           dispatchGatedStage6WindowEvent(AIRPORT_CHIME_HIDE_EVENT);

@@ -86,18 +86,18 @@ export const STAGE3_OBJECTS_CONFIG = {
     /** 게시판·포스터 종이 효과음 볼륨 (1 초과 시 Web Audio 증폭) */
     paperSoundVolume: 3.6,
     posterImages: {
-      party: "/assets/poster/festival_poster.png",
-      bestGum: "/assets/poster/vote_poster.png",
-      icecream: "/assets/poster/icecream_poster.png",
-      guestbook: "/assets/poster/minihome_poster.png",
+      party: "/assets/poster/festival_poster.webp",
+      bestGum: "/assets/poster/vote_poster.webp",
+      icecream: "/assets/poster/icecream_poster.webp",
+      guestbook: "/assets/poster/minihome_poster.webp",
     },
     /** `NoticeModalBoard` 방명록 전체 화면 배경 */
     guestbookFullscreenBg: "/assets/guestbook/guestbook_bg.webp",
     /** `GgumddiVoteSection` 후보 카드 이미지 (순서 = 1·2·3번) */
     voteCandidateImages: [
-      "/assets/poster/vote_1.png",
-      "/assets/poster/vote_2.png",
-      "/assets/poster/vote_3.png",
+      "/assets/poster/vote_1.webp",
+      "/assets/poster/vote_2.webp",
+      "/assets/poster/vote_3.webp",
     ],
   },
 

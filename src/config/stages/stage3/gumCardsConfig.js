@@ -8,7 +8,7 @@ export const CARDS = [
   {
     num: "01",
     name: "껌뽀지",
-    img: `${BASE}/assets/tarocard/blue_ggum.png`,
+    img: `${BASE}/assets/tarocard/blue_ggum.webp`,
     keywords: ["#생각정리", "#비우기"],
     accent: "#7B9EFF",
     accentBg: "rgba(123,158,255,0.12)",
@@ -21,7 +21,7 @@ export const CARDS = [
   {
     num: "02",
     name: "껌쏙지",
-    img: `${BASE}/assets/tarocard/green_ggum.png`,
+    img: `${BASE}/assets/tarocard/green_ggum.webp`,
     keywords: ["#우연한", "#행운"],
     accent: "#86efac",
     accentBg: "rgba(134,239,172,0.10)",
@@ -34,7 +34,7 @@ export const CARDS = [
   {
     num: "03",
     name: "껌반지",
-    img: `${BASE}/assets/tarocard/yellow_ggum.png`,
+    img: `${BASE}/assets/tarocard/yellow_ggum.webp`,
     keywords: ["#영감", "#새로운시선"],
     accent: "#FDE68A",
     accentBg: "rgba(253,230,138,0.10)",
@@ -47,7 +47,7 @@ export const CARDS = [
   {
     num: "04",
     name: "껌뿌지",
-    img: `${BASE}/assets/tarocard/pink_ggum.png`,
+    img: `${BASE}/assets/tarocard/pink_ggum.webp`,
     keywords: ["#생산적휴식", "#낮잠허락"],
     accent: "#F9A8D4",
     accentBg: "rgba(249,168,212,0.12)",
@@ -60,7 +60,7 @@ export const CARDS = [
   {
     num: "05",
     name: "껌냥지",
-    img: `${BASE}/assets/tarocard/purple_ggum.png`,
+    img: `${BASE}/assets/tarocard/purple_ggum.webp`,
     keywords: ["#다정함", "#괜찮아"],
     accent: "#C084FC",
     accentBg: "rgba(192,132,252,0.12)",
@@ -73,7 +73,7 @@ export const CARDS = [
   {
     num: "06",
     name: "껌별지",
-    img: `${BASE}/assets/tarocard/orange_ggum.png`,
+    img: `${BASE}/assets/tarocard/orange_ggum.webp`,
     keywords: ["#목표", "#페이스메이커"],
     accent: "#FDBA74",
     accentBg: "rgba(253,186,116,0.12)",
@@ -86,7 +86,7 @@ export const CARDS = [
   {
     num: "07",
     name: "껌몰지",
-    img: `${BASE}/assets/tarocard/gray_ggum.png`,
+    img: `${BASE}/assets/tarocard/gray_ggum.webp`,
     keywords: ["#깊은집중", "#고요한시간"],
     accent: "#93C5FD",
     accentBg: "rgba(147,197,253,0.10)",
@@ -99,7 +99,7 @@ export const CARDS = [
   {
     num: "08",
     name: "껌온지",
-    img: `${BASE}/assets/tarocard/brown_ggum.png`,
+    img: `${BASE}/assets/tarocard/brown_ggum.webp`,
     keywords: ["#함께", "#온기"],
     accent: "#FCA5A5",
     accentBg: "rgba(252,165,165,0.12)",

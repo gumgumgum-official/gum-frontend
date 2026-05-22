@@ -1,6 +1,6 @@
 /** Stage3 스탬프 투어·이스터에그 상수 */
 
-export const STAMP_POSTER_IMAGE_PATH = "/assets/poster/stamp_poster.png";
+export const STAMP_POSTER_IMAGE_PATH = "/assets/poster/stamp_poster.webp";
 
 /** 화면 중앙 포스터 페이드·스케일 인 */
 export const STAGE3_STAMP_INTRO_CENTER_IN_MS = 720;

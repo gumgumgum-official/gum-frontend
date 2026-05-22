@@ -37,7 +37,7 @@ export const STAGE6_CONFIG = {
   airplane: {
     path: "/models/stage6/airplane_compression.glb",
   },
-  boardPosterImage: "/assets/poster/stamp_poster.png",
+  boardPosterImage: "/assets/poster/stamp_poster.webp",
   photoboothVideoPath: "/assets/photo_booth/photobooth.mp4",
   photoboothPhotoSrcs: [
     "/assets/photo_booth/photo1.png",
