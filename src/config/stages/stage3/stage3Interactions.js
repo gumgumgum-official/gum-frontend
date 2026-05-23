@@ -44,6 +44,7 @@ export const LOOP_CLIP_NAMES = [
   "Gum_Breathing_Loop",
   "Gum_Breathing_Loop_7",
   "Gum_HandWave_Loop",
+  "Lollipop_ArmShake_Rig",
 ];
 
 /** 2배속 재생할 풍선 루프 클립 이름 집합 */
