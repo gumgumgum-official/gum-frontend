@@ -1,4 +1,5 @@
 import { getSessionId } from "./session.js";
+import { fetchWithRetry } from "./fetchWithRetry.js";
 
 /** 게시판 껌딱지 투표 UX용 — `:${getSessionId()}` 접미로 localStorage 에 저장됨 */
 export const GGUMDDI_MY_VOTE_STORAGE_PREFIX = "gum-ggumddi-my-vote";
@@ -98,9 +99,9 @@ function normalizeAggregate(payload) {
  */
 export async function fetchMyVote(clientId) {
   const base = getGumServerBaseUrl();
-  const res = await fetch(
+  const res = await fetchWithRetry(
     `${base}/api/votes/my?clientId=${encodeURIComponent(clientId)}`,
-    { headers: { Accept: "application/json" } },
+    { headers: { Accept: "application/json" }, idempotent: true },
   );
   if (!res.ok) {
     throw new Error(`내 투표 조회 실패 (HTTP ${res.status})`);
@@ -115,9 +116,10 @@ export async function fetchMyVote(clientId) {
  */
 export async function fetchVoteResults() {
   const base = getGumServerBaseUrl();
-  const res = await fetch(`${base}/api/votes/results`, {
+  const res = await fetchWithRetry(`${base}/api/votes/results`, {
     method: "GET",
     headers: { Accept: "application/json" },
+    idempotent: true,
   });
   if (!res.ok) {
     throw new Error(`투표 집계 조회 실패 (HTTP ${res.status})`);
@@ -138,7 +140,7 @@ export async function postVote(candidate, opts = {}) {
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
 
-  const res = await fetch(`${base}/api/votes`, {
+  const res = await fetchWithRetry(`${base}/api/votes`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
@@ -182,7 +184,7 @@ export async function deleteMyVote(opts = {}) {
   const sessionId = opts.sessionId ?? getSessionId();
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
-  const res = await fetch(`${base}/api/votes/my`, {
+  const res = await fetchWithRetry(`${base}/api/votes/my`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
@@ -215,7 +217,7 @@ export async function updateMyVote(candidate, opts = {}) {
   const sessionId = opts.sessionId ?? getSessionId();
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
-  const res = await fetch(`${base}/api/votes/my`, {
+  const res = await fetchWithRetry(`${base}/api/votes/my`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
