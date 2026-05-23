@@ -49,7 +49,7 @@ export function createStage2GumSpeechBubbles({
 
   function makeBubbleElement(id) {
     const el = document.createElement("div");
-    el.className = "speech-bubble-stage2";
+    el.className = "speech-bubble-stage2 speech-bubble-stage2--beam";
     el.id = id;
     el.setAttribute("aria-hidden", "true");
     document.body.appendChild(el);
