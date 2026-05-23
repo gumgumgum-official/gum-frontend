@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getGumServerBaseUrl } from "../lib/monitorCurrentApi.js";
+import { fetchWithRetry } from "../lib/fetchWithRetry.js";
 import {
   pauseStage3BackgroundAmbientForOverlay,
   resumeStage3BackgroundAmbientFromOverlay,
@@ -771,7 +772,7 @@ function GuestbookForm({ onSuccess }) {
     setSubmitting(true);
     try {
       const base = getGumServerBaseUrl();
-      const res = await fetch(`${base}/api/posts`, {
+      const res = await fetchWithRetry(`${base}/api/posts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -989,6 +990,10 @@ function GuestbookEntry({ index, name, date, message, postId }) {
 export function GuestbookEmbed({ onClose, variant = "default" }) {
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState(false);
+  /** 「다시 시도」 클릭 횟수 — 3회까지 허용, 그 후엔 작가 문의 안내 */
+  const [retryCount, setRetryCount] = useState(0);
+  const RETRY_LIMIT = 3;
 
   useEffect(() => {
     pauseStage3BackgroundAmbientForOverlay();
@@ -1002,17 +1007,28 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
     };
   }, []);
 
-  useEffect(() => {
-    const base = getGumServerBaseUrl();
-    fetch(`${base}/api/posts`)
-      .then((r) => r.json())
-      .then((d) => {
-        const raw = Array.isArray(d) ? d : (d.posts ?? []);
-        setPosts(sortPostsNewestFirst(raw));
-      })
-      .catch(() => setPosts([]))
-      .finally(() => setPostsLoading(false));
+  const loadPosts = useCallback(async () => {
+    setPostsLoading(true);
+    setPostsError(false);
+    try {
+      const base = getGumServerBaseUrl();
+      const res = await fetchWithRetry(`${base}/api/posts`, {
+        idempotent: true,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      const raw = Array.isArray(d) ? d : (d.posts ?? []);
+      setPosts(sortPostsNewestFirst(raw));
+    } catch {
+      setPostsError(true);
+    } finally {
+      setPostsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
 
   function handlePostAdded(post) {
     setPosts((prev) => sortPostsNewestFirst([post, ...prev]));
@@ -1171,6 +1187,45 @@ export function GuestbookEmbed({ onClose, variant = "default" }) {
                         }}
                       >
                         불러오는 중…
+                      </div>
+                    ) : postsError ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 10,
+                          fontFamily: FONT,
+                          fontSize: "0.875rem",
+                          color: PROFILE_STATUS_FG,
+                          textAlign: "center",
+                          padding: "1.5rem 0",
+                          whiteSpace: "pre-line",
+                        }}
+                      >
+                        {retryCount >= RETRY_LIMIT ? (
+                          <span>
+                            {
+                              "방명록을 계속 불러오지 못하고 있어요.\n현장에 있는 작가에게 문의해주세요."
+                            }
+                          </span>
+                        ) : (
+                          <>
+                            <span>
+                              방명록을 불러오지 못했어요. 다시 시도해주세요.
+                            </span>
+                            <button
+                              type="button"
+                              className="guestbookEmbed-submitBtn"
+                              onClick={() => {
+                                setRetryCount((c) => c + 1);
+                                loadPosts();
+                              }}
+                            >
+                              다시 시도
+                            </button>
+                          </>
+                        )}
                       </div>
                     ) : posts.length === 0 ? (
                       <div
