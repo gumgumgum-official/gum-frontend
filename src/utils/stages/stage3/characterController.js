@@ -7,6 +7,10 @@ import {
 } from "../../common/gltfTemplateCache.js";
 import { dispatchStage3IslandExitBlocked } from "../../../events/stage3Events.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
+import {
+  BALLOON_CELEBRATION_DURATION,
+  getBalloonCelebrationOffsets,
+} from "./balloonCelebration.js";
 
 const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
@@ -84,6 +88,7 @@ function findClip(clips, regex) {
  *   setFacingYaw: (yRad: number) => void,
  *   setOpacity: (opacity: number) => void,
  *   setBalloonHeld: (held: boolean) => void,
+ *   playBalloonCelebration: () => void,
  *   getBalloonHandAnchorWorld: (out: import("three").Vector3) => boolean,
  * }}
  */
@@ -133,6 +138,8 @@ export function createCharacterController({
   let balloonHandAnchor = null;
   /** 풍선 idle 모델의 Hand_R Empty */
   let balloonIdleHandAnchor = null;
+  /** 풍선 첫 획득 연출 남은 시간(초) — 0이면 비활성 */
+  let balloonCelebrationTimer = 0;
 
   // 경계 clamp 값 — setup()에서 1회 계산, update() 매 프레임 재사용
   let _minCx = 0,
@@ -1055,6 +1062,21 @@ export function createCharacterController({
         }
       }
 
+      // 풍선 첫 획득 연출 — 풍선 모델만 살짝 떠올라 한 바퀴 회전.
+      // 매 프레임 위에서 동기화된 좌표 위에 덧입히므로 누적되지 않는다.
+      // (연출 중 이동 입력 시 이동+회전이 겹치나 0.7초로 짧아 허용)
+      if (balloonCelebrationTimer > 0) {
+        balloonCelebrationTimer = Math.max(0, balloonCelebrationTimer - delta);
+        const progress =
+          1 - balloonCelebrationTimer / BALLOON_CELEBRATION_DURATION;
+        const { floatY, spin } = getBalloonCelebrationOffsets(progress);
+        for (const m of [balloonCharacterModel, balloonIdleCharacterModel]) {
+          if (!m) continue;
+          m.position.y += floatY;
+          m.rotation.y += spin;
+        }
+      }
+
       if (characterMixer && (isWalking || !idleCharacterMixer))
         characterMixer.update(delta);
       if (idleCharacterMixer && !isWalking) idleCharacterMixer.update(delta);
@@ -1104,6 +1126,7 @@ export function createCharacterController({
       balloonHandAnchor = null;
       balloonIdleHandAnchor = null;
       isBalloonHeld = false;
+      balloonCelebrationTimer = 0;
       if (walkAudio) {
         walkAudio.pause();
         walkAudio.src = "";
@@ -1253,6 +1276,11 @@ export function createCharacterController({
         if (balloonWalkAction) balloonWalkAction.paused = !isWalking;
       }
       setCharacterVisibility(isWalking);
+    },
+
+    /** 풍선 첫 획득 연출 시작 — 살짝 떠올라 한 바퀴 회전 */
+    playBalloonCelebration() {
+      balloonCelebrationTimer = BALLOON_CELEBRATION_DURATION;
     },
 
     /**
