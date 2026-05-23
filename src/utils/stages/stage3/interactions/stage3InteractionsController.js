@@ -37,7 +37,8 @@ import { notifyStage3IntroInputBlocked } from "../stage3IntroInputBlockedNotify.
  *   getCamera: () => import("three").PerspectiveCamera | null,
  *   getCanvas: () => HTMLCanvasElement | null,
  *   getConfig: () => import("../../../../types.js").Stage3Config,
- *   getCharacter: () => { getPosition?: () => import("three").Vector3; getIsMoving?: () => boolean; setBalloonHeld?: (held: boolean) => void; getBalloonHandAnchorWorld?: (out: import("three").Vector3) => boolean } | null,
+ *   getCharacter: () => { getPosition?: () => import("three").Vector3; getIsMoving?: () => boolean; setBalloonHeld?: (held: boolean) => void; playBalloonCelebration?: () => void; getBalloonHandAnchorWorld?: (out: import("three").Vector3) => boolean } | null,
+ *   getGumFollowers: () => { playBalloonCelebration?: () => void } | null,
  *   getVendingMachineController: () => ReturnType<typeof import("../vendingMachine/stage3VendingMachineController.js").createStage3VendingMachineController>,
  *   getCameraIntroState: () => { completed: boolean; active: boolean },
  *   isInteractionBlocked: () => boolean,
@@ -69,6 +70,7 @@ export function createStage3InteractionsController({
   getCanvas,
   getConfig,
   getCharacter,
+  getGumFollowers,
   getScene,
   getVendingMachineController,
   getCameraIntroState,
@@ -402,7 +404,7 @@ export function createStage3InteractionsController({
         Math.round((CLOCK_ALARM_START_FRAME / 24) * 1000),
       );
 
-      tryAdvanceStampSequence("clock");
+      // "clock" 스탬프는 풍선 획득(holdBalloon)에서만 찍는다 — 시계 클릭으로는 찍지 않음
       return true;
     }
     return false;
@@ -601,6 +603,26 @@ export function createStage3InteractionsController({
     }
   }
 
+  /**
+   * 풍선 획득 시 캐릭터 주변 후광 — 한 번 부풀었다 사라지는 DOM 글로우
+   * @param {number} cx  screen X
+   * @param {number} cy  screen Y
+   */
+  function spawnBalloonPickupHalo(cx, cy) {
+    const el = document.createElement("div");
+    el.className = "balloon-pickup-halo";
+    const size = 520;
+    el.style.cssText = `left:${cx}px;top:${cy}px;width:${size}px;height:${size}px;`;
+    document.body.appendChild(el);
+    let tid;
+    const remove = () => {
+      clearTimeout(tid);
+      el.remove();
+    };
+    el.addEventListener("animationend", remove);
+    tid = setTimeout(remove, 2000);
+  }
+
   /** @param {{ node: import("three").Object3D, clip?: import("three").AnimationClip | null }} target */
   function holdBalloon(target, clickX, clickY) {
     releaseHeldBalloon();
@@ -610,8 +632,23 @@ export function createStage3InteractionsController({
     target.node.updateMatrixWorld(true);
     const clone = target.node.clone(true);
     clone.visible = true;
+    // 원본 풍선의 renderOrder=1 + transparent 패스 참여를 클론에도 강제 적용한다.
+    // (backgroundLoader.js의 frontRenderObjectNames와 동일 처리 — 바다 transparent
+    //  메시 앞에 그려져야 잘려 보이지 않음. clone()이 renderOrder는 복사하지만
+    //  holder 그룹 하위로 옮긴 뒤 누락되는 케이스를 방어한다.)
     clone.traverse((child) => {
       child.frustumCulled = false;
+      if (!child.isMesh) return;
+      child.renderOrder = 1;
+      const mats = Array.isArray(child.material)
+        ? child.material
+        : [child.material];
+      for (const mat of mats) {
+        if (mat && !mat.transparent) {
+          mat.transparent = true;
+          mat.needsUpdate = true;
+        }
+      }
     });
     target.node.visible = false;
 
@@ -651,7 +688,9 @@ export function createStage3InteractionsController({
       .applyQuaternion(holder.quaternion);
 
     playBalloonPickupSound();
-    // 파티클은 유저 캐릭터 스크린 위치에서 터짐
+    // 파티클·후광은 유저 캐릭터 스크린 위치에서 터짐
+    let fxX = clickX;
+    let fxY = clickY;
     const camera = getCamera();
     const canvas = getCanvas();
     const charPos = getCharacter()?.getPosition?.();
@@ -660,12 +699,18 @@ export function createStage3InteractionsController({
       camera.updateMatrixWorld(true);
       _heldStringBottom.project(camera);
       const rect = canvas.getBoundingClientRect();
-      const sx = (_heldStringBottom.x * 0.5 + 0.5) * rect.width + rect.left;
-      const sy = (-_heldStringBottom.y * 0.5 + 0.5) * rect.height + rect.top;
-      spawnBalloonPickupEffect(sx, sy);
-    } else {
-      spawnBalloonPickupEffect(clickX, clickY);
+      fxX = (_heldStringBottom.x * 0.5 + 0.5) * rect.width + rect.left;
+      fxY = (-_heldStringBottom.y * 0.5 + 0.5) * rect.height + rect.top;
     }
+    spawnBalloonPickupHalo(fxX, fxY);
+    spawnBalloonPickupEffect(fxX, fxY);
+
+    // 캐릭터·팔로워 연출 — 살짝 떠올라 한 바퀴 빠르게 회전
+    getCharacter()?.playBalloonCelebration?.();
+    getGumFollowers()?.playBalloonCelebration?.();
+
+    // 풍선을 한 번이라도 잡으면 clock 위치 스탬프 — 멱등이라 첫 호출만 찍힘
+    tryAdvanceStampSequence("clock");
 
     // 하양색 파티클 효과와 함께 첫 풍선 획득 시 1회만 안내 자막
     if (!balloonPickupAnnounced) {

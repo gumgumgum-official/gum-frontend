@@ -13,6 +13,10 @@ import {
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
 import { GUM_CARD_STICK_FOLLOWER_BY_NUM } from "../../../config/stages/stage3/gumCardStickFollowers.js";
 import { sampleStage3WalkableGroundY } from "./island/stage3IslandWalkable.js";
+import {
+  BALLOON_CELEBRATION_DURATION,
+  getBalloonCelebrationOffsets,
+} from "./balloonCelebration.js";
 
 /**
  * @param {{
@@ -156,6 +160,10 @@ export function createGumFollowersController({
   let elapsedSec = 0;
   let breakOffUntil = 0;
   let prevUserYaw = null;
+  /** 풍선 첫 획득 연출 남은 시간(초) — 0이면 비활성 */
+  let balloonCelebrationTimer = 0;
+  /** 연출 오프셋이 현재 follower 모델에 적용돼 있는지 — 다음 프레임에 되돌림 */
+  let celebrationOffsetActive = false;
   /** true면 다음 update에서 유저 기준 목표 위치/각도로 한 번에 맞춤(월드 0,0에서 lerp로 끌려 오는 현상 방지) */
   let pendingInitialWorldAlign = true;
   let baseGroundY = 0;
@@ -896,6 +904,24 @@ export function createGumFollowersController({
 
       _userPos.copy(userPos);
 
+      // 풍선 연출 오프셋 되돌리기 — follow 로직이 깨끗한 좌표에서 lerp 하도록.
+      // (직접 누적하면 lerp 소스에 섞여 좌표가 표류한다)
+      if (celebrationOffsetActive) {
+        followers.forEach((f) => {
+          if (f.attachMode === "headFloat") return;
+          const dy = f._celebFloatY || 0;
+          const dr = f._celebSpin || 0;
+          for (const m of [f.model, f.idleModel]) {
+            if (!m) continue;
+            m.position.y -= dy;
+            m.rotation.y -= dr;
+          }
+          f._celebFloatY = 0;
+          f._celebSpin = 0;
+        });
+        celebrationOffsetActive = false;
+      }
+
       followers.forEach((f) => {
         if (f.attachMode === "headFloat") {
           updateHeadFloatFollower(f, delta, _userPos, userYaw);
@@ -1167,9 +1193,33 @@ export function createGumFollowersController({
         if (f.pendingInitialAlign) f.pendingInitialAlign = false;
       });
 
+      // 풍선 첫 획득 연출 — 떠오름·회전 오프셋을 기본 변환 위에 덧입힌다.
+      // 적용량을 follower에 기록해 다음 프레임 시작 시 정확히 되돌린다.
+      if (balloonCelebrationTimer > 0) {
+        balloonCelebrationTimer = Math.max(0, balloonCelebrationTimer - delta);
+        const progress =
+          1 - balloonCelebrationTimer / BALLOON_CELEBRATION_DURATION;
+        const { floatY, spin } = getBalloonCelebrationOffsets(progress);
+        followers.forEach((f) => {
+          if (f.attachMode === "headFloat") return;
+          f._celebFloatY = floatY;
+          f._celebSpin = spin;
+          for (const m of [f.model, f.idleModel]) {
+            if (!m) continue;
+            m.position.y += floatY;
+            m.rotation.y += spin;
+          }
+        });
+        celebrationOffsetActive = true;
+      }
+
       if (pendingInitialWorldAlign) {
         pendingInitialWorldAlign = false;
       }
+    },
+    /** 풍선 첫 획득 연출 시작 — 팔로워들이 살짝 떠올라 한 바퀴 회전 */
+    playBalloonCelebration() {
+      balloonCelebrationTimer = BALLOON_CELEBRATION_DURATION;
     },
     cleanup() {
       followers.forEach(disposeStickFollowerEntry);
@@ -1181,6 +1231,8 @@ export function createGumFollowersController({
       elapsedSec = 0;
       breakOffUntil = 0;
       prevUserYaw = null;
+      balloonCelebrationTimer = 0;
+      celebrationOffsetActive = false;
       baseGroundY = 0;
       groundRayOriginY = 30;
       walkableGroundMeshes = [];

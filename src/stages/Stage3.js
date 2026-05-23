@@ -359,6 +359,7 @@ export function Stage3(options = {}) {
     getCanvas: () => canvasRef,
     getConfig: () => config,
     getCharacter: () => character,
+    getGumFollowers: () => gumFollowers,
     getVendingMachineController: () => vendingMachineController,
     getCameraIntroState: () => cameraIntroController.getState(),
     isInteractionBlocked: () =>
