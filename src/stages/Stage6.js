@@ -1360,7 +1360,14 @@ export function Stage6() {
   }
 
   function isStage6PointerBlocked() {
-    return isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall;
+    return (
+      isSceneInteractionLocked ||
+      isAnnouncementActive ||
+      isPhoneInCall ||
+      isWalkingToEscalator ||
+      isEscalatorSnapping ||
+      isEscalatorRiding
+    );
   }
 
   function dispatchTelRingSubtitleIfNeeded() {
@@ -1659,7 +1666,13 @@ export function Stage6() {
 
   function getStage6MovementKeys() {
     if (isWalkingToEscalator) return getEscAutoWalkKeys();
-    if (isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall) {
+    if (
+      isSceneInteractionLocked ||
+      isAnnouncementActive ||
+      isPhoneInCall ||
+      isEscalatorSnapping ||
+      isEscalatorRiding
+    ) {
       return {};
     }
     return keyboard.keys;
@@ -2278,6 +2291,24 @@ export function Stage6() {
           skipCameraFollow: true,
           overrideY,
         });
+
+        // 에스컬레이터 자동 접근 — 충돌을 무시하고 목표 지점으로 일정 속도 슬라이드.
+        // (경로상 OBJ_ 콜라이더에 막혀 도착 못 하면 조작권을 잃는 소프트락 방지)
+        // 걷기 애니메이션·방향은 getEscAutoWalkKeys()의 가짜 키가 그대로 담당하고,
+        // 실제 XZ 위치만 물리 결과 대신 pre-update 위치 기준 슬라이드로 덮어쓴다.
+        if (isWalkingToEscalator && posRef) {
+          const slideStep = (config.character?.moveSpeed ?? 1.85) * delta;
+          const slideDX = escApproachTargetX - preX;
+          const slideDZ = escApproachTargetZ - preZ;
+          const slideDist = Math.hypot(slideDX, slideDZ);
+          if (slideDist <= slideStep || slideDist < 1e-4) {
+            posRef.x = escApproachTargetX;
+            posRef.z = escApproachTargetZ;
+          } else {
+            posRef.x = preX + (slideDX / slideDist) * slideStep;
+            posRef.z = preZ + (slideDZ / slideDist) * slideStep;
+          }
+        }
 
         // frustum 클램프 — 에스컬레이터 탑승 중엔 적용 안 함
         if (
