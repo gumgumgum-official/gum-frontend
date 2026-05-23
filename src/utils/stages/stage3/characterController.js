@@ -131,8 +131,10 @@ export function createCharacterController({
   let balloonCharacterModel = null;
   let balloonMixer = null;
   let balloonWalkAction = null;
-  /** 풍선을 든 idle 포즈 모델 (user_idle_balloon.glb — 애니메이션 없는 정적 포즈) */
+  /** 풍선을 든 idle 포즈 모델 (user_idle_balloon.glb — idle_balloon 클립 1프레임 유지) */
   let balloonIdleCharacterModel = null;
+  let balloonIdleMixer = null;
+  let balloonIdleAction = null;
   let isBalloonHeld = false;
   /** 풍선 walk 모델의 Hand_R Empty — 로드 시 1회 캐시(매 프레임 트리 탐색 회피) */
   let balloonHandAnchor = null;
@@ -578,7 +580,9 @@ export function createCharacterController({
             }
           }
 
-          // 풍선을 든 idle 포즈 모델 — 멈춰 있을 때 표시 (애니메이션 없는 정적 포즈)
+          // 풍선을 든 idle 포즈 모델 — 멈춰 있을 때 표시
+          // (GLB의 idle_balloon 클립 1프레임을 mixer로 재생해 풍선 포즈 유지.
+          //  클립을 재생하지 않으면 바인드 포즈인 T-포즈로 보임)
           if (balloonIdleGltf) {
             balloonIdleCharacterModel = SkeletonUtils.clone(
               balloonIdleGltf.scene,
@@ -601,6 +605,22 @@ export function createCharacterController({
                 "[Stage3] 풍선 idle 모델에 Hand_R Empty가 없음 — 멈췄을 때 실 끝이 머리 위로 폴백됨",
               );
             }
+
+            if (balloonIdleGltf.animations?.length > 0) {
+              balloonIdleMixer = new THREE.AnimationMixer(
+                balloonIdleCharacterModel,
+              );
+              const idleBalloonClip =
+                findClip(balloonIdleGltf.animations, /idle/i) ??
+                balloonIdleGltf.animations[0];
+              balloonIdleAction = balloonIdleMixer.clipAction(idleBalloonClip);
+              balloonIdleAction.loop = THREE.LoopRepeat;
+              balloonIdleAction.play();
+              balloonIdleAction.enabled = true;
+              balloonIdleAction.setEffectiveWeight(1);
+              balloonIdleMixer.update(0);
+            }
+
             scene.add(balloonIdleCharacterModel);
 
             if (isBalloonHeld) {
@@ -1081,6 +1101,7 @@ export function createCharacterController({
         characterMixer.update(delta);
       if (idleCharacterMixer && !isWalking) idleCharacterMixer.update(delta);
       if (balloonMixer && isBalloonHeld) balloonMixer.update(delta);
+      if (balloonIdleMixer && isBalloonHeld) balloonIdleMixer.update(delta);
 
       syncWalkSound(moved);
 
@@ -1114,6 +1135,10 @@ export function createCharacterController({
         balloonMixer.stopAllAction();
         balloonMixer = null;
       }
+      if (balloonIdleMixer) {
+        balloonIdleMixer.stopAllAction();
+        balloonIdleMixer = null;
+      }
       if (balloonCharacterModel) {
         scene.remove(balloonCharacterModel);
         balloonCharacterModel = null;
@@ -1123,6 +1148,7 @@ export function createCharacterController({
         balloonIdleCharacterModel = null;
       }
       balloonWalkAction = null;
+      balloonIdleAction = null;
       balloonHandAnchor = null;
       balloonIdleHandAnchor = null;
       isBalloonHeld = false;
