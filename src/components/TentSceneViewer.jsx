@@ -1,15 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import {
   STAGE6_SUBTITLE_HIDE_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
 } from "../events/stage6Events.js";
-import { getGLBLoader } from "../utils/common/assetLoaders.js";
+import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
+import {
+  loadGltfTemplateCached,
+  resolvePublicAssetUrl,
+} from "../utils/common/gltfTemplateCache.js";
+import { TENT_SCENE_GLB_PATH } from "../utils/common/kioskExhibitionWarmup.js";
 import { preloadTentSceneSubtitleFonts } from "../utils/common/preloadGangwonEduFont.js";
+import {
+  getTentSceneEnvironmentTexture,
+  takePreparedTentModel,
+  warmTentSceneVisualAssets,
+} from "../utils/common/tentScenePrewarm.js";
 import "./TentSceneViewer.css";
+
+/** TentSceneViewer.css `.tent-scene-viewer__content` opacity transition과 동일 */
+const TENT_SCENE_FADE_IN_MS = 2000;
 
 function getCamCfg() {
   return (
@@ -34,12 +46,7 @@ function dispatchTentSubtitleHide() {
   window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
 }
 
-export function TentSceneViewer({
-  onClose,
-  onCardOpen,
-  skipBubbleSequence = false,
-}) {
-  const FADE_IN_MS = 2000;
+export function TentSceneViewer({ onCardOpen, skipBubbleSequence = false }) {
   const canvasRef = useRef(null);
   const rootRef = useRef(null);
   const onCardOpenRef = useRef(onCardOpen);
@@ -49,11 +56,6 @@ export function TentSceneViewer({
 
   const [isVisible, setIsVisible] = useState(false);
   const isVisibleRef = useRef(false);
-
-  const handleClose = useCallback(() => {
-    dispatchTentSubtitleHide();
-    onClose?.();
-  }, [onClose]);
 
   useEffect(() => {
     let raf2 = 0;
@@ -135,7 +137,10 @@ export function TentSceneViewer({
     };
     rootEl.addEventListener("transitionend", onFadeInEnd);
 
-    const fallbackId = setTimeout(startAfterFadeIn, FADE_IN_MS + 100);
+    const fallbackId = setTimeout(
+      startAfterFadeIn,
+      TENT_SCENE_FADE_IN_MS + 100,
+    );
 
     return () => {
       aborted = true;
@@ -145,7 +150,7 @@ export function TentSceneViewer({
       dispatchTentSubtitleHide();
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [FADE_IN_MS, skipBubbleSequence]);
+  }, [skipBubbleSequence]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -154,8 +159,16 @@ export function TentSceneViewer({
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const isElectronLike = isElectronLikeUserAgent();
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: false,
+      powerPreference: "high-performance",
+    });
+    const pixelRatio = isElectronLike
+      ? Math.min(1.25, window.devicePixelRatio || 1)
+      : Math.min(1.5, window.devicePixelRatio || 1);
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(w, h, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.33;
@@ -165,14 +178,12 @@ export function TentSceneViewer({
     scene.background = new THREE.Color(0x0e0c1c);
     scene.environmentIntensity = 0.85;
     let unmounted = false;
-    new EXRLoader().load("/hdri/sunny_rose_garden_1k.exr", (tex) => {
-      if (unmounted) {
-        tex.dispose();
-        return;
-      }
-      tex.mapping = THREE.EquirectangularReflectionMapping;
-      scene.environment = tex;
-    });
+    void getTentSceneEnvironmentTexture()
+      .then((tex) => {
+        if (unmounted) return;
+        scene.environment = tex;
+      })
+      .catch((err) => console.warn("[TentScene] HDRI 로드 실패:", err));
 
     const cfg = getCamCfg();
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
@@ -185,15 +196,46 @@ export function TentSceneViewer({
     controls.enabled = false;
     controls.update();
 
-    getGLBLoader().load("/models/stage3/tent_gum_scene.glb", {
-      onLoad: (gltf) => {
-        gltf.scene.traverse((obj) => {
-          if (obj.isLight) obj.intensity *= 0.0005;
+    const addModelToScene = (model) => {
+      if (unmounted) {
+        model.traverse((obj) => {
+          const mesh = /** @type {any} */ (obj);
+          if (mesh.geometry) mesh.geometry.dispose();
+          const mats = mesh.material
+            ? Array.isArray(mesh.material)
+              ? mesh.material
+              : [mesh.material]
+            : [];
+          mats.forEach((m) => m.dispose());
         });
-        scene.add(gltf.scene);
-      },
-      onError: (err) => console.error("[TentScene] GLB 로드 실패:", err),
-    });
+        return;
+      }
+      scene.add(model);
+    };
+
+    const prepared = takePreparedTentModel();
+    if (prepared) {
+      addModelToScene(prepared);
+    } else {
+      const tentUrl = resolvePublicAssetUrl(TENT_SCENE_GLB_PATH);
+      void warmTentSceneVisualAssets()
+        .then(() => takePreparedTentModel())
+        .then((model) => {
+          if (model) {
+            addModelToScene(model);
+            return;
+          }
+          return loadGltfTemplateCached(tentUrl).then((gltf) => {
+            if (unmounted) return;
+            const model = gltf.scene.clone(true);
+            model.traverse((obj) => {
+              if (obj.isLight) obj.intensity *= 0.0005;
+            });
+            addModelToScene(model);
+          });
+        })
+        .catch((err) => console.error("[TentScene] GLB 로드 실패:", err));
+    }
 
     let animId;
     const tick = () => {
@@ -218,7 +260,6 @@ export function TentSceneViewer({
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", onResize);
       controls.dispose();
-      scene.environment?.dispose();
       scene.traverse((obj) => {
         const mesh = /** @type {any} */ (obj);
         if (mesh.geometry) mesh.geometry.dispose();
@@ -240,9 +281,6 @@ export function TentSceneViewer({
         className={`tent-scene-viewer__content${isVisible ? " is-visible" : ""}`}
       >
         <canvas ref={canvasRef} className="tent-scene-canvas" />
-        <button className="tent-btn tent-btn--close" onClick={handleClose}>
-          ✕
-        </button>
       </div>
     </div>
   );

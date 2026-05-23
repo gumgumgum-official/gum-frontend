@@ -10,8 +10,12 @@ export const STAGE3_STAMP_INTRO_FLY_MS = 780;
 /** 배경 준비 후 진입 자막 시퀀스 시작까지 대기(ms) — 카메라 인트로는 즉시 */
 export const STAGE3_ENTRY_SUBTITLE_START_DELAY_MS = 1500;
 
-/** Stage6BoardingOverlay `runSubtitleSequence`와 동일: hold + fade(600) + gap(200) × 구간 */
-export const STAGE3_ENTRY_SUBTITLE_TOTAL_MS = 2500 + 600 + 200 + 2000 + 600;
+/** Stage6BoardingOverlay `runSubtitleSequence`와 동일: hold(1500/1500/2500) + fade(600) + gap(200) × 3구간 */
+export const STAGE3_ENTRY_SUBTITLE_TOTAL_MS =
+  1500 + 600 + 200 + 1500 + 600 + 200 + 2500 + 600;
+
+/** 스탬프 패널 코너 이동 시작 후 이동 안내 상단 토스트까지 대기(ms) */
+export const STAGE3_ENTRY_MOVEMENT_HINT_DELAY_MS = 0;
 
 export const REQUIRED_EGG_COUNT = 3;
 

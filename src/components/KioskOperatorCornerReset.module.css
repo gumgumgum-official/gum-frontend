@@ -1,0 +1,12 @@
+.cornerHit {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+  width: 72px;
+  height: 72px;
+  cursor: default;
+  touch-action: manipulation;
+  /* 운영자만 알 수 있도록 보이지 않음 */
+  opacity: 0;
+}

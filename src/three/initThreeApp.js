@@ -12,7 +12,7 @@ import { Stage6 } from "../stages/Stage6.js";
 import { APP_CONFIG } from "../config/appConfig.js";
 import { getGLBLoader } from "../utils/common/assetLoaders.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
-import { warmStage3GltfTemplateUrls } from "../utils/stages/stage3/stage3GltfWarmup.js";
+import { warmKioskExhibitionAssets } from "../utils/common/kioskExhibitionWarmup.js";
 import { warmStage2GltfTemplateUrls } from "../utils/stages/stage2/stage2GltfWarmup.js";
 import { preloadStage6AirportGlb } from "../utils/stages/stage6/stage6AirportPreload.js";
 
@@ -37,6 +37,7 @@ export function initThreeApp(canvasElement, options = {}) {
     initialStage,
     enableKeyboardSwitch = false,
     skipStage3Intro = false,
+    getRenderPaused,
     onError,
   } = options;
   const safeAllowedStages = Array.isArray(allowedStages) ? allowedStages : [];
@@ -200,8 +201,7 @@ export function initThreeApp(canvasElement, options = {}) {
   }
 
   if (safeAllowedStages.includes(3)) {
-    warmStage3GltfTemplateUrls();
-    preloadStage6AirportGlb();
+    warmKioskExhibitionAssets({ priority: "idle" });
     void fetch(
       base + "/static/sounds/20711 finch bird isolated tweet-full.mp3",
       {
@@ -248,14 +248,23 @@ export function initThreeApp(canvasElement, options = {}) {
         applyRendererSize();
       }
 
-      const delta = clock.getDelta();
-      stageManager.update(delta);
-      const camera = stageManager.getCurrentCamera();
-      if (camera) {
-        renderer.render(scene, camera);
+      const paused = getRenderPaused?.() === true;
+      if (!paused) {
+        const delta = clock.getDelta();
+        stageManager.update(delta);
+        const camera = stageManager.getCurrentCamera();
+        if (camera) {
+          renderer.render(scene, camera);
+        }
+      } else {
+        clock.getDelta();
       }
 
-      if (profileEnabled() && stageManager.getCurrentStageNumber?.() === 3) {
+      if (
+        !paused &&
+        profileEnabled() &&
+        stageManager.getCurrentStageNumber?.() === 3
+      ) {
         const now = window.performance.now();
         if (profileLastTime > 0) profileTimes.push(now - profileLastTime);
         profileLastTime = now;

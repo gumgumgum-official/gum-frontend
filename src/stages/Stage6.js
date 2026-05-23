@@ -26,17 +26,21 @@ import {
 import {
   AIRPORT_CHIME_HIDE_EVENT,
   AIRPORT_CHIME_SHOW_EVENT,
+  STAGE6_INTRO_CLICK_HINT_EVENT,
+  STAGE6_INTRO_FINISHED_EVENT,
   AIRPORT_SUBTITLE_HIDE_EVENT,
   AIRPORT_SUBTITLE_SHOW_EVENT,
   AIRPORT_SUBTITLE_UPDATE_EVENT,
   STAGE6_BOARDING_PASS_ISSUED_EVENT,
   STAGE6_BOARDING_RESET_EVENT,
+  STAGE6_WALK_TO_ESCALATOR_EVENT,
   STAGE6_FINISH_EVENT,
   STAGE6_SCREEN_FADE_EVENT,
   STAGE6_INT_CLICK_EVENT,
   STAGE6_INTERACTION_LOCK_EVENT,
   STAGE6_INTERACTION_UNLOCK_EVENT,
-  STAGE6_NAME_MODAL_SHOW_EVENT,
+  STAGE6_NAME_MODAL_HIDE_EVENT,
+  STAGE6_SUBTITLE_HIDE_EVENT,
   STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_HIDE_EVENT,
   STAGE6_PHONE_INDICATOR_MODE_IN_CALL,
@@ -44,9 +48,14 @@ import {
   STAGE6_PHONE_INDICATOR_SHOW_EVENT,
   STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
-  STAGE6_POSTER_MODAL_SHOW_EVENT,
   STAGE6_SUBTITLE_SEQUENCE_EVENT,
+  dispatchStage6InputBlocked,
+  STAGE6_AUDIO_UNLOCKED_EVENT,
 } from "../events/stage6Events.js";
+import {
+  isStage6AudioUnlocked,
+  unlockStage6AudioFromUserGesture,
+} from "../utils/stages/stage6/stage6AudioUnlock.js";
 import { isElectronLikeUserAgent } from "../utils/common/envUtils.js";
 import {
   createBagPhysics,
@@ -57,11 +66,16 @@ import {
   blockStage6Notifications,
   dispatchGatedStage6WindowEvent,
   isStage6ClickBubbleSuppressed,
+  isStage6PhotoboothModalOpen,
+  openStage6NameModal,
+  openStage6PhotoboothModal,
+  openStage6PosterModal,
   resetStage6NotificationGate,
+  runStage6NotificationNowOrEnqueue,
+  STAGE6_PHONE_IN_CALL_BLOCK_TAG,
   unblockStage6Notifications,
 } from "../utils/stages/stage6/stage6NotificationGate.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
-import { createStage6CameraDebugOverlay } from "../utils/stages/stage6/stage6CameraDebugOverlay.js";
 const INT_PREFIX = "INT_";
 const CHAR_ROOT_NAMES = [
   "INT_Gum_Cry",
@@ -103,7 +117,7 @@ const PHONE_RING_SOUND_VOLUME = 0.42;
 /** 전화 받기 전 벨소리 재생 횟수 */
 const PHONE_RING_REPEAT_COUNT = 2;
 const PHONE_HANGUP_SOUND_PATH = "/static/sounds/airport/phone_hangup.mp3";
-const PHONE_HANGUP_SOUND_VOLUME = 0.49;
+const PHONE_HANGUP_SOUND_VOLUME = 0.75;
 const PHONE_CALL_SOUNDS = ["/static/sounds/airport/payphone_voice.mp3"];
 const PHONE_CALL_RING_SUBTITLES = ["어? 전화가 온 것 같아요! 한번 받아볼까요?"];
 const PHONE_CALL_SOUND_VOLUME = 0.49;
@@ -253,6 +267,8 @@ export function Stage6() {
   let onPointerMove = null;
   let onInteractionLock = null;
   let onInteractionUnlock = null;
+  /** @type {(() => void) | null} */
+  let onBoardingPassIssuedHandler = null;
   const interactedTargets = new Set();
   /** @type {string | null} */
   let hoveredCharacterName = null;
@@ -263,6 +279,10 @@ export function Stage6() {
   let isTelRinging = false;
   /** 통화 음성 재생 중 — 포인터 클릭·모달 차단 */
   let isPhoneInCall = false;
+  /** 벨 자막 재생 전에 수화기를 들면 `activateTelRinging` 자막·큐 재생 생략 */
+  let skipTelRingSubtitle = false;
+  /** 포토부스 모달 닫힐 때까지 전화 벨·HUD·자막 표시 연기 */
+  let deferTelRingUntilPhotoboothClosed = false;
   let telEmissiveProgress = 0;
   let telEmissiveTarget = 0;
   let telCallIndex = 0;
@@ -278,8 +298,21 @@ export function Stage6() {
   const telEmissiveMaterials = [];
   let isSceneInteractionLocked = false;
   let isAnnouncementActive = false;
+  /** 인트로 중 입력 토스트 재표시 간격(초) — App 표시 시간과 동일 */
+  const INTRO_INPUT_TOAST_COOLDOWN_SEC = 2;
+  let introInputBlockedToastCooldown = 0;
+  let introSequenceStarted = false;
+  /** @type {(() => void) | null} */
+  let onIntroAudioUnlockListener = null;
+  /** @type {(() => void) | null} */
+  let onIntroAudioGestureListener = null;
   let isFinishFired = false;
   let isBoardingPassIssued = false;
+  /** 탑승권 발급 후 에스컬레이터 진입 존까지 자동 이동 */
+  let isWalkingToEscalator = false;
+  let escApproachTargetX = 0;
+  let escApproachTargetZ = 0;
+  let escWalkAfterBoardingTimeoutId = 0;
   let isEscalatorRiding = false;
   let isEscalatorFading = false;
   let escFadeProgress = 0;
@@ -292,6 +325,12 @@ export function Stage6() {
   let escNoBoardingCooldown = 0;
   /** 에스컬레이터 진입 존 감지 반경 (m) */
   const ESC_DETECT_RADIUS = 1.2;
+  /** 자동 이동 목표 — front step에서 캐릭터 방향으로 이 거리만큼 떨어진 지점 (m) */
+  const ESC_APPROACH_FROM_STEP_DIST = 0.22;
+  /** front step까지 이 거리 이내면 자동 이동 종료 → 진입 스냅 대기 */
+  const ESC_AUTO_WALK_ARRIVE_RADIUS = 0.5;
+  const ESC_AUTO_WALK_ARRIVE_RADIUS_SQ =
+    ESC_AUTO_WALK_ARRIVE_RADIUS * ESC_AUTO_WALK_ARRIVE_RADIUS;
   /** step 위 캐릭터 Y 오프셋 */
   const ESC_CHAR_Y_OFFSET = 0.05;
   /** 탑승 직전 step으로 스냅하는 보간 속도 */
@@ -308,6 +347,10 @@ export function Stage6() {
   const _escFrontStepPos = new THREE.Vector3();
   const _escTopStepPos = new THREE.Vector3();
   let airplaneCallSignTimeoutId = 0;
+  /** `playAirplaneCallSignOnce` — 자막 시작(띵-동 표시 후 1초) 전용 */
+  let atmCallSignOnStartedTimeoutId = 0;
+  /** `playAirplaneCallSignOnce` — 오디오 미재생 시 띵-동·자막 폴백 */
+  let atmCallSignFallbackTimeoutId = 0;
   let airportAnnounceIntroTimeoutId = 0;
   let announceWatchdogId = 0;
   /** @type {HTMLAudioElement | null} */
@@ -332,7 +375,6 @@ export function Stage6() {
   let isAirportChimeVisible = false;
 
   const bagPhysics = createBagPhysics();
-  let cameraDebugOverlay = null;
 
   function applyStage6SceneBackground(scene) {
     scene.background = new THREE.Color(config.background.color);
@@ -354,7 +396,7 @@ export function Stage6() {
   /** 칠 사인 오디오 재생 후 chime 아이콘을 표시하기 시작할 시간(초) */
   const CHIME_INDICATOR_TRIGGER_TIME_SEC = 0.58;
   const AIRPORT_ANNOUNCE_INTRO_DELAY_AFTER_CALL_SIGN_MS = 100;
-  const AIRPORT_ANNOUNCE_INTRO_VOLUME = 0.55;
+  const AIRPORT_ANNOUNCE_INTRO_VOLUME = 0.8;
   /** `OBJ_ATM` 클릭 시 */
   const ATM_CLICK_SOUND_PATH = "/static/sounds/click.mp3";
   const ATM_CLICK_SOUND_VOLUME = 0.5;
@@ -432,7 +474,31 @@ export function Stage6() {
     dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_UPDATE_EVENT, { text });
   }
 
+  function showAirportChimeIndicator() {
+    if (isAirportChimeVisible) return;
+    window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_SHOW_EVENT));
+    isAirportChimeVisible = true;
+  }
+
+  function hideAirportChimeIndicator() {
+    if (!isAirportChimeVisible) return;
+    window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
+    isAirportChimeVisible = false;
+  }
+
+  function clearAtmCallSignTimers() {
+    if (atmCallSignOnStartedTimeoutId) {
+      window.clearTimeout(atmCallSignOnStartedTimeoutId);
+      atmCallSignOnStartedTimeoutId = 0;
+    }
+    if (atmCallSignFallbackTimeoutId) {
+      window.clearTimeout(atmCallSignFallbackTimeoutId);
+      atmCallSignFallbackTimeoutId = 0;
+    }
+  }
+
   function cancelAirplaneCallSignScheduled() {
+    clearAtmCallSignTimers();
     if (airplaneCallSignTimeoutId) {
       window.clearTimeout(airplaneCallSignTimeoutId);
       airplaneCallSignTimeoutId = 0;
@@ -458,10 +524,7 @@ export function Stage6() {
       airplaneCallSignAudio.src = "";
       airplaneCallSignAudio = null;
     }
-    if (isAirportChimeVisible) {
-      window.dispatchEvent(new CustomEvent(AIRPORT_CHIME_HIDE_EVENT));
-      isAirportChimeVisible = false;
-    }
+    hideAirportChimeIndicator();
     if (airportAnnounceIntroAudio) {
       airportAnnounceIntroAudio.onplay = null;
       airportAnnounceIntroAudio.ontimeupdate = null;
@@ -474,6 +537,20 @@ export function Stage6() {
     activeSubtitleCueIndex = -1;
     isAirportSubtitleVisible = false;
     window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
+  }
+
+  function finishAirportIntroSubtitles() {
+    activeSubtitleCueIndex = -1;
+    isAirportSubtitleVisible = false;
+    isAnnouncementActive = false;
+    introInputBlockedToastCooldown = 0;
+    window.dispatchEvent(new CustomEvent(STAGE6_INTRO_FINISHED_EVENT));
+    dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
+    dispatchGatedStage6WindowEvent(STAGE6_INTRO_CLICK_HINT_EVENT);
+    telActivateTimeoutId = window.setTimeout(() => {
+      telActivateTimeoutId = 0;
+      activateTelRinging();
+    }, STAGE6_TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
   }
 
   function playAirportAnnounceIntro() {
@@ -502,12 +579,7 @@ export function Stage6() {
       let cueIdx = 0;
       const showNextCue = () => {
         if (!isStage6Active || cueIdx >= cues.length) {
-          isAnnouncementActive = false;
-          dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
-          telActivateTimeoutId = window.setTimeout(() => {
-            telActivateTimeoutId = 0;
-            activateTelRinging();
-          }, STAGE6_TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
+          finishAirportIntroSubtitles();
           return;
         }
         const cue = cues[cueIdx];
@@ -540,14 +612,7 @@ export function Stage6() {
       );
     };
     airportAnnounceIntroAudio.onended = () => {
-      activeSubtitleCueIndex = -1;
-      isAirportSubtitleVisible = false;
-      isAnnouncementActive = false;
-      dispatchGatedStage6WindowEvent(AIRPORT_SUBTITLE_HIDE_EVENT);
-      telActivateTimeoutId = window.setTimeout(() => {
-        telActivateTimeoutId = 0;
-        activateTelRinging();
-      }, STAGE6_TEL_ACTIVATE_DELAY_AFTER_ANNOUNCEMENT_MS);
+      finishAirportIntroSubtitles();
     };
     const announcePlayPromise = airportAnnounceIntroAudio.play();
     if (
@@ -589,38 +654,122 @@ export function Stage6() {
         "/static/sounds/airport/airplane_call_sign.mp3",
       );
     }
-    if (airplaneCallSignTimeoutId) {
-      window.clearTimeout(airplaneCallSignTimeoutId);
-      airplaneCallSignTimeoutId = 0;
-    }
-    isAirportChimeVisible = false;
-    airplaneCallSignAudio.onplay = () => {
-      dispatchGatedStage6WindowEvent(AIRPORT_CHIME_SHOW_EVENT);
-      isAirportChimeVisible = true;
-      if (airplaneCallSignTimeoutId) {
-        window.clearTimeout(airplaneCallSignTimeoutId);
-        airplaneCallSignTimeoutId = 0;
-      }
-      airplaneCallSignTimeoutId = window.setTimeout(() => {
-        airplaneCallSignTimeoutId = 0;
-        onStarted?.();
+    clearAtmCallSignTimers();
+    let onStartedFired = false;
+    const fireOnStartedOnce = () => {
+      if (onStartedFired) return;
+      onStartedFired = true;
+      onStarted?.();
+    };
+    const scheduleOnStartedAfterChime = () => {
+      if (atmCallSignOnStartedTimeoutId) return;
+      atmCallSignOnStartedTimeoutId = window.setTimeout(() => {
+        atmCallSignOnStartedTimeoutId = 0;
+        fireOnStartedOnce();
       }, 1000);
     };
-    airplaneCallSignAudio.ontimeupdate = null;
-    airplaneCallSignAudio.onended = () => {
-      if (isAirportChimeVisible) {
-        dispatchGatedStage6WindowEvent(AIRPORT_CHIME_HIDE_EVENT);
-        isAirportChimeVisible = false;
+    const runAtmCallSignFallback = () => {
+      if (onStartedFired) return;
+      if (atmCallSignFallbackTimeoutId) {
+        window.clearTimeout(atmCallSignFallbackTimeoutId);
+        atmCallSignFallbackTimeoutId = 0;
       }
+      showAirportChimeIndicator();
+      scheduleOnStartedAfterChime();
+    };
+
+    isAirportChimeVisible = false;
+    airplaneCallSignAudio.onplay = null;
+    airplaneCallSignAudio.ontimeupdate = () => {
+      if (
+        Number(airplaneCallSignAudio?.currentTime ?? 0) <
+        CHIME_INDICATOR_TRIGGER_TIME_SEC
+      ) {
+        return;
+      }
+      if (atmCallSignFallbackTimeoutId) {
+        window.clearTimeout(atmCallSignFallbackTimeoutId);
+        atmCallSignFallbackTimeoutId = 0;
+      }
+      if (!isAirportChimeVisible) {
+        showAirportChimeIndicator();
+        scheduleOnStartedAfterChime();
+      }
+    };
+    airplaneCallSignAudio.onended = () => {
+      hideAirportChimeIndicator();
     };
     airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
     airplaneCallSignAudio.currentTime = 0;
-    airplaneCallSignAudio.play().catch(() => {
-      if (isAirportChimeVisible) {
-        dispatchGatedStage6WindowEvent(AIRPORT_CHIME_HIDE_EVENT);
-        isAirportChimeVisible = false;
-      }
-      onStarted?.();
+    try {
+      airplaneCallSignAudio.load();
+    } catch {
+      // ignore
+    }
+    const playPromise = airplaneCallSignAudio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(runAtmCallSignFallback);
+    }
+    atmCallSignFallbackTimeoutId = window.setTimeout(
+      runAtmCallSignFallback,
+      2500,
+    );
+  }
+
+  function tryStartAirportIntroSequence() {
+    if (!isStage6Active || introSequenceStarted) return;
+    introSequenceStarted = true;
+    scheduleAirplaneCallSign();
+  }
+
+  function clearIntroAudioUnlockListeners() {
+    if (onIntroAudioUnlockListener) {
+      window.removeEventListener(
+        STAGE6_AUDIO_UNLOCKED_EVENT,
+        onIntroAudioUnlockListener,
+      );
+      onIntroAudioUnlockListener = null;
+    }
+    if (onIntroAudioGestureListener) {
+      window.removeEventListener(
+        "pointerdown",
+        onIntroAudioGestureListener,
+        true,
+      );
+      window.removeEventListener("keydown", onIntroAudioGestureListener, true);
+      onIntroAudioGestureListener = null;
+    }
+  }
+
+  function ensureStage6AudioUnlockedThenStartIntro() {
+    if (isStage6AudioUnlocked()) {
+      tryStartAirportIntroSequence();
+      return;
+    }
+    clearIntroAudioUnlockListeners();
+    onIntroAudioUnlockListener = () => {
+      onIntroAudioUnlockListener = null;
+      tryStartAirportIntroSequence();
+    };
+    window.addEventListener(
+      STAGE6_AUDIO_UNLOCKED_EVENT,
+      onIntroAudioUnlockListener,
+      { once: true },
+    );
+
+    onIntroAudioGestureListener = () => {
+      if (isStage6AudioUnlocked()) return;
+      void unlockStage6AudioFromUserGesture().then(() => {
+        window.dispatchEvent(new CustomEvent(STAGE6_AUDIO_UNLOCKED_EVENT));
+      });
+    };
+    window.addEventListener("pointerdown", onIntroAudioGestureListener, {
+      once: true,
+      capture: true,
+    });
+    window.addEventListener("keydown", onIntroAudioGestureListener, {
+      once: true,
+      capture: true,
     });
   }
 
@@ -692,8 +841,34 @@ export function Stage6() {
     }, AIRPLANE_CALL_SIGN_DELAY_MS);
   }
 
+  function isIntroMovementKey(event) {
+    return event.key in keyboard.keys || event.code in keyboard.keys;
+  }
+
+  /** @returns {import("../events/stage6Events.js").Stage6InputBlockedReason | null} */
+  function getStage6InputBlockedReason() {
+    if (isAnnouncementActive) return "intro";
+    if (isPhoneInCall) return "phone-in-call";
+    return null;
+  }
+
+  /** @param {import("../events/stage6Events.js").Stage6InputBlockedKind} kind */
+  function notifyStage6InputBlocked(kind) {
+    const reason = getStage6InputBlockedReason();
+    if (!isStage6Active || !reason) return;
+    if (introInputBlockedToastCooldown > 0) return;
+    dispatchStage6InputBlocked(reason, kind);
+    introInputBlockedToastCooldown = INTRO_INPUT_TOAST_COOLDOWN_SEC;
+  }
+
   const handleKeyDown = (event) => {
-    if (isSceneInteractionLocked || isAnnouncementActive || isFinishFired) {
+    if (getStage6InputBlockedReason()) {
+      if (isIntroMovementKey(event)) {
+        notifyStage6InputBlocked("move");
+      }
+      return;
+    }
+    if (isSceneInteractionLocked || isFinishFired) {
       return;
     }
     if (event.key === "Enter") {
@@ -913,11 +1088,10 @@ export function Stage6() {
   }
 
   function isAtmHitTarget(hit) {
-    return (
-      hit?.intName === ATM_OBJECT_NAME ||
-      normalizeIntNameToken(hit?.target) ===
-        normalizeIntNameToken(ATM_OBJECT_NAME)
-    );
+    if (!hit) return false;
+    if (hit.intName === ATM_OBJECT_NAME) return true;
+    const token = normalizeIntNameToken(hit.target);
+    return token === "atm" || token === "intatm";
   }
 
   function dispatchStage6SubtitleSequence(messages, options) {
@@ -932,6 +1106,27 @@ export function Stage6() {
     dispatchGatedStage6WindowEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
       messages,
     });
+  }
+
+  function hideStage6SubtitlesNow() {
+    window.dispatchEvent(new CustomEvent(AIRPORT_SUBTITLE_HIDE_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_SUBTITLE_HIDE_EVENT));
+  }
+
+  function dismissStage6ModalsNow() {
+    window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT));
+    window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_HIDE_EVENT));
+  }
+
+  function beginPhoneInCallNotificationsBlock() {
+    blockStage6Notifications(STAGE6_PHONE_IN_CALL_BLOCK_TAG);
+    hideStage6SubtitlesNow();
+    dismissStage6ModalsNow();
+  }
+
+  function endPhoneInCallNotificationsBlock() {
+    unblockStage6Notifications(STAGE6_PHONE_IN_CALL_BLOCK_TAG);
   }
 
   function collectAtmInteractiveRoot(rootModel) {
@@ -1094,16 +1289,67 @@ export function Stage6() {
     return isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall;
   }
 
+  function dispatchTelRingSubtitleIfNeeded() {
+    if (skipTelRingSubtitle || isPhoneInCall) return;
+    const ringSubtitle =
+      PHONE_CALL_RING_SUBTITLES[telCallIndex] ?? PHONE_CALL_RING_SUBTITLES[0];
+    const messages = [{ text: ringSubtitle, holdMs: 3000 }];
+    runStage6NotificationNowOrEnqueue(() => {
+      if (skipTelRingSubtitle || isPhoneInCall) return;
+      window.dispatchEvent(
+        new CustomEvent(STAGE6_SUBTITLE_SEQUENCE_EVENT, {
+          detail: { messages },
+        }),
+      );
+    });
+  }
+
+  function suppressTelRingPresentationForPhotobooth() {
+    deferTelRingUntilPhotoboothClosed = true;
+    stopPhoneRing();
+    hidePhoneIndicator();
+    hideTelBubble();
+    hideStage6SubtitlesNow();
+    if (!isPhoneInCall) {
+      isTelActivated = false;
+      telEmissiveTarget = 0;
+    }
+  }
+
   function activateTelRinging() {
     if (!isStage6Active || isTelActivated) return;
+    if (isStage6PhotoboothModalOpen()) {
+      deferTelRingUntilPhotoboothClosed = true;
+      return;
+    }
+    deferTelRingUntilPhotoboothClosed = false;
     isTelActivated = true;
+    skipTelRingSubtitle = false;
     telEmissiveTarget = 1;
     showPhoneIndicator(STAGE6_PHONE_INDICATOR_MODE_RINGING);
     playPhoneRing();
     showTelBubble("click!");
-    const ringSubtitle =
-      PHONE_CALL_RING_SUBTITLES[telCallIndex] ?? PHONE_CALL_RING_SUBTITLES[0];
-    dispatchStage6SubtitleSequence([{ text: ringSubtitle, holdMs: 3000 }]);
+    dispatchTelRingSubtitleIfNeeded();
+  }
+
+  function handlePhotoboothModalOpened() {
+    if (isPhoneInCall) return;
+    if (deferTelRingUntilPhotoboothClosed || isTelRinging || isTelActivated) {
+      suppressTelRingPresentationForPhotobooth();
+    }
+  }
+
+  function handlePhotoboothModalClosed() {
+    if (
+      !deferTelRingUntilPhotoboothClosed ||
+      !isStage6Active ||
+      isPhoneInCall
+    ) {
+      deferTelRingUntilPhotoboothClosed = false;
+      return;
+    }
+    deferTelRingUntilPhotoboothClosed = false;
+    activateTelRinging();
   }
 
   function startPhoneCallAfterHangup(callSrc) {
@@ -1119,6 +1365,7 @@ export function Stage6() {
     phoneCallAudio.onended = () => {
       isPhoneInCall = false;
       hidePhoneIndicator();
+      endPhoneInCallNotificationsBlock();
       telEmissiveTarget = 0;
       telRingAgainTimeoutId = window.setTimeout(() => {
         telRingAgainTimeoutId = 0;
@@ -1138,12 +1385,15 @@ export function Stage6() {
 
   function playCurrentPhoneCall() {
     if (telCallIndex >= PHONE_CALL_SOUNDS.length) return;
+    skipTelRingSubtitle = true;
+    hideStage6SubtitlesNow();
     stopPhoneRing();
     hideTelBubble();
     hideCharBubble();
     isPhoneInCall = true;
     telEmissiveTarget = 0;
     showPhoneIndicator(STAGE6_PHONE_INDICATOR_MODE_IN_CALL);
+    beginPhoneInCallNotificationsBlock();
     isTelActivated = false;
     const callIdx = telCallIndex;
     const callSrc = resolvePublicAssetUrl(PHONE_CALL_SOUNDS[callIdx]);
@@ -1226,6 +1476,121 @@ export function Stage6() {
     applyTelEmissive(telEmissiveProgress);
   }
 
+  /** @returns {{ frontStep: THREE.Object3D, topStep: THREE.Object3D | null } | null} */
+  function getEscStepAnchors() {
+    if (escSteps.length === 0) return null;
+    let frontStep = null;
+    let topStep = null;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const step of escSteps) {
+      step.updateMatrixWorld(true);
+      step.getWorldPosition(_escStepWorldPos);
+      if (_escStepWorldPos.y < minY) {
+        minY = _escStepWorldPos.y;
+        frontStep = step;
+        _escFrontStepPos.copy(_escStepWorldPos);
+      }
+      if (_escStepWorldPos.y > maxY) {
+        maxY = _escStepWorldPos.y;
+        topStep = step;
+        _escTopStepPos.copy(_escStepWorldPos);
+      }
+    }
+    if (!frontStep) return null;
+    return { frontStep, topStep };
+  }
+
+  function tryBeginWalkToEscalator() {
+    if (
+      !isStage6Active ||
+      !character ||
+      !isBoardingPassIssued ||
+      isFinishFired ||
+      isEscalatorSnapping ||
+      isEscalatorRiding
+    ) {
+      return;
+    }
+    const anchors = getEscStepAnchors();
+    if (!anchors) return;
+    const charPos = character.getPosition();
+    if (!charPos) return;
+    const dx = charPos.x - _escFrontStepPos.x;
+    const dz = charPos.z - _escFrontStepPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist <= ESC_DETECT_RADIUS) {
+      isWalkingToEscalator = false;
+      return;
+    }
+    if (dist > ESC_APPROACH_FROM_STEP_DIST) {
+      escApproachTargetX =
+        _escFrontStepPos.x + (dx / dist) * ESC_APPROACH_FROM_STEP_DIST;
+      escApproachTargetZ =
+        _escFrontStepPos.z + (dz / dist) * ESC_APPROACH_FROM_STEP_DIST;
+    } else {
+      escApproachTargetX = _escFrontStepPos.x;
+      escApproachTargetZ = _escFrontStepPos.z;
+    }
+    isWalkingToEscalator = true;
+  }
+
+  function getEscAutoWalkKeys() {
+    const pos = character?.getPosition();
+    if (!pos) {
+      isWalkingToEscalator = false;
+      return {};
+    }
+    if (getEscStepAnchors()) {
+      const toStepX = _escFrontStepPos.x - pos.x;
+      const toStepZ = _escFrontStepPos.z - pos.z;
+      if (
+        toStepX * toStepX + toStepZ * toStepZ <=
+        ESC_AUTO_WALK_ARRIVE_RADIUS_SQ
+      ) {
+        isWalkingToEscalator = false;
+        return {};
+      }
+    }
+    const dx = escApproachTargetX - pos.x;
+    const dz = escApproachTargetZ - pos.z;
+    const keys = {};
+    const axisThreshold = 0.12;
+    if (dz < -axisThreshold) {
+      keys.ArrowUp = true;
+      keys.w = true;
+      keys.W = true;
+      keys.KeyW = true;
+    }
+    if (dz > axisThreshold) {
+      keys.ArrowDown = true;
+      keys.s = true;
+      keys.S = true;
+      keys.KeyS = true;
+    }
+    if (dx < -axisThreshold) {
+      keys.ArrowLeft = true;
+      keys.a = true;
+      keys.A = true;
+      keys.KeyA = true;
+    }
+    if (dx > axisThreshold) {
+      keys.ArrowRight = true;
+      keys.d = true;
+      keys.D = true;
+      keys.KeyD = true;
+    }
+    return keys;
+  }
+
+  function getStage6MovementKeys() {
+    if (isWalkingToEscalator) return getEscAutoWalkKeys();
+    if (isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall) {
+      return {};
+    }
+    return keyboard.keys;
+  }
+
   function getPointerHitTarget(event) {
     if (!canvasRef || !cameraRef || intRaycastMeshes.length === 0) return null;
     const rect = canvasRef.getBoundingClientRect();
@@ -1295,21 +1660,12 @@ export function Stage6() {
       }
       cameraRef = this.camera;
 
-      if (import.meta.env.DEV) {
-        cameraDebugOverlay = createStage6CameraDebugOverlay({
-          camera: this.camera,
-          domElement: canvas,
-          config,
-        });
-      }
-
       scene.background = null;
       character = createCharacterController({
         scene,
         glbLoader,
         config,
-        getKeys: () =>
-          isSceneInteractionLocked || isAnnouncementActive ? {} : keyboard.keys,
+        getKeys: getStage6MovementKeys,
       });
       keyboard.mount();
 
@@ -1337,6 +1693,8 @@ export function Stage6() {
       isTelActivated = false;
       isTelRinging = false;
       isPhoneInCall = false;
+      skipTelRingSubtitle = false;
+      deferTelRingUntilPhotoboothClosed = false;
       telEmissiveTarget = 0;
       telEmissiveProgress = 0;
       telCallIndex = 0;
@@ -1344,8 +1702,16 @@ export function Stage6() {
       telEmissiveMaterials.length = 0;
       isSceneInteractionLocked = false;
       isAnnouncementActive = false;
+      introInputBlockedToastCooldown = 0;
+      introSequenceStarted = false;
+      clearIntroAudioUnlockListeners();
       isFinishFired = false;
       isBoardingPassIssued = false;
+      isWalkingToEscalator = false;
+      if (escWalkAfterBoardingTimeoutId) {
+        window.clearTimeout(escWalkAfterBoardingTimeoutId);
+        escWalkAfterBoardingTimeoutId = 0;
+      }
       isEscalatorRiding = false;
       isEscalatorSnapping = false;
       isEscalatorFading = false;
@@ -1356,13 +1722,24 @@ export function Stage6() {
       escSteps.length = 0;
       escNoBoardingCooldown = 0;
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
+      onBoardingPassIssuedHandler = () => {
+        isBoardingPassIssued = true;
+        atmEmissiveTarget = 0;
+        if (escWalkAfterBoardingTimeoutId) {
+          window.clearTimeout(escWalkAfterBoardingTimeoutId);
+        }
+        escWalkAfterBoardingTimeoutId = window.setTimeout(() => {
+          escWalkAfterBoardingTimeoutId = 0;
+          tryBeginWalkToEscalator();
+        }, 400);
+      };
       window.addEventListener(
         STAGE6_BOARDING_PASS_ISSUED_EVENT,
-        () => {
-          isBoardingPassIssued = true;
-          atmEmissiveTarget = 0;
-        },
-        { once: true },
+        onBoardingPassIssuedHandler,
+      );
+      window.addEventListener(
+        STAGE6_WALK_TO_ESCALATOR_EVENT,
+        tryBeginWalkToEscalator,
       );
       onInteractionLock = () => {
         isSceneInteractionLocked = true;
@@ -1377,25 +1754,32 @@ export function Stage6() {
         onInteractionUnlock,
       );
       window.addEventListener("keydown", handleKeyDown, { capture: true });
+      window.addEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+        handlePhotoboothModalOpened,
+      );
+      window.addEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
+        handlePhotoboothModalClosed,
+      );
       onPointerDown = (event) => {
+        if (getStage6InputBlockedReason()) {
+          notifyStage6InputBlocked("click");
+          return;
+        }
         const hit = getPointerHitTarget(event);
         if (!hit) return;
         if (isStage6PointerBlocked()) return;
         if (hit.target === "photobooth") {
           playUiClickSound();
           hideTelBubble();
-          blockStage6Notifications("photobooth-modal");
-          window.dispatchEvent(
-            new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT, {
-              detail: {
-                videoSrc:
-                  config.photoboothVideoPath ??
-                  "/assets/photo_booth/photobooth.mp4",
-                photoSrcs: config.photoboothPhotoSrcs,
-                photoRatios: config.photoboothPhotoRatios,
-              },
-            }),
-          );
+          openStage6PhotoboothModal({
+            videoSrc:
+              config.photoboothVideoPath ??
+              "/assets/photo_booth/photobooth.mp4",
+            photoSrcs: config.photoboothPhotoSrcs,
+            photoRatios: config.photoboothPhotoRatios,
+          });
         }
         const isAtmHit = isAtmHitTarget(hit);
         const isTelHit = isTelHitTarget(hit);
@@ -1413,8 +1797,7 @@ export function Stage6() {
               },
             ]);
           } else {
-            blockStage6Notifications("name-modal");
-            window.dispatchEvent(new CustomEvent(STAGE6_NAME_MODAL_SHOW_EVENT));
+            openStage6NameModal();
           }
         } else {
           registerNonAtmInteraction(hit);
@@ -1422,16 +1805,11 @@ export function Stage6() {
         if (hit.target === "boardpic" || hit.target === "poster") {
           playUiClickSound();
           hideTelBubble();
-          blockStage6Notifications("poster-modal");
-          window.dispatchEvent(
-            new CustomEvent(STAGE6_POSTER_MODAL_SHOW_EVENT, {
-              detail: {
-                imageSrc:
-                  config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
-                intName: hit.intName,
-              },
-            }),
-          );
+          openStage6PosterModal({
+            imageSrc:
+              config.boardPosterImage ?? "/assets/poster/stamp_poster.png",
+            intName: hit.intName,
+          });
         }
         window.dispatchEvent(
           new CustomEvent(STAGE6_INT_CLICK_EVENT, {
@@ -1648,6 +2026,9 @@ export function Stage6() {
               escSteps.push(obj);
             }
           });
+          if (isBoardingPassIssued) {
+            tryBeginWalkToEscalator();
+          }
 
           const allStaticColliders = collectStage6StaticColliderBoxes(model);
           const staticColliderBoxes = bagPhysics.setup(
@@ -1663,7 +2044,7 @@ export function Stage6() {
           });
 
           // GLB 씬이 실제로 준비된 뒤에 공항 안내 오디오/자막 시퀀스를 시작
-          scheduleAirplaneCallSign();
+          ensureStage6AudioUnlockedThenStartIntro();
         })
         .catch((err) => {
           console.error(
@@ -1674,7 +2055,7 @@ export function Stage6() {
             revealStage6Scene(scene);
           }
           // 배경 로드 실패해도 안내 방송은 진행 (기존 동작 유지)
-          scheduleAirplaneCallSign();
+          ensureStage6AudioUnlockedThenStartIntro();
         });
 
       // 벤치 로드 (config.bench 있을 때)
@@ -1750,8 +2131,12 @@ export function Stage6() {
     },
 
     update(delta) {
-      if (cameraDebugOverlay) cameraDebugOverlay.update();
-
+      if (introInputBlockedToastCooldown > 0) {
+        introInputBlockedToastCooldown = Math.max(
+          0,
+          introInputBlockedToastCooldown - delta,
+        );
+      }
       atmEmissiveProgress = THREE.MathUtils.damp(
         atmEmissiveProgress,
         atmEmissiveTarget,
@@ -1817,7 +2202,13 @@ export function Stage6() {
         });
 
         // frustum 클램프 — 에스컬레이터 탑승 중엔 적용 안 함
-        if (posRef && wasInView && !isEscalatorSnapping && !isEscalatorRiding) {
+        if (
+          posRef &&
+          wasInView &&
+          !isEscalatorSnapping &&
+          !isEscalatorRiding &&
+          !isWalkingToEscalator
+        ) {
           const y = posRef.y;
           const cam = this.camera;
           if (!isInCameraView(posRef.x, y, posRef.z, cam)) {
@@ -1852,53 +2243,36 @@ export function Stage6() {
       ) {
         escNoBoardingCooldown = Math.max(0, escNoBoardingCooldown - delta);
         const charPos = character.getPosition();
-        if (charPos) {
-          let frontStep = null;
-          let topStep = null;
-          let minY = Infinity;
-          let maxY = -Infinity;
-          for (const step of escSteps) {
-            step.updateMatrixWorld(true);
-            step.getWorldPosition(_escStepWorldPos);
-            if (_escStepWorldPos.y < minY) {
-              minY = _escStepWorldPos.y;
-              frontStep = step;
-              _escFrontStepPos.copy(_escStepWorldPos);
-            }
-            if (_escStepWorldPos.y > maxY) {
-              maxY = _escStepWorldPos.y;
-              topStep = step;
-              _escTopStepPos.copy(_escStepWorldPos);
-            }
-          }
-          if (frontStep) {
-            const dx = charPos.x - _escFrontStepPos.x;
-            const dz = charPos.z - _escFrontStepPos.z;
-            if (dx * dx + dz * dz < ESC_DETECT_RADIUS * ESC_DETECT_RADIUS) {
-              if (!isBoardingPassIssued) {
-                if (escNoBoardingCooldown <= 0) {
-                  escNoBoardingCooldown = 4;
-                  dispatchStage6SubtitleSequence([
-                    {
-                      text: "탑승 수속을 먼저 완료해 주세요! 🎫",
-                      holdMs: 2500,
-                    },
-                  ]);
-                }
-              } else {
-                isEscalatorSnapping = true;
-                isSceneInteractionLocked = true;
-                escRidingStep = frontStep;
-                escFadeProgress = 0;
-                escRidingTime = 0;
-                isEscalatorFading = false;
-                // 에스컬레이터 이동 방향: 최하단 step → 최상단 step XZ 방향
-                if (topStep) {
-                  const ddx = _escTopStepPos.x - _escFrontStepPos.x;
-                  const ddz = _escTopStepPos.z - _escFrontStepPos.z;
-                  if (Math.abs(ddx) > 0.01 || Math.abs(ddz) > 0.01) {
-                    escFacingYaw = Math.atan2(ddx, ddz);
-                  }
+        const anchors = charPos ? getEscStepAnchors() : null;
+        if (charPos && anchors) {
+          const { frontStep, topStep } = anchors;
+          const dx = charPos.x - _escFrontStepPos.x;
+          const dz = charPos.z - _escFrontStepPos.z;
+          if (dx * dx + dz * dz < ESC_DETECT_RADIUS * ESC_DETECT_RADIUS) {
+            if (!isBoardingPassIssued) {
+              if (escNoBoardingCooldown <= 0) {
+                escNoBoardingCooldown = 4;
+                dispatchStage6SubtitleSequence([
+                  {
+                    text: "탑승 수속을 먼저 완료해 주세요! 🎫",
+                    holdMs: 2500,
+                  },
+                ]);
+              }
+            } else {
+              isWalkingToEscalator = false;
+              isEscalatorSnapping = true;
+              isSceneInteractionLocked = true;
+              escRidingStep = frontStep;
+              escFadeProgress = 0;
+              escRidingTime = 0;
+              isEscalatorFading = false;
+              // 에스컬레이터 이동 방향: 최하단 step → 최상단 step XZ 방향
+              if (topStep) {
+                const ddx = _escTopStepPos.x - _escFrontStepPos.x;
+                const ddz = _escTopStepPos.z - _escFrontStepPos.z;
+                if (Math.abs(ddx) > 0.01 || Math.abs(ddz) > 0.01) {
+                  escFacingYaw = Math.atan2(ddx, ddz);
                 }
               }
             }
@@ -1959,10 +2333,6 @@ export function Stage6() {
     cleanup(scene) {
       isStage6Active = false;
       keyboard.unmount();
-      if (cameraDebugOverlay) {
-        cameraDebugOverlay.dispose();
-        cameraDebugOverlay = null;
-      }
       if (characterAnimUnblockTimeoutId) {
         window.clearTimeout(characterAnimUnblockTimeoutId);
         characterAnimUnblockTimeoutId = 0;
@@ -1995,6 +2365,15 @@ export function Stage6() {
         charHoverCryAudio = null;
       }
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
+        handlePhotoboothModalOpened,
+      );
+      window.removeEventListener(
+        STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT,
+        handlePhotoboothModalClosed,
+      );
+      deferTelRingUntilPhotoboothClosed = false;
       window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
       window.dispatchEvent(new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT));
       window.dispatchEvent(new CustomEvent(STAGE6_BOARDING_RESET_EVENT));
@@ -2019,6 +2398,22 @@ export function Stage6() {
           onInteractionUnlock,
         );
       }
+      if (onBoardingPassIssuedHandler) {
+        window.removeEventListener(
+          STAGE6_BOARDING_PASS_ISSUED_EVENT,
+          onBoardingPassIssuedHandler,
+        );
+        onBoardingPassIssuedHandler = null;
+      }
+      window.removeEventListener(
+        STAGE6_WALK_TO_ESCALATOR_EVENT,
+        tryBeginWalkToEscalator,
+      );
+      if (escWalkAfterBoardingTimeoutId) {
+        window.clearTimeout(escWalkAfterBoardingTimeoutId);
+        escWalkAfterBoardingTimeoutId = 0;
+      }
+      isWalkingToEscalator = false;
       canvasRef = null;
       cameraRef = null;
       onPointerDown = null;
@@ -2062,6 +2457,8 @@ export function Stage6() {
       isTelActivated = false;
       isTelRinging = false;
       isPhoneInCall = false;
+      skipTelRingSubtitle = false;
+      deferTelRingUntilPhotoboothClosed = false;
       telRootRef = null;
       telEmissiveMaterials.length = 0;
       telEmissiveProgress = 0;
@@ -2069,6 +2466,9 @@ export function Stage6() {
       telCallIndex = 0;
       isSceneInteractionLocked = false;
       isAnnouncementActive = false;
+      introInputBlockedToastCooldown = 0;
+      introSequenceStarted = false;
+      clearIntroAudioUnlockListeners();
       intRaycastMeshes.length = 0;
 
       bagPhysics.cleanup();

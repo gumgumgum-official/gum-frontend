@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { playPhotoboothCameraSound } from "../utils/stages/stage6/playPhotoboothCameraSound.js";
 
 const DEFAULT_PHOTO_RATIOS = [0.25, 0.75, 0.82];
 /** 영상 종료 후 자동으로 모달을 닫기 전 대기 시간 (ms) */
-const AUTO_CLOSE_AFTER_END_MS = 5000;
+const AUTO_CLOSE_AFTER_END_MS = 1500;
 /** 닫힐 때 오버레이 페이드아웃 시간 — style.css의 transition과 맞출 것 */
 const CLOSE_TRANSITION_MS = 320;
 
@@ -38,13 +39,11 @@ export function Stage6PhotoboothModal({
     onClose?.();
   }, [onClose]);
 
-  const prevIsOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen && !prevIsOpenRef.current) {
+    if (isOpen) {
       setIsExiting(false);
     }
-    prevIsOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, videoSrc]);
 
   useEffect(() => {
     setRevealed(photos.map(() => false));
@@ -168,6 +167,7 @@ export function Stage6PhotoboothModal({
       ratios.forEach((threshold, i) => {
         if (!triggeredRef.current[i] && ratio >= threshold) {
           triggeredRef.current[i] = true;
+          playPhotoboothCameraSound();
           setRevealed((prev) => {
             const next = [...prev];
             next[i] = true;

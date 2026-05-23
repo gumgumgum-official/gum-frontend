@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { STAGE3_OBJECTS_CONFIG } from "../config/stages/stage3/stage3ObjectsConfig.js";
 import { getOrCreateVoteClientId } from "../lib/voteApi.js";
@@ -6,7 +14,9 @@ import { prefetchVoteBundle } from "../lib/voteBundleCache.js";
 import { playRandomNoticePaperSound } from "../utils/stages/stage3/playNoticePaperSound.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 import { GgumddiVoteSection } from "./GgumddiVoteSection";
-import { GuestbookEmbed } from "./GuestbookEmbed";
+import { GuestbookEmbed } from "./GuestbookEmbed.jsx";
+import { getGuestbookImageUrls } from "../utils/common/guestbookAssetUrls.js";
+import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
 
 const NOTICE = STAGE3_OBJECTS_CONFIG.notice;
 const NOTICE_POSTER = NOTICE.posterImages;
@@ -16,6 +26,30 @@ const woodDark = "oklch(0.45 0.08 55)";
 const card = "oklch(0.99 0.012 85)";
 const amber50 = "#fffbeb";
 const posterBorderColor = "oklch(0.85 0.02 60)";
+
+const CLOSE_BTN_SIZE = 32;
+const CLOSE_BTN_INSET = 12;
+
+/** @type {import("react").CSSProperties} */
+const CLOSE_BTN_BASE_STYLE = {
+  position: "fixed",
+  width: CLOSE_BTN_SIZE,
+  height: CLOSE_BTN_SIZE,
+  padding: 0,
+  border: "none",
+  borderRadius: "50%",
+  background: "transparent",
+  fontSize: "24px",
+  lineHeight: 1,
+  cursor: "pointer",
+  color: "rgba(255, 251, 235, 0.8)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  transition: "color 0.2s, background 0.2s",
+  zIndex: 10003,
+  pointerEvents: "auto",
+};
 
 /** 한 줄 가로 배치: 모달 너비의 1/3씩 균등 분배, 화면이 클수록 포스터만 함께 커짐 */
 /** @type {import('framer-motion').MotionStyle} */
@@ -35,6 +69,10 @@ const POSTER_BASE = {
  */
 export function NoticeModalBoard({ isOpen, onClose }) {
   const [zoomedPoster, setZoomedPoster] = useState(null); // "feast" | "vote" | "guestbook" | null
+  const cardRef = useRef(null);
+  const [closeBtnStyle, setCloseBtnStyle] = useState(
+    /** @type {import("react").CSSProperties | null} */ (null),
+  );
   const voteClientId = useMemo(
     () => (isOpen ? getOrCreateVoteClientId() : null),
     [isOpen],
@@ -66,8 +104,63 @@ export function NoticeModalBoard({ isOpen, onClose }) {
     prefetchVoteBundle(voteClientId);
   }, [isOpen, voteClientId]);
 
-  return (
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setCloseBtnStyle(null);
+      return undefined;
+    }
+
+    const syncCloseBtnPosition = () => {
+      const cardEl = cardRef.current;
+      if (!cardEl) return;
+      const rect = cardEl.getBoundingClientRect();
+      setCloseBtnStyle({
+        ...CLOSE_BTN_BASE_STYLE,
+        top: rect.top + CLOSE_BTN_INSET,
+        left: rect.right - CLOSE_BTN_INSET - CLOSE_BTN_SIZE,
+      });
+    };
+
+    syncCloseBtnPosition();
+    const ResizeObserverCtor = window.ResizeObserver;
+    const observer = ResizeObserverCtor
+      ? new ResizeObserverCtor(syncCloseBtnPosition)
+      : null;
+    if (observer && cardRef.current) observer.observe(cardRef.current);
+    window.addEventListener("resize", syncCloseBtnPosition);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncCloseBtnPosition);
+    };
+  }, [isOpen, zoomedPoster]);
+
+  const guestbookPreloadUrls = useMemo(() => getGuestbookImageUrls(), []);
+  const guestbookBgUrl = useMemo(
+    () => resolvePublicAssetUrl(NOTICE.guestbookFullscreenBg),
+    [],
+  );
+
+  const modalTree = (
     <AnimatePresence>
+      {isOpen
+        ? guestbookPreloadUrls.map((url) => (
+            <img
+              key={url}
+              src={url}
+              alt=""
+              aria-hidden
+              fetchPriority="low"
+              decoding="async"
+              style={{
+                position: "fixed",
+                width: 0,
+                height: 0,
+                opacity: 0,
+                pointerEvents: "none",
+              }}
+            />
+          ))
+        : null}
       {isOpen && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -91,7 +184,35 @@ export function NoticeModalBoard({ isOpen, onClose }) {
             pointerEvents: isOpen ? "auto" : "none",
           }}
         >
+          {closeBtnStyle ? (
+            <button
+              type="button"
+              aria-label="닫기"
+              style={closeBtnStyle}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closeWithSound();
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = amber50;
+                e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "rgba(255, 251, 235, 0.8)";
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{ transform: "translateY(-1px)" }}
+              >
+                ×
+              </span>
+            </button>
+          ) : null}
           <motion.div
+            ref={cardRef}
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
@@ -116,7 +237,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: "16px 28px",
+                padding: "16px 52px 16px 28px",
                 background: wood,
                 borderBottom: `3px solid ${woodDark}`,
                 borderRadius: "24px 24px 0 0",
@@ -136,46 +257,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                 껌딱지 월드 소식통
               </h2>
             </div>
-            <button
-              type="button"
-              onClick={() => closeWithSound()}
-              aria-label="닫기"
-              style={{
-                position: "absolute",
-                top: "12px",
-                right: "12px",
-                width: "32px",
-                height: "32px",
-                padding: 0,
-                border: "none",
-                borderRadius: "50%",
-                background: "transparent",
-                fontSize: "24px",
-                lineHeight: 1,
-                cursor: "pointer",
-                color: "rgba(255, 251, 235, 0.8)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "color 0.2s, background 0.2s",
-                zIndex: 5,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = amber50;
-                e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "rgba(255, 251, 235, 0.8)";
-                e.currentTarget.style.background = "transparent";
-              }}
-            >
-              <span
-                aria-hidden="true"
-                style={{ transform: "translateY(-1px)" }}
-              >
-                ×
-              </span>
-            </button>
             <div
               style={{
                 padding: "clamp(32px, 4vh, 56px) clamp(16px, 2.5vw, 40px)",
@@ -405,7 +486,7 @@ export function NoticeModalBoard({ isOpen, onClose }) {
                   pointerEvents: zoomedPoster ? "auto" : "none",
                   ...(zoomedPoster === "guestbook"
                     ? {
-                        backgroundImage: `url(${NOTICE.guestbookFullscreenBg})`,
+                        backgroundImage: `url(${guestbookBgUrl})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
@@ -484,4 +565,6 @@ export function NoticeModalBoard({ isOpen, onClose }) {
       )}
     </AnimatePresence>
   );
+
+  return createPortal(modalTree, document.body);
 }

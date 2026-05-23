@@ -23,6 +23,10 @@ import { GameMachineModalShell } from "./components/GameMachineModalShell.jsx";
 import { GgumRunnerMinigame } from "./components/GgumRunnerMinigame.jsx";
 import { dispatchMinigameClose } from "./utils/stages/stage3/minigameLauncher.js";
 import { playUiClickSound } from "./utils/stages/stage3/playUiClickSound.js";
+import { waitForStage3GpuReady } from "./utils/stages/stage3/stage3RevealGate.js";
+import { KioskOperatorCornerReset } from "./components/KioskOperatorCornerReset.jsx";
+import { performKioskSoftRestart } from "./utils/common/kioskSoftRestart.js";
+import { beginStage3KioskVisitorSession } from "./utils/stages/stage3/stage3KioskSession.js";
 import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
   getGumServerBaseUrl,
@@ -39,10 +43,23 @@ import {
   STAGE6_PHONE_INDICATOR_SHOW_EVENT,
   STAGE6_POSTER_MODAL_HIDE_EVENT,
   STAGE6_POSTER_MODAL_SHOW_EVENT,
+  STAGE6_INPUT_BLOCKED_EVENT,
+  STAGE6_INTRO_CLICK_HINT_EVENT,
+  STAGE6_INTRO_CLICK_HINT_MESSAGE,
 } from "./events/stage6Events.js";
-import { STAGE3_ISLAND_EXIT_BLOCKED_EVENT } from "./events/stage3Events.js";
+import {
+  STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+  STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT,
+  STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+  STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+  STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+  STAGE3_NOTICE_MODAL_CLOSE_EVENT,
+  STAGE3_NOTICE_MODAL_SHOW_EVENT,
+} from "./events/stage3Events.js";
 import {
   runStage6NotificationNowOrEnqueue,
+  STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG,
+  STAGE6_POSTER_MODAL_BLOCK_TAG,
   unblockStage6Notifications,
 } from "./utils/stages/stage6/stage6NotificationGate.js";
 
@@ -83,7 +100,11 @@ function AppLayout() {
 
   const isStartRoute = location.pathname === "/start";
   const isKioskRoute = location.pathname === "/kiosk";
+  const isAirportRoute = location.pathname === "/airport";
+  const isKioskExhibitionRoute = isStartRoute || isKioskRoute || isAirportRoute;
   const showKioskCanvas = isStartRoute || isKioskRoute;
+  const [stage3GpuReady, setStage3GpuReady] = useState(false);
+  const kioskRenderPaused = isStartRoute && !isKioskRoute && stage3GpuReady;
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showGameMachineModalShell, setShowGameMachineModalShell] =
@@ -106,9 +127,21 @@ function AppLayout() {
     useState([0.25, 0.75, 0.82]);
   const [showAirportChime, setShowAirportChime] = useState(false);
   const [phoneIndicatorMode, setPhoneIndicatorMode] = useState(null);
-  const [showStage3IslandExitToast, setShowStage3IslandExitToast] =
-    useState(false);
-  const stage3IslandExitToastTimerRef = useRef(null);
+  const [topHudToastMessage, setTopHudToastMessage] = useState(null);
+  const topHudToastTimerRef = useRef(null);
+  const [introClickHintMessage, setIntroClickHintMessage] = useState(null);
+  const introClickHintTimerRef = useRef(null);
+
+  const showTopHudToast = useCallback((message) => {
+    setTopHudToastMessage(message);
+    if (topHudToastTimerRef.current) {
+      clearTimeout(topHudToastTimerRef.current);
+    }
+    topHudToastTimerRef.current = window.setTimeout(() => {
+      setTopHudToastMessage(null);
+      topHudToastTimerRef.current = null;
+    }, 2000);
+  }, []);
 
   const closeGameMachineModalShell = useCallback(() => {
     setShowGameMachineModalShell(false);
@@ -123,6 +156,11 @@ function AppLayout() {
     playUiClickSound();
     closeGameMachineModalShell();
   }, [closeGameMachineModalShell]);
+
+  const runKioskSoftRestart = useCallback(async () => {
+    await performKioskSoftRestart();
+    navigate({ pathname: "/start", search: "" }, { replace: true });
+  }, [navigate]);
 
   // 긴급 배정: ?worryId=223 감지 → 서버 emergency-assign 호출 후 파라미터 제거
   useEffect(() => {
@@ -146,9 +184,26 @@ function AppLayout() {
   useEffect(() => {
     if (isKioskRoute && prevPathnameRef.current !== "/kiosk") {
       requestStage3Reveal();
+      beginStage3KioskVisitorSession();
     }
     prevPathnameRef.current = location.pathname;
   }, [location.pathname, isKioskRoute]);
+
+  // /start 대기 중(hidden 캔버스): GPU 워밍업 완료 후에만 렌더 정지
+  useEffect(() => {
+    if (!showKioskCanvas) {
+      setStage3GpuReady(false);
+      return;
+    }
+    let cancelled = false;
+    setStage3GpuReady(false);
+    void waitForStage3GpuReady().then(() => {
+      if (!cancelled) setStage3GpuReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showKioskCanvas, location.pathname]);
 
   // Stage3 → Stage6 전환 이벤트 (/kiosk에서만)
   useEffect(() => {
@@ -167,22 +222,31 @@ function AppLayout() {
   useEffect(() => {
     const showHandler = () => setShowNoticeModal(true);
     const closeHandler = () => setShowNoticeModal(false);
-    window.addEventListener("gum:showNoticeModal", showHandler);
-    window.addEventListener("gum:closeNoticeModal", closeHandler);
+    window.addEventListener(STAGE3_NOTICE_MODAL_SHOW_EVENT, showHandler);
+    window.addEventListener(STAGE3_NOTICE_MODAL_CLOSE_EVENT, closeHandler);
     return () => {
-      window.removeEventListener("gum:showNoticeModal", showHandler);
-      window.removeEventListener("gum:closeNoticeModal", closeHandler);
+      window.removeEventListener(STAGE3_NOTICE_MODAL_SHOW_EVENT, showHandler);
+      window.removeEventListener(STAGE3_NOTICE_MODAL_CLOSE_EVENT, closeHandler);
     };
   }, []);
 
   useEffect(() => {
     const showHandler = () => setShowGameMachineModalShell(true);
     const closeHandler = () => closeGameMachineModalShell();
-    window.addEventListener("gum:showGameMachineModal", showHandler);
-    window.addEventListener("gum:closeGameMachineModal", closeHandler);
+    window.addEventListener(STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT, showHandler);
+    window.addEventListener(
+      STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+      closeHandler,
+    );
     return () => {
-      window.removeEventListener("gum:showGameMachineModal", showHandler);
-      window.removeEventListener("gum:closeGameMachineModal", closeHandler);
+      window.removeEventListener(
+        STAGE3_GAME_MACHINE_MODAL_SHOW_EVENT,
+        showHandler,
+      );
+      window.removeEventListener(
+        STAGE3_GAME_MACHINE_MODAL_CLOSE_EVENT,
+        closeHandler,
+      );
     };
   }, [closeGameMachineModalShell]);
 
@@ -197,7 +261,7 @@ function AppLayout() {
     };
     const hideStage6Poster = () => {
       setShowStage6PosterModal(false);
-      unblockStage6Notifications("poster-modal");
+      unblockStage6Notifications(STAGE6_POSTER_MODAL_BLOCK_TAG);
     };
     window.addEventListener(STAGE6_POSTER_MODAL_SHOW_EVENT, showStage6Poster);
     window.addEventListener(STAGE6_POSTER_MODAL_HIDE_EVENT, hideStage6Poster);
@@ -232,7 +296,7 @@ function AppLayout() {
     };
     const hideStage6Photobooth = () => {
       setShowStage6PhotoboothModal(false);
-      unblockStage6Notifications("photobooth-modal");
+      unblockStage6Notifications(STAGE6_PHOTOBOOTH_MODAL_BLOCK_TAG);
     };
     window.addEventListener(
       STAGE6_PHOTOBOOTH_MODAL_SHOW_EVENT,
@@ -255,10 +319,9 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showChime = () =>
-      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(true));
-    const hideChime = () =>
-      runStage6NotificationNowOrEnqueue(() => setShowAirportChime(false));
+    // 띵-동 HUD는 call sign 오디오와 동기 — 알림 큐를 타면 탑승 수속 멘트만 먼저 뜰 수 있음
+    const showChime = () => setShowAirportChime(true);
+    const hideChime = () => setShowAirportChime(false);
     window.addEventListener(AIRPORT_CHIME_SHOW_EVENT, showChime);
     window.addEventListener(AIRPORT_CHIME_HIDE_EVENT, hideChime);
     return () => {
@@ -268,33 +331,97 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const showIslandExitToast = () => {
-      setShowStage3IslandExitToast(true);
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
-      }
-      stage3IslandExitToastTimerRef.current = window.setTimeout(() => {
-        setShowStage3IslandExitToast(false);
-        stage3IslandExitToastTimerRef.current = null;
-      }, 2000);
+    const INTRO_CLICK_HINT_VISIBLE_MS = 2500;
+
+    const showIntroClickHint = (/** @type {CustomEvent} */ event) => {
+      const message =
+        typeof event?.detail?.message === "string" && event.detail.message
+          ? event.detail.message
+          : STAGE6_INTRO_CLICK_HINT_MESSAGE;
+      runStage6NotificationNowOrEnqueue(() => {
+        setIntroClickHintMessage(message);
+        if (introClickHintTimerRef.current) {
+          clearTimeout(introClickHintTimerRef.current);
+        }
+        introClickHintTimerRef.current = window.setTimeout(() => {
+          setIntroClickHintMessage(null);
+          introClickHintTimerRef.current = null;
+        }, INTRO_CLICK_HINT_VISIBLE_MS);
+      });
     };
-    window.addEventListener(
-      STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
-      showIslandExitToast,
-    );
+
+    window.addEventListener(STAGE6_INTRO_CLICK_HINT_EVENT, showIntroClickHint);
     return () => {
       window.removeEventListener(
-        STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
-        showIslandExitToast,
+        STAGE6_INTRO_CLICK_HINT_EVENT,
+        showIntroClickHint,
       );
-      if (stage3IslandExitToastTimerRef.current) {
-        clearTimeout(stage3IslandExitToastTimerRef.current);
-        stage3IslandExitToastTimerRef.current = null;
+      if (introClickHintTimerRef.current) {
+        clearTimeout(introClickHintTimerRef.current);
+        introClickHintTimerRef.current = null;
       }
+      setIntroClickHintMessage(null);
     };
   }, []);
 
   useEffect(() => {
+    const onIslandExitBlocked = () => {
+      showTopHudToast("하핳.. 거기로는 못 가요😅");
+    };
+    const onStage3TopToastMessage = (/** @type {CustomEvent} */ event) => {
+      const message = event.detail?.message;
+      if (typeof message === "string" && message.length > 0) {
+        showTopHudToast(message);
+      }
+    };
+    const showStage6InputBlockedToast = (event) => {
+      const text =
+        typeof event?.detail?.text === "string" ? event.detail.text : "";
+      if (text) showTopHudToast(text);
+    };
+    window.addEventListener(
+      STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+      onIslandExitBlocked,
+    );
+    window.addEventListener(
+      STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+      onStage3TopToastMessage,
+    );
+    window.addEventListener(
+      STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+      onStage3TopToastMessage,
+    );
+    window.addEventListener(
+      STAGE6_INPUT_BLOCKED_EVENT,
+      showStage6InputBlockedToast,
+    );
+    return () => {
+      window.removeEventListener(
+        STAGE3_ISLAND_EXIT_BLOCKED_EVENT,
+        onIslandExitBlocked,
+      );
+      window.removeEventListener(
+        STAGE3_INTRO_INPUT_BLOCKED_EVENT,
+        onStage3TopToastMessage,
+      );
+      window.removeEventListener(
+        STAGE3_INTRO_MOVEMENT_HINT_EVENT,
+        onStage3TopToastMessage,
+      );
+      window.removeEventListener(
+        STAGE6_INPUT_BLOCKED_EVENT,
+        showStage6InputBlockedToast,
+      );
+      if (topHudToastTimerRef.current) {
+        clearTimeout(topHudToastTimerRef.current);
+        topHudToastTimerRef.current = null;
+      }
+    };
+  }, [showTopHudToast]);
+
+  useEffect(() => {
+    // 전화 HUD는 통화 상태 표시 — 알림 게이트(큐)를 타면 통화 중 block 시
+    // '전화 중'이 큐에 쌓였다가 종료 후 flush되어 늦게 뜨는 레이스가 난다.
     const showPhone = (e) => {
       const mode = e.detail?.mode;
       setPhoneIndicatorMode(
@@ -337,33 +464,53 @@ function AppLayout() {
       <Stage6PosterModal
         isOpen={showStage6PosterModal}
         imageSrc={stage6PosterImageSrc}
-        onClose={() => setShowStage6PosterModal(false)}
+        onClose={() => {
+          window.dispatchEvent(new CustomEvent(STAGE6_POSTER_MODAL_HIDE_EVENT));
+        }}
       />
       <Stage6PhotoboothModal
         isOpen={showStage6PhotoboothModal}
         videoSrc={stage6PhotoboothVideoSrc}
         photoSrcs={stage6PhotoboothPhotoSrcs}
         photoRatios={stage6PhotoboothPhotoRatios}
-        onClose={() => setShowStage6PhotoboothModal(false)}
+        onClose={() => {
+          window.dispatchEvent(
+            new CustomEvent(STAGE6_PHOTOBOOTH_MODAL_HIDE_EVENT),
+          );
+        }}
       />
       <Stage6BoardingOverlay />
       <GumCardsModalOverlay />
-      <div
-        className={`airport-chime-indicator stage3-island-exit-toast ${showStage3IslandExitToast ? "visible" : ""}`}
-      >
-        하핳.. 거기로는 못 가요😅
-      </div>
-      <div
-        className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
-      >
-        🔔 띵-동
-      </div>
-      <div
-        className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
-      >
-        {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
-          ? "전화 중 📞"
-          : "☎️ 전화 왔어요"}
+      {isKioskExhibitionRoute ? (
+        <KioskOperatorCornerReset
+          onTrigger={() => {
+            void runKioskSoftRestart();
+          }}
+        />
+      ) : null}
+      <div className="airport-hud-indicator-stack" aria-live="polite">
+        <div
+          className={`airport-chime-indicator ${showAirportChime ? "visible" : ""}`}
+        >
+          🔔 띵-동
+        </div>
+        {introClickHintMessage ? (
+          <div className="airport-chime-indicator visible">
+            {introClickHintMessage}
+          </div>
+        ) : null}
+        <div
+          className={`airport-chime-indicator ${phoneIndicatorMode ? "visible" : ""}`}
+        >
+          {phoneIndicatorMode === STAGE6_PHONE_INDICATOR_MODE_IN_CALL
+            ? "전화 중 📞"
+            : "☎️ 전화 왔어요"}
+        </div>
+        <div
+          className={`airport-chime-indicator stage3-island-exit-toast ${topHudToastMessage ? "visible" : ""}`}
+        >
+          {topHudToastMessage ?? ""}
+        </div>
       </div>
       {showKioskCanvas && (
         <div
@@ -373,7 +520,11 @@ function AppLayout() {
             pointerEvents: isKioskRoute ? "auto" : "none",
           }}
         >
-          <ThreeCanvas allowedStages={KIOSK_ALLOWED_STAGES} initialStage={3} />
+          <ThreeCanvas
+            allowedStages={KIOSK_ALLOWED_STAGES}
+            initialStage={3}
+            renderPaused={kioskRenderPaused}
+          />
         </div>
       )}
       <Routes>

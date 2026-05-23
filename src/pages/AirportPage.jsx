@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { AirportAudioUnlockOverlay } from "../components/AirportAudioUnlockOverlay.jsx";
 import { ThreeCanvas } from "../components/ThreeCanvas.jsx";
 import styles from "./Page.module.css";
 
@@ -26,6 +27,7 @@ export function AirportPage() {
 
   return (
     <div className={styles.page}>
+      <AirportAudioUnlockOverlay />
       <ThreeCanvas allowedStages={allowedStages} initialStage={6} />
     </div>
   );

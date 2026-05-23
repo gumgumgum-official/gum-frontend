@@ -5,7 +5,9 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { CARDS } from "../config/stages/stage3/gumCardsConfig.js";
+import { KIOSK_NEW_VISITOR_EVENT } from "../events/kioskEvents.js";
 import { playRandomGumCardPickSound } from "../utils/stages/stage3/playGumCardPickSound.js";
+import { EVENT_CLOSE } from "../utils/stages/stage3/gumCardsModalLauncher.js";
 import "./GumCardsModal.css";
 
 /** @typedef {{ num: string, name: string, img: string, keywords: string[], accent: string, accentBg: string, accentBorder: string, theme: string, title: string, desc: string, comfort: string }} GumCardData */
@@ -143,6 +145,13 @@ export function GumCardsModal({ open, onClose, onStick }) {
     }, 2800);
   }, []);
 
+  const resetCardSelection = useCallback(() => {
+    flippedCardRef.current = null;
+    setFlippedCard(null);
+    setToast({ show: false, msg: "" });
+    gridRef.current?.classList.remove("ready");
+  }, []);
+
   useEffect(() => {
     return () => {
       if (openRafRef.current) cancelAnimationFrame(openRafRef.current);
@@ -155,6 +164,22 @@ export function GumCardsModal({ open, onClose, onStick }) {
   useEffect(() => {
     if (!shouldRender) clearTrackedParticles();
   }, [shouldRender, clearTrackedParticles]);
+
+  useEffect(() => {
+    if (!shouldRender) {
+      resetCardSelection();
+    }
+  }, [shouldRender, resetCardSelection]);
+
+  useEffect(() => {
+    const onSessionReset = () => resetCardSelection();
+    window.addEventListener(KIOSK_NEW_VISITOR_EVENT, onSessionReset);
+    window.addEventListener(EVENT_CLOSE, onSessionReset);
+    return () => {
+      window.removeEventListener(KIOSK_NEW_VISITOR_EVENT, onSessionReset);
+      window.removeEventListener(EVENT_CLOSE, onSessionReset);
+    };
+  }, [resetCardSelection]);
 
   useEffect(() => {
     if (openRafRef.current) {
