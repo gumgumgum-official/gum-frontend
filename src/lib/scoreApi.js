@@ -1,3 +1,5 @@
+import { fetchWithRetry } from "./fetchWithRetry.js";
+
 function getGumServerBaseUrl() {
   const raw =
     import.meta.env.VITE_GUM_SERVER_URL || window.location.origin || "";
@@ -12,7 +14,7 @@ function getGumServerBaseUrl() {
  */
 export async function postScore(userId, score) {
   const base = getGumServerBaseUrl();
-  const res = await fetch(`${base}/api/scores`, {
+  const res = await fetchWithRetry(`${base}/api/scores`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userId, score }),
@@ -42,8 +44,9 @@ export async function fetchLeaderboard() {
   const base = getGumServerBaseUrl();
   if (!base) return [];
   try {
-    const res = await fetch(`${base}/api/scores/leaderboard`, {
+    const res = await fetchWithRetry(`${base}/api/scores/leaderboard`, {
       headers: { Accept: "application/json" },
+      idempotent: true,
     });
     if (!res.ok) {
       console.warn("[scoreApi] GET /api/scores/leaderboard 실패:", res.status);
