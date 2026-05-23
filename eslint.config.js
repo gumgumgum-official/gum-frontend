@@ -40,6 +40,7 @@ export default [
         Blob: "readonly",
         Image: "readonly",
         fetch: "readonly",
+        AbortController: "readonly",
         localStorage: "readonly",
         CustomEvent: "readonly",
       },
