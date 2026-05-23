@@ -359,6 +359,7 @@ export function Stage3(options = {}) {
     getCanvas: () => canvasRef,
     getConfig: () => config,
     getCharacter: () => character,
+    getGumFollowers: () => gumFollowers,
     getVendingMachineController: () => vendingMachineController,
     getCameraIntroState: () => cameraIntroController.getState(),
     isInteractionBlocked: () =>
@@ -401,6 +402,7 @@ export function Stage3(options = {}) {
     onGameMachineModalClose: overlayController.onGameMachineModalClose,
     onOpenTentModal: overlayController.onOpenTentModal,
     getDebugControls: () => debugControls,
+    getScene: () => sceneRef,
   });
 
   const bubblesController = createStage3BubblesController({
@@ -424,6 +426,10 @@ export function Stage3(options = {}) {
     detachIntClickHintBubble: () =>
       interactionsController.detachIntClickHintBubble(),
     hideIntClickHint: () => interactionsController.hideIntClickHint(),
+    attachBalloonHoverBubble: (el) =>
+      interactionsController.attachBalloonHoverBubble(el),
+    detachBalloonHoverBubble: () =>
+      interactionsController.detachBalloonHoverBubble(),
   });
 
   function ensureStage3UiMounted() {

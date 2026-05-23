@@ -172,7 +172,19 @@ export function applyStage3BackgroundMeshFlags(model, config) {
       continue;
     }
     obj.traverse((child) => {
-      if (child.isMesh) child.renderOrder = 1;
+      if (!child.isMesh) return;
+      child.renderOrder = 1;
+      // 바다(transparent)가 opaque 패스 이후에 그려지는 것을 막으려면
+      // 풍선도 transparent 패스에 참여시켜야 renderOrder=1이 효과를 발휘함
+      const mats = Array.isArray(child.material)
+        ? child.material
+        : [child.material];
+      for (const mat of mats) {
+        if (mat && !mat.transparent) {
+          mat.transparent = true;
+          mat.needsUpdate = true;
+        }
+      }
     });
   }
 }

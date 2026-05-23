@@ -31,6 +31,7 @@ import { requestStage3Reveal } from "./utils/stages/stage3/stage3RevealGate.js";
 import {
   getGumServerBaseUrl,
   getMonitorDeviceId,
+  postMonitorComplete,
 } from "./lib/monitorCurrentApi.js";
 import {
   AIRPORT_CHIME_HIDE_EVENT,
@@ -63,11 +64,33 @@ import {
   unblockStage6Notifications,
 } from "./utils/stages/stage6/stage6NotificationGate.js";
 
+async function callMonitorClear(monitorId) {
+  const base = getGumServerBaseUrl();
+  if (!base) return;
+  const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/clear`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const json = await res.json().catch(() => ({}));
+    if (json.ok) {
+      console.info(
+        `[monitor-clear] ${monitorId} 초기화 (cleared=${json.cleared})`,
+      );
+    } else {
+      console.warn("[monitor-clear] 실패:", json);
+    }
+  } catch (e) {
+    console.warn("[monitor-clear] 요청 오류:", e);
+  }
+}
+
 async function callEmergencyAssign(worryId, monitorId) {
   const base = getGumServerBaseUrl();
-  const secret = import.meta.env.VITE_EMERGENCY_SECRET;
-  if (!base || !secret) return;
-  const params = new URLSearchParams({ worryId, secret, monitorId });
+  if (!base) return;
+  const params = new URLSearchParams({ worryId, monitorId });
   const url = `${base}/api/emergency-assign?${params.toString()}`;
   try {
     const res = await fetch(url);
@@ -162,17 +185,31 @@ function AppLayout() {
     navigate({ pathname: "/start", search: "" }, { replace: true });
   }, [navigate]);
 
-  // 긴급 배정: ?worryId=223 감지 → 서버 emergency-assign 호출 후 파라미터 제거
+  // 운영자 URL 파라미터: 어느 라우트에서나 동작 (시크릿 없음)
+  //  ?worryId=223  → emergency-assign (강제 배정)
+  //  ?clear=1      → 모니터 강제 초기화
+  //  ?complete=1   → 모니터 정상 종료 (대기열 있으면 다음 사람 배정)
+  // 모니터 대상은 ?monitor= 로 지정 (getMonitorDeviceId)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const worryId = params.get("worryId");
-    if (!worryId) return;
+    const shouldClear = params.get("clear") === "1";
+    // complete=1 은 /start 에서 StartPage가 (방문자 리셋·웜업 포함) 처리하므로
+    // 중복 호출 방지를 위해 그 외 라우트에서만 처리한다.
+    const shouldComplete =
+      params.get("complete") === "1" && location.pathname !== "/start";
+
+    if (!worryId && !shouldClear && !shouldComplete) return;
 
     const monitorId = getMonitorDeviceId();
-    void callEmergencyAssign(worryId, monitorId);
+    if (worryId) void callEmergencyAssign(worryId, monitorId);
+    if (shouldClear) void callMonitorClear(monitorId);
+    if (shouldComplete) void postMonitorComplete();
 
-    // URL에서 worryId 파라미터 제거 (재실행 방지)
-    params.delete("worryId");
+    // 소비한 액션 파라미터만 제거 (monitor 등은 유지, 재실행 방지)
+    if (worryId) params.delete("worryId");
+    if (shouldClear) params.delete("clear");
+    if (shouldComplete) params.delete("complete");
     const newSearch = params.toString();
     navigate(
       { pathname: location.pathname, search: newSearch ? `?${newSearch}` : "" },

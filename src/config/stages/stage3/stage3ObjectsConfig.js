@@ -35,9 +35,12 @@ export const STAGE3_OBJECTS_CONFIG = {
      */
     frontRenderObjectNames: [
       "OBJ_DogBalloon",
-      "OBJ_BalloonHeart",
-      "OBJ_BalloonStar",
-      "OBJ_BalloonSun",
+      // island18.glb에서 풍선 메시 이름은 INT_* 접두사다 (이전 OBJ_* 명칭이
+      // GLB 갱신으로 사라지며 frontRenderObjectNames가 무력화돼 풍선이 바다
+      // transparent 뒤로 정렬되던 버그 — getObjectByName이 null이라 조용히 실패)
+      "INT_BalloonHeart",
+      "INT_BalloonStar",
+      "INT_BalloonSun",
     ],
   },
 

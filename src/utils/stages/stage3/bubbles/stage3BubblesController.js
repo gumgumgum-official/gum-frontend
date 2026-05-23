@@ -26,6 +26,8 @@ import {
  *   attachIntClickHintBubble: (el: HTMLDivElement) => void,
  *   detachIntClickHintBubble: () => void,
  *   hideIntClickHint: () => void,
+ *   attachBalloonHoverBubble: (el: HTMLDivElement) => void,
+ *   detachBalloonHoverBubble: () => void,
  * }} params
  */
 export function createStage3BubblesController({
@@ -42,11 +44,15 @@ export function createStage3BubblesController({
   attachIntClickHintBubble,
   detachIntClickHintBubble,
   hideIntClickHint,
+  attachBalloonHoverBubble,
+  detachBalloonHoverBubble,
 }) {
   /** @type {HTMLDivElement | null} */
   let userWorryEnterBubbleEl = null;
   /** @type {HTMLDivElement | null} */
   let intClickHintBubbleEl = null;
+  /** @type {HTMLDivElement | null} */
+  let balloonHoverBubbleEl = null;
   /** @type {'off' | 'show' | 'gap'} */
   let userWorryEnterBubblePhase = "off";
   let userWorryEnterBubbleT = 0;
@@ -91,6 +97,16 @@ export function createStage3BubblesController({
       intClickHintBubbleEl.style.pointerEvents = "auto";
       document.body.appendChild(intClickHintBubbleEl);
       attachIntClickHintBubble(intClickHintBubbleEl);
+    }
+
+    if (!balloonHoverBubbleEl) {
+      balloonHoverBubbleEl = document.createElement("div");
+      balloonHoverBubbleEl.className =
+        "speech-bubble-stage2 speech-bubble-stage3-user speech-bubble-stage3-int-click";
+      balloonHoverBubbleEl.setAttribute("aria-hidden", "true");
+      balloonHoverBubbleEl.style.pointerEvents = "none";
+      document.body.appendChild(balloonHoverBubbleEl);
+      attachBalloonHoverBubble(balloonHoverBubbleEl);
     }
   }
 
@@ -173,6 +189,9 @@ export function createStage3BubblesController({
     detachIntClickHintBubble();
     intClickHintBubbleEl?.remove();
     intClickHintBubbleEl = null;
+    detachBalloonHoverBubble();
+    balloonHoverBubbleEl?.remove();
+    balloonHoverBubbleEl = null;
     userWorryEnterBubblePhase = "off";
     userWorryEnterBubbleT = 0;
     lastWorryEnterBubbleMessageIndex = -1;

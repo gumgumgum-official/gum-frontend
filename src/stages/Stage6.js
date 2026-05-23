@@ -77,7 +77,13 @@ import {
 } from "../utils/stages/stage6/stage6NotificationGate.js";
 import { playUiClickSound } from "../utils/stages/stage3/playUiClickSound.js";
 const INT_PREFIX = "INT_";
+/**
+ * 카운터에 있는 캐릭터는 INT_Gum_* 래퍼 노드 없이 메쉬들이 OBJ_Counter 직속이라
+ * OBJ_Counter 자체를 캐릭터 루트로 삼는다. (EXTRA_CLICKABLE_OBJECT_NAMES에도 등록)
+ */
+const COUNTER_CHARACTER_NAME = "OBJ_Counter";
 const CHAR_ROOT_NAMES = [
+  COUNTER_CHARACTER_NAME,
   "INT_Gum_Cry",
   "INT_Gum_Heart",
   "INT_Gum_Camera",
@@ -86,27 +92,31 @@ const CHAR_ROOT_NAMES = [
 ];
 /** 각 캐릭터 hover 시 말풍선에 표시할 텍스트 */
 const CHAR_SPEECH_MAP = {
-  INT_Gum_Cry: "가지마..나랑 더 놀자...🥺",
+  [COUNTER_CHARACTER_NAME]: "어서오세요~ 껌딱지월드입니다~",
+  INT_Gum_Cry: "아이스크림줄테니까 안가면 안돼..? 가지마..나랑 더 놀자...🥺",
   INT_Gum_Heart: "이거 내 진심인데 받아줄래?💕",
   INT_Gum_Camera: "찰칵! 📸",
   INT_Gum_Airplane: "아~더 놀고싶어!나랑 더 놀자~~✈️",
-  INT_Gum_Lollipop: "같이..먹을래..?🍭",
+  INT_Gum_Lollipop: "내가 어디서든 응원하고있을게! 잘가👋🏻",
 };
 const CHAR_BUBBLE_VISIBLE_SEC = 2.5;
 const CHAR_BUBBLE_OFFSET_Y = 0.92;
-const CHAR_ANIM_MAP = {
-  INT_Gum_Cry: [],
-  INT_Gum_Heart: ["Heart_Offer_Rig", "Heart_Offer_Prop"],
-  INT_Gum_Camera: [
-    "Shutter_EyeDefL",
-    "Shutter_EyeZZL",
-    "Shutter_PropCam",
-    "Shutter_Flash",
-  ],
-  INT_Gum_Airplane: ["Plane_Throw_Rig", "Plane_Throw_Prop"],
-  INT_Gum_Lollipop: ["Lollipop_ArmShake_Rig", "Lollipop_Shake"],
+/** 말풍선 위치 기준 노드가 캐릭터 루트와 다를 때 매핑 (루트 bbox가 너무 클 때) */
+const CHAR_BUBBLE_ANCHOR_MAP = {
+  [COUNTER_CHARACTER_NAME]: "INT_Airplane_Body_Counter",
 };
-const EXTRA_CLICKABLE_OBJECT_NAMES = new Set(["INT_ATM", "OBJ_Tel"]);
+const CHAR_ANIM_MAP = {
+  [COUNTER_CHARACTER_NAME]: ["Counter_Hover"],
+  INT_Gum_Heart: ["Heart_Hover"],
+  INT_Gum_Camera: ["Camera_Hover"],
+  INT_Gum_Airplane: ["Airplane_Hover"],
+  INT_Gum_Lollipop: ["Lollipop_Hover"],
+};
+const EXTRA_CLICKABLE_OBJECT_NAMES = new Set([
+  "INT_ATM",
+  "OBJ_Tel",
+  COUNTER_CHARACTER_NAME,
+]);
 const ATM_OBJECT_NAME = "INT_ATM";
 const TEL_OBJECT_NAME = "OBJ_Tel";
 const TEL_EMISSIVE_DARK_STRENGTH = 0.06;
@@ -125,7 +135,11 @@ const CHAR_HOVER_AIRPLANE_HEHE_PATH =
   "/static/sounds/airport/gum/baby_hehe1.mp3";
 const CHAR_HOVER_AIRPLANE_PLANE_PATH =
   "/static/sounds/airport/gum/paper_plane.mp3";
-const CHAR_HOVER_CRY_PATH = "/static/sounds/airport/gum/baby_cry1.mp3";
+const CHAR_HOVER_CRY_PATH = "/static/sounds/airport/gum/baby_cry2.mp3";
+const CHAR_HOVER_CAMERA_PATH = "/static/sounds/airport/gum/camera.mp3";
+const CHAR_HOVER_HEART_PATH = "/static/sounds/airport/gum/baby_hehe2.mp3";
+const CHAR_HOVER_LOLLIPOP_PATH = "/static/sounds/airport/gum/yay.mp3";
+const CHAR_HOVER_COUNTER_PATH = "/static/sounds/airport/gum/bloop.mp3";
 const CHAR_HOVER_SOUND_VOLUME = 0.6;
 const TEL_ATM_TRIGGER_DELAY_AFTER_LAST_CALL_MS = 5000;
 const ATM_INTERACTION_REQUIRED_COUNT = 3;
@@ -372,6 +386,14 @@ export function Stage6() {
   let charHoverAirplanePlaneAudio = null;
   /** @type {HTMLAudioElement | null} */
   let charHoverCryAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let charHoverCameraAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let charHoverHeartAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let charHoverLollipopAudio = null;
+  /** @type {HTMLAudioElement | null} */
+  let charHoverCounterAudio = null;
   let isAirportChimeVisible = false;
 
   const bagPhysics = createBagPhysics();
@@ -1014,6 +1036,48 @@ export function Stage6() {
       }
       charHoverCryAudio.currentTime = 0;
       charHoverCryAudio.play().catch(() => {});
+    } else if (charName === "INT_Gum_Camera") {
+      if (!charHoverCameraAudio) {
+        charHoverCameraAudio = new window.Audio();
+        charHoverCameraAudio.preload = "auto";
+        charHoverCameraAudio.src = resolvePublicAssetUrl(
+          CHAR_HOVER_CAMERA_PATH,
+        );
+        charHoverCameraAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+      }
+      charHoverCameraAudio.currentTime = 0;
+      charHoverCameraAudio.play().catch(() => {});
+    } else if (charName === "INT_Gum_Heart") {
+      if (!charHoverHeartAudio) {
+        charHoverHeartAudio = new window.Audio();
+        charHoverHeartAudio.preload = "auto";
+        charHoverHeartAudio.src = resolvePublicAssetUrl(CHAR_HOVER_HEART_PATH);
+        charHoverHeartAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+      }
+      charHoverHeartAudio.currentTime = 0;
+      charHoverHeartAudio.play().catch(() => {});
+    } else if (charName === "INT_Gum_Lollipop") {
+      if (!charHoverLollipopAudio) {
+        charHoverLollipopAudio = new window.Audio();
+        charHoverLollipopAudio.preload = "auto";
+        charHoverLollipopAudio.src = resolvePublicAssetUrl(
+          CHAR_HOVER_LOLLIPOP_PATH,
+        );
+        charHoverLollipopAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+      }
+      charHoverLollipopAudio.currentTime = 0;
+      charHoverLollipopAudio.play().catch(() => {});
+    } else if (charName === COUNTER_CHARACTER_NAME) {
+      if (!charHoverCounterAudio) {
+        charHoverCounterAudio = new window.Audio();
+        charHoverCounterAudio.preload = "auto";
+        charHoverCounterAudio.src = resolvePublicAssetUrl(
+          CHAR_HOVER_COUNTER_PATH,
+        );
+        charHoverCounterAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+      }
+      charHoverCounterAudio.currentTime = 0;
+      charHoverCounterAudio.play().catch(() => {});
     }
   }
 
@@ -1040,7 +1104,8 @@ export function Stage6() {
   function setupCharAnimations(sceneRoot, animations) {
     charMixer = new THREE.AnimationMixer(sceneRoot);
     for (const charName of CHAR_ROOT_NAMES) {
-      charRoots[charName] = sceneRoot.getObjectByName(charName) ?? null;
+      const bubbleAnchorName = CHAR_BUBBLE_ANCHOR_MAP[charName] ?? charName;
+      charRoots[charName] = sceneRoot.getObjectByName(bubbleAnchorName) ?? null;
       const clipNames = CHAR_ANIM_MAP[charName] ?? [];
       charActions[charName] = [];
       for (const clipName of clipNames) {
@@ -1055,6 +1120,15 @@ export function Stage6() {
         charActions[charName].push(action);
       }
     }
+
+    // 카운터 캐릭터: hover 애니메이션이 끝나면 마지막 프레임에 고정되지 않고
+    // 0프레임(기본 자세)으로 복귀시킨다. clampWhenFinished로 액션이 활성 상태로
+    // 남아 있으므로 time만 0으로 돌리면 그 자세를 유지한다.
+    charMixer.addEventListener("finished", (e) => {
+      if (charActions[COUNTER_CHARACTER_NAME]?.includes(e.action)) {
+        e.action.time = 0;
+      }
+    });
 
     const escClip = findAnimationClipLoose(animations, "Escalator_Steps");
     if (escClip) {
@@ -1286,7 +1360,14 @@ export function Stage6() {
   }
 
   function isStage6PointerBlocked() {
-    return isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall;
+    return (
+      isSceneInteractionLocked ||
+      isAnnouncementActive ||
+      isPhoneInCall ||
+      isWalkingToEscalator ||
+      isEscalatorSnapping ||
+      isEscalatorRiding
+    );
   }
 
   function dispatchTelRingSubtitleIfNeeded() {
@@ -1585,7 +1666,13 @@ export function Stage6() {
 
   function getStage6MovementKeys() {
     if (isWalkingToEscalator) return getEscAutoWalkKeys();
-    if (isSceneInteractionLocked || isAnnouncementActive || isPhoneInCall) {
+    if (
+      isSceneInteractionLocked ||
+      isAnnouncementActive ||
+      isPhoneInCall ||
+      isEscalatorSnapping ||
+      isEscalatorRiding
+    ) {
       return {};
     }
     return keyboard.keys;
@@ -1960,6 +2047,10 @@ export function Stage6() {
           revealStage6Scene(scene);
 
           // 애니메이션 시스템 초기화 (§5: mixer 1개, gltf.scene 전체)
+          console.log(
+            "[Stage6] clips:",
+            (gltf.animations ?? []).map((c) => c.name),
+          );
           setupCharAnimations(model, gltf.animations ?? []);
 
           registerIntInteractions(model);
@@ -2201,6 +2292,24 @@ export function Stage6() {
           overrideY,
         });
 
+        // 에스컬레이터 자동 접근 — 충돌을 무시하고 목표 지점으로 일정 속도 슬라이드.
+        // (경로상 OBJ_ 콜라이더에 막혀 도착 못 하면 조작권을 잃는 소프트락 방지)
+        // 걷기 애니메이션·방향은 getEscAutoWalkKeys()의 가짜 키가 그대로 담당하고,
+        // 실제 XZ 위치만 물리 결과 대신 pre-update 위치 기준 슬라이드로 덮어쓴다.
+        if (isWalkingToEscalator && posRef) {
+          const slideStep = (config.character?.moveSpeed ?? 1.85) * delta;
+          const slideDX = escApproachTargetX - preX;
+          const slideDZ = escApproachTargetZ - preZ;
+          const slideDist = Math.hypot(slideDX, slideDZ);
+          if (slideDist <= slideStep || slideDist < 1e-4) {
+            posRef.x = escApproachTargetX;
+            posRef.z = escApproachTargetZ;
+          } else {
+            posRef.x = preX + (slideDX / slideDist) * slideStep;
+            posRef.z = preZ + (slideDZ / slideDist) * slideStep;
+          }
+        }
+
         // frustum 클램프 — 에스컬레이터 탑승 중엔 적용 안 함
         if (
           posRef &&
@@ -2359,10 +2468,30 @@ export function Stage6() {
         charHoverAirplanePlaneAudio.src = "";
         charHoverAirplanePlaneAudio = null;
       }
+      if (charHoverCameraAudio) {
+        charHoverCameraAudio.pause();
+        charHoverCameraAudio.src = "";
+        charHoverCameraAudio = null;
+      }
+      if (charHoverHeartAudio) {
+        charHoverHeartAudio.pause();
+        charHoverHeartAudio.src = "";
+        charHoverHeartAudio = null;
+      }
       if (charHoverCryAudio) {
         charHoverCryAudio.pause();
         charHoverCryAudio.src = "";
         charHoverCryAudio = null;
+      }
+      if (charHoverLollipopAudio) {
+        charHoverLollipopAudio.pause();
+        charHoverLollipopAudio.src = "";
+        charHoverLollipopAudio = null;
+      }
+      if (charHoverCounterAudio) {
+        charHoverCounterAudio.pause();
+        charHoverCounterAudio.src = "";
+        charHoverCounterAudio = null;
       }
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener(

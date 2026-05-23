@@ -7,6 +7,10 @@ import {
 } from "../../common/gltfTemplateCache.js";
 import { dispatchStage3IslandExitBlocked } from "../../../events/stage3Events.js";
 import { slideMoveXZAgainstAABBs } from "./islandStaticColliders.js";
+import {
+  BALLOON_CELEBRATION_DURATION,
+  getBalloonCelebrationOffsets,
+} from "./balloonCelebration.js";
 
 const WALK_SOUND_REL = "/static/sounds/character_walk.mp3";
 
@@ -83,6 +87,9 @@ function findClip(clips, regex) {
  *   ) => void,
  *   setFacingYaw: (yRad: number) => void,
  *   setOpacity: (opacity: number) => void,
+ *   setBalloonHeld: (held: boolean) => void,
+ *   playBalloonCelebration: () => void,
+ *   getBalloonHandAnchorWorld: (out: import("three").Vector3) => boolean,
  * }}
  */
 export function createCharacterController({
@@ -120,6 +127,21 @@ export function createCharacterController({
   let punchAction = null;
   let isPunchPlaying = false;
   let impactTimeoutId = null;
+  // 풍선을 든 전용 모델 — walk/idle 대신 표시된다 (걸을 때 / 멈췄을 때 분리)
+  let balloonCharacterModel = null;
+  let balloonMixer = null;
+  let balloonWalkAction = null;
+  /** 풍선을 든 idle 포즈 모델 (user_idle_balloon.glb — idle_balloon 클립 1프레임 유지) */
+  let balloonIdleCharacterModel = null;
+  let balloonIdleMixer = null;
+  let balloonIdleAction = null;
+  let isBalloonHeld = false;
+  /** 풍선 walk 모델의 Hand_R Empty — 로드 시 1회 캐시(매 프레임 트리 탐색 회피) */
+  let balloonHandAnchor = null;
+  /** 풍선 idle 모델의 Hand_R Empty */
+  let balloonIdleHandAnchor = null;
+  /** 풍선 첫 획득 연출 남은 시간(초) — 0이면 비활성 */
+  let balloonCelebrationTimer = 0;
 
   // 경계 clamp 값 — setup()에서 1회 계산, update() 매 프레임 재사용
   let _minCx = 0,
@@ -262,6 +284,19 @@ export function createCharacterController({
 
   function setCharacterVisibility(walking) {
     if (!characterModel) return;
+    // 풍선을 든 상태: walk/idle 일반 모델을 숨기고 풍선 모델 표시.
+    // 걸을 땐 풍선 walk 모델, 멈추면 풍선 idle 모델(없으면 walk 모델로 폴백).
+    if (isBalloonHeld && (balloonCharacterModel || balloonIdleCharacterModel)) {
+      characterModel.visible = false;
+      if (idleCharacterModel) idleCharacterModel.visible = false;
+      const useIdle = !walking && !!balloonIdleCharacterModel;
+      if (balloonCharacterModel) balloonCharacterModel.visible = !useIdle;
+      if (balloonIdleCharacterModel)
+        balloonIdleCharacterModel.visible = useIdle;
+      return;
+    }
+    if (balloonCharacterModel) balloonCharacterModel.visible = false;
+    if (balloonIdleCharacterModel) balloonIdleCharacterModel.visible = false;
     if (idleCharacterModel) {
       characterModel.visible = walking;
       idleCharacterModel.visible = !walking;
@@ -331,13 +366,23 @@ export function createCharacterController({
       const punchUrl = resolvePublicAssetUrl(
         config.characterPunchModelPath ?? "/models/stage3/user_punch.glb",
       );
+      const balloonUrl = resolvePublicAssetUrl(
+        config.characterBalloonModelPath ??
+          "/models/common/user_walk_v2_balloon.glb",
+      );
+      const balloonIdleUrl = resolvePublicAssetUrl(
+        config.characterIdleBalloonModelPath ??
+          "/models/common/user_idle_balloon.glb",
+      );
 
       Promise.all([
         loadGltfTemplateCached(characterUrl),
         loadGltfTemplateCached(idleUrl).catch(() => null),
         loadGltfTemplateCached(punchUrl).catch(() => null),
+        loadGltfTemplateCached(balloonUrl).catch(() => null),
+        loadGltfTemplateCached(balloonIdleUrl).catch(() => null),
       ]).then(
-        ([gltf, idleGltf, punchGltf]) => {
+        ([gltf, idleGltf, punchGltf, balloonGltf, balloonIdleGltf]) => {
           const scale = config.character?.scale ?? 1;
           const radiusCfg = config.character?.collisionRadius;
           collisionRadius =
@@ -472,6 +517,117 @@ export function createCharacterController({
               });
             }
             scene.add(punchCharacterModel);
+          }
+
+          if (balloonGltf) {
+            balloonCharacterModel = SkeletonUtils.clone(balloonGltf.scene);
+            balloonCharacterModel.scale.setScalar(scale);
+            balloonCharacterModel.position.set(
+              spawnX,
+              characterYPosition,
+              spawnZ,
+            );
+            if (spawnYaw != null) {
+              balloonCharacterModel.rotation.y = spawnYaw;
+            }
+            balloonCharacterModel.visible = false;
+            applyShadows(balloonCharacterModel);
+            balloonHandAnchor =
+              balloonCharacterModel.getObjectByName("Hand_R") ?? null;
+
+            // 풍선 모델은 walk 모델과 동일 리그·동일 export라 같은 scale을 쓴다.
+            // 단위 불일치(다른 export 설정)는 런타임이 아니라 재-export로 잡는다 — DEV 경고만.
+            if (import.meta.env.DEV) {
+              const walkBox = new THREE.Box3().setFromObject(characterModel);
+              const balloonBox = new THREE.Box3().setFromObject(
+                balloonCharacterModel,
+              );
+              const walkH = walkBox.max.y - walkBox.min.y;
+              const balloonH = balloonBox.max.y - balloonBox.min.y;
+              const ratio = walkH / Math.max(1e-6, balloonH);
+              if (ratio < 0.6 || ratio > 1.6) {
+                console.warn(
+                  `[Stage3] 풍선 캐릭터 모델 스케일 의심 — walk/balloon 높이비 ${ratio.toFixed(2)} (GLB export 단위 확인 필요)`,
+                );
+              }
+              if (!balloonHandAnchor) {
+                console.warn(
+                  "[Stage3] 풍선 모델에 Hand_R Empty가 없음 — 실 끝이 손 대신 머리 위로 폴백됨",
+                );
+              }
+            }
+
+            if (balloonGltf.animations?.length > 0) {
+              balloonMixer = new THREE.AnimationMixer(balloonCharacterModel);
+              const balloonWalkClip =
+                findClip(balloonGltf.animations, /walk|run|move/i) ??
+                balloonGltf.animations[0];
+              balloonWalkAction = balloonMixer.clipAction(balloonWalkClip);
+              balloonWalkAction.loop = THREE.LoopRepeat;
+              balloonWalkAction.play();
+              balloonWalkAction.paused = true;
+              balloonWalkAction.enabled = true;
+              balloonWalkAction.setEffectiveWeight(1);
+            }
+            scene.add(balloonCharacterModel);
+
+            // 모델 로딩이 끝나기 전에 이미 풍선을 잡았다면 즉시 동기화·표시
+            if (isBalloonHeld) {
+              balloonCharacterModel.position.copy(characterModel.position);
+              balloonCharacterModel.rotation.copy(characterModel.rotation);
+              if (balloonWalkAction) balloonWalkAction.paused = !isWalking;
+              setCharacterVisibility(isWalking);
+            }
+          }
+
+          // 풍선을 든 idle 포즈 모델 — 멈춰 있을 때 표시
+          // (GLB의 idle_balloon 클립 1프레임을 mixer로 재생해 풍선 포즈 유지.
+          //  클립을 재생하지 않으면 바인드 포즈인 T-포즈로 보임)
+          if (balloonIdleGltf) {
+            balloonIdleCharacterModel = SkeletonUtils.clone(
+              balloonIdleGltf.scene,
+            );
+            balloonIdleCharacterModel.scale.setScalar(scale);
+            balloonIdleCharacterModel.position.set(
+              spawnX,
+              characterYPosition,
+              spawnZ,
+            );
+            if (spawnYaw != null) {
+              balloonIdleCharacterModel.rotation.y = spawnYaw;
+            }
+            balloonIdleCharacterModel.visible = false;
+            applyShadows(balloonIdleCharacterModel);
+            balloonIdleHandAnchor =
+              balloonIdleCharacterModel.getObjectByName("Hand_R") ?? null;
+            if (import.meta.env.DEV && !balloonIdleHandAnchor) {
+              console.warn(
+                "[Stage3] 풍선 idle 모델에 Hand_R Empty가 없음 — 멈췄을 때 실 끝이 머리 위로 폴백됨",
+              );
+            }
+
+            if (balloonIdleGltf.animations?.length > 0) {
+              balloonIdleMixer = new THREE.AnimationMixer(
+                balloonIdleCharacterModel,
+              );
+              const idleBalloonClip =
+                findClip(balloonIdleGltf.animations, /idle/i) ??
+                balloonIdleGltf.animations[0];
+              balloonIdleAction = balloonIdleMixer.clipAction(idleBalloonClip);
+              balloonIdleAction.loop = THREE.LoopRepeat;
+              balloonIdleAction.play();
+              balloonIdleAction.enabled = true;
+              balloonIdleAction.setEffectiveWeight(1);
+              balloonIdleMixer.update(0);
+            }
+
+            scene.add(balloonIdleCharacterModel);
+
+            if (isBalloonHeld) {
+              balloonIdleCharacterModel.position.copy(characterModel.position);
+              balloonIdleCharacterModel.rotation.copy(characterModel.rotation);
+              setCharacterVisibility(isWalking);
+            }
           }
 
           const prewarmCamera = getCamera?.();
@@ -908,6 +1064,7 @@ export function createCharacterController({
         setCharacterVisibility(movingInput);
         characterWalkAction.paused = !movingInput;
         if (idleCharacterAction) idleCharacterAction.paused = movingInput;
+        if (balloonWalkAction) balloonWalkAction.paused = !movingInput;
         isWalking = movingInput;
       }
 
@@ -916,9 +1073,35 @@ export function createCharacterController({
         idleCharacterModel.rotation.copy(characterModel.rotation);
       }
 
+      // 풍선 walk/idle 모델은 보일 때 항상 walk 모델 위치·회전을 따라간다
+      if (isBalloonHeld) {
+        for (const m of [balloonCharacterModel, balloonIdleCharacterModel]) {
+          if (!m) continue;
+          m.position.copy(characterModel.position);
+          m.rotation.copy(characterModel.rotation);
+        }
+      }
+
+      // 풍선 첫 획득 연출 — 풍선 모델만 살짝 떠올라 한 바퀴 회전.
+      // 매 프레임 위에서 동기화된 좌표 위에 덧입히므로 누적되지 않는다.
+      // (연출 중 이동 입력 시 이동+회전이 겹치나 0.7초로 짧아 허용)
+      if (balloonCelebrationTimer > 0) {
+        balloonCelebrationTimer = Math.max(0, balloonCelebrationTimer - delta);
+        const progress =
+          1 - balloonCelebrationTimer / BALLOON_CELEBRATION_DURATION;
+        const { floatY, spin } = getBalloonCelebrationOffsets(progress);
+        for (const m of [balloonCharacterModel, balloonIdleCharacterModel]) {
+          if (!m) continue;
+          m.position.y += floatY;
+          m.rotation.y += spin;
+        }
+      }
+
       if (characterMixer && (isWalking || !idleCharacterMixer))
         characterMixer.update(delta);
       if (idleCharacterMixer && !isWalking) idleCharacterMixer.update(delta);
+      if (balloonMixer && isBalloonHeld) balloonMixer.update(delta);
+      if (balloonIdleMixer && isBalloonHeld) balloonIdleMixer.update(delta);
 
       syncWalkSound(moved);
 
@@ -948,6 +1131,28 @@ export function createCharacterController({
       }
       punchAction = null;
       isPunchPlaying = false;
+      if (balloonMixer) {
+        balloonMixer.stopAllAction();
+        balloonMixer = null;
+      }
+      if (balloonIdleMixer) {
+        balloonIdleMixer.stopAllAction();
+        balloonIdleMixer = null;
+      }
+      if (balloonCharacterModel) {
+        scene.remove(balloonCharacterModel);
+        balloonCharacterModel = null;
+      }
+      if (balloonIdleCharacterModel) {
+        scene.remove(balloonIdleCharacterModel);
+        balloonIdleCharacterModel = null;
+      }
+      balloonWalkAction = null;
+      balloonIdleAction = null;
+      balloonHandAnchor = null;
+      balloonIdleHandAnchor = null;
+      isBalloonHeld = false;
+      balloonCelebrationTimer = 0;
       if (walkAudio) {
         walkAudio.pause();
         walkAudio.src = "";
@@ -1040,6 +1245,8 @@ export function createCharacterController({
       punchCharacterModel.rotation.copy(src.rotation);
       characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
+      if (balloonCharacterModel) balloonCharacterModel.visible = false;
+      if (balloonIdleCharacterModel) balloonIdleCharacterModel.visible = false;
       punchCharacterModel.visible = true;
       punchAction.reset();
       const clip = punchAction.getClip();
@@ -1073,6 +1280,62 @@ export function createCharacterController({
     setFacingYaw(yRad) {
       if (characterModel) characterModel.rotation.y = yRad;
       if (idleCharacterModel) idleCharacterModel.rotation.y = yRad;
+      if (balloonCharacterModel) balloonCharacterModel.rotation.y = yRad;
+      if (balloonIdleCharacterModel)
+        balloonIdleCharacterModel.rotation.y = yRad;
+    },
+
+    /**
+     * 풍선 들기/놓기 — true면 walk/idle 대신 풍선 전용 모델을 표시한다.
+     * @param {boolean} held
+     */
+    setBalloonHeld(held) {
+      const next = Boolean(held);
+      if (next === isBalloonHeld) return;
+      isBalloonHeld = next;
+      if (isBalloonHeld && characterModel) {
+        for (const m of [balloonCharacterModel, balloonIdleCharacterModel]) {
+          if (!m) continue;
+          m.position.copy(characterModel.position);
+          m.rotation.copy(characterModel.rotation);
+        }
+        if (balloonWalkAction) balloonWalkAction.paused = !isWalking;
+      }
+      setCharacterVisibility(isWalking);
+    },
+
+    /** 풍선 첫 획득 연출 시작 — 살짝 떠올라 한 바퀴 회전 */
+    playBalloonCelebration() {
+      balloonCelebrationTimer = BALLOON_CELEBRATION_DURATION;
+    },
+
+    /**
+     * 풍선을 든 상태일 때 오른손(Hand_R Empty)의 월드 좌표를 out에 쓴다.
+     * 현재 보이는 모델 기준 — 멈췄으면 idle 풍선 모델, 걸으면 walk 풍선 모델.
+     * Stage3.update()는 interactionsController를 character.update보다 먼저
+     * 호출하므로 이 값은 최대 1프레임 지연될 수 있다(풍선 실 기준 무시 가능).
+     * @param {THREE.Vector3} out
+     * @returns {boolean} 유효한 좌표를 썼으면 true
+     */
+    getBalloonHandAnchorWorld(out) {
+      if (!isBalloonHeld) return false;
+      let model = null;
+      let anchor = null;
+      if (!isWalking && balloonIdleCharacterModel && balloonIdleHandAnchor) {
+        model = balloonIdleCharacterModel;
+        anchor = balloonIdleHandAnchor;
+      } else if (balloonCharacterModel && balloonHandAnchor) {
+        model = balloonCharacterModel;
+        anchor = balloonHandAnchor;
+      }
+      if (!model || !anchor) return false;
+      model.updateMatrixWorld(true);
+      anchor.getWorldPosition(out);
+      return (
+        Number.isFinite(out.x) &&
+        Number.isFinite(out.y) &&
+        Number.isFinite(out.z)
+      );
     },
 
     /**
@@ -1089,7 +1352,12 @@ export function createCharacterController({
 
     /** 캐릭터 모델 전체 메시 opacity 일괄 설정 (에스컬레이터 fade out 용) */
     setOpacity(opacity) {
-      const targets = [characterModel, idleCharacterModel];
+      const targets = [
+        characterModel,
+        idleCharacterModel,
+        balloonCharacterModel,
+        balloonIdleCharacterModel,
+      ];
       for (const root of targets) {
         if (!root) continue;
         root.traverse((obj) => {

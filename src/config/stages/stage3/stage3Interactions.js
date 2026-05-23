@@ -9,7 +9,7 @@ export const STAGE3_INT_SUFFIX_TO_TARGET = {
   tent: "tent",
   portal: "portal",
   well: "well",
-  clock: "clock",
+  bench: "clock", // GLB 노드명: INT_Bench (시계 알람 인터랙션 — 근접 힌트는 벤치 기준)
   vendingmachine: "vendingMachine", // GLB 노드명: INT_vending_machine
 };
 
@@ -44,7 +44,22 @@ export const LOOP_CLIP_NAMES = [
   "Gum_Breathing_Loop",
   "Gum_Breathing_Loop_7",
   "Gum_HandWave_Loop",
+  "Lollipop_ArmShake_Rig",
 ];
+
+/** 2배속 재생할 풍선 루프 클립 이름 집합 */
+export const BALLOON_CLIP_NAMES = new Set([
+  "Balloon_Heart_Sway",
+  "Balloon_Star_Sway",
+  "Balloon_Sun_Sway",
+]);
+
+/** 풍선 근접 클릭 힌트: 클립 이름 → 말풍선 텍스트 (OBJ_ 이름 대신 클립 트랙에서 노드명 추출) */
+export const BALLOON_CLIP_HINT_MAP = {
+  Balloon_Heart_Sway: "❤️풍선 click",
+  Balloon_Star_Sway: "⭐풍선 click",
+  Balloon_Sun_Sway: "☀️풍선 click",
+};
 
 /**
  * 클릭 시 1회 재생할 오브젝트별 애니메이션 설정.
