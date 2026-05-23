@@ -9,7 +9,7 @@ export const STAGE3_INT_SUFFIX_TO_TARGET = {
   tent: "tent",
   portal: "portal",
   well: "well",
-  clock: "clock",
+  bench: "clock", // GLB 노드명: INT_Bench (시계 알람 인터랙션 — 근접 힌트는 벤치 기준)
   vendingmachine: "vendingMachine", // GLB 노드명: INT_vending_machine
 };
 
