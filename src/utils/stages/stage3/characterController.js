@@ -122,13 +122,17 @@ export function createCharacterController({
   let punchAction = null;
   let isPunchPlaying = false;
   let impactTimeoutId = null;
-  // 풍선을 든 채 걷는 전용 모델 — walk/idle 대신 표시된다
+  // 풍선을 든 전용 모델 — walk/idle 대신 표시된다 (걸을 때 / 멈췄을 때 분리)
   let balloonCharacterModel = null;
   let balloonMixer = null;
   let balloonWalkAction = null;
+  /** 풍선을 든 idle 포즈 모델 (user_idle_balloon.glb — 애니메이션 없는 정적 포즈) */
+  let balloonIdleCharacterModel = null;
   let isBalloonHeld = false;
-  /** 풍선 모델의 Hand_R Empty — 로드 시 1회 캐시(매 프레임 트리 탐색 회피) */
+  /** 풍선 walk 모델의 Hand_R Empty — 로드 시 1회 캐시(매 프레임 트리 탐색 회피) */
   let balloonHandAnchor = null;
+  /** 풍선 idle 모델의 Hand_R Empty */
+  let balloonIdleHandAnchor = null;
 
   // 경계 clamp 값 — setup()에서 1회 계산, update() 매 프레임 재사용
   let _minCx = 0,
@@ -271,14 +275,19 @@ export function createCharacterController({
 
   function setCharacterVisibility(walking) {
     if (!characterModel) return;
-    // 풍선을 든 상태: walk/idle 모델을 숨기고 풍선 모델만 표시
-    if (isBalloonHeld && balloonCharacterModel) {
+    // 풍선을 든 상태: walk/idle 일반 모델을 숨기고 풍선 모델 표시.
+    // 걸을 땐 풍선 walk 모델, 멈추면 풍선 idle 모델(없으면 walk 모델로 폴백).
+    if (isBalloonHeld && (balloonCharacterModel || balloonIdleCharacterModel)) {
       characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
-      balloonCharacterModel.visible = true;
+      const useIdle = !walking && !!balloonIdleCharacterModel;
+      if (balloonCharacterModel) balloonCharacterModel.visible = !useIdle;
+      if (balloonIdleCharacterModel)
+        balloonIdleCharacterModel.visible = useIdle;
       return;
     }
     if (balloonCharacterModel) balloonCharacterModel.visible = false;
+    if (balloonIdleCharacterModel) balloonIdleCharacterModel.visible = false;
     if (idleCharacterModel) {
       characterModel.visible = walking;
       idleCharacterModel.visible = !walking;
@@ -352,14 +361,19 @@ export function createCharacterController({
         config.characterBalloonModelPath ??
           "/models/common/user_walk_v2_balloon.glb",
       );
+      const balloonIdleUrl = resolvePublicAssetUrl(
+        config.characterIdleBalloonModelPath ??
+          "/models/common/user_idle_balloon.glb",
+      );
 
       Promise.all([
         loadGltfTemplateCached(characterUrl),
         loadGltfTemplateCached(idleUrl).catch(() => null),
         loadGltfTemplateCached(punchUrl).catch(() => null),
         loadGltfTemplateCached(balloonUrl).catch(() => null),
+        loadGltfTemplateCached(balloonIdleUrl).catch(() => null),
       ]).then(
-        ([gltf, idleGltf, punchGltf, balloonGltf]) => {
+        ([gltf, idleGltf, punchGltf, balloonGltf, balloonIdleGltf]) => {
           const scale = config.character?.scale ?? 1;
           const radiusCfg = config.character?.collisionRadius;
           collisionRadius =
@@ -553,6 +567,38 @@ export function createCharacterController({
               balloonCharacterModel.position.copy(characterModel.position);
               balloonCharacterModel.rotation.copy(characterModel.rotation);
               if (balloonWalkAction) balloonWalkAction.paused = !isWalking;
+              setCharacterVisibility(isWalking);
+            }
+          }
+
+          // 풍선을 든 idle 포즈 모델 — 멈춰 있을 때 표시 (애니메이션 없는 정적 포즈)
+          if (balloonIdleGltf) {
+            balloonIdleCharacterModel = SkeletonUtils.clone(
+              balloonIdleGltf.scene,
+            );
+            balloonIdleCharacterModel.scale.setScalar(scale);
+            balloonIdleCharacterModel.position.set(
+              spawnX,
+              characterYPosition,
+              spawnZ,
+            );
+            if (spawnYaw != null) {
+              balloonIdleCharacterModel.rotation.y = spawnYaw;
+            }
+            balloonIdleCharacterModel.visible = false;
+            applyShadows(balloonIdleCharacterModel);
+            balloonIdleHandAnchor =
+              balloonIdleCharacterModel.getObjectByName("Hand_R") ?? null;
+            if (import.meta.env.DEV && !balloonIdleHandAnchor) {
+              console.warn(
+                "[Stage3] 풍선 idle 모델에 Hand_R Empty가 없음 — 멈췄을 때 실 끝이 머리 위로 폴백됨",
+              );
+            }
+            scene.add(balloonIdleCharacterModel);
+
+            if (isBalloonHeld) {
+              balloonIdleCharacterModel.position.copy(characterModel.position);
+              balloonIdleCharacterModel.rotation.copy(characterModel.rotation);
               setCharacterVisibility(isWalking);
             }
           }
@@ -1000,10 +1046,13 @@ export function createCharacterController({
         idleCharacterModel.rotation.copy(characterModel.rotation);
       }
 
-      // 풍선 모델은 보일 때 항상 walk 모델 위치·회전을 따라간다
-      if (isBalloonHeld && balloonCharacterModel) {
-        balloonCharacterModel.position.copy(characterModel.position);
-        balloonCharacterModel.rotation.copy(characterModel.rotation);
+      // 풍선 walk/idle 모델은 보일 때 항상 walk 모델 위치·회전을 따라간다
+      if (isBalloonHeld) {
+        for (const m of [balloonCharacterModel, balloonIdleCharacterModel]) {
+          if (!m) continue;
+          m.position.copy(characterModel.position);
+          m.rotation.copy(characterModel.rotation);
+        }
       }
 
       if (characterMixer && (isWalking || !idleCharacterMixer))
@@ -1047,8 +1096,13 @@ export function createCharacterController({
         scene.remove(balloonCharacterModel);
         balloonCharacterModel = null;
       }
+      if (balloonIdleCharacterModel) {
+        scene.remove(balloonIdleCharacterModel);
+        balloonIdleCharacterModel = null;
+      }
       balloonWalkAction = null;
       balloonHandAnchor = null;
+      balloonIdleHandAnchor = null;
       isBalloonHeld = false;
       if (walkAudio) {
         walkAudio.pause();
@@ -1143,6 +1197,7 @@ export function createCharacterController({
       characterModel.visible = false;
       if (idleCharacterModel) idleCharacterModel.visible = false;
       if (balloonCharacterModel) balloonCharacterModel.visible = false;
+      if (balloonIdleCharacterModel) balloonIdleCharacterModel.visible = false;
       punchCharacterModel.visible = true;
       punchAction.reset();
       const clip = punchAction.getClip();
@@ -1177,6 +1232,8 @@ export function createCharacterController({
       if (characterModel) characterModel.rotation.y = yRad;
       if (idleCharacterModel) idleCharacterModel.rotation.y = yRad;
       if (balloonCharacterModel) balloonCharacterModel.rotation.y = yRad;
+      if (balloonIdleCharacterModel)
+        balloonIdleCharacterModel.rotation.y = yRad;
     },
 
     /**
@@ -1187,9 +1244,12 @@ export function createCharacterController({
       const next = Boolean(held);
       if (next === isBalloonHeld) return;
       isBalloonHeld = next;
-      if (isBalloonHeld && balloonCharacterModel && characterModel) {
-        balloonCharacterModel.position.copy(characterModel.position);
-        balloonCharacterModel.rotation.copy(characterModel.rotation);
+      if (isBalloonHeld && characterModel) {
+        for (const m of [balloonCharacterModel, balloonIdleCharacterModel]) {
+          if (!m) continue;
+          m.position.copy(characterModel.position);
+          m.rotation.copy(characterModel.rotation);
+        }
         if (balloonWalkAction) balloonWalkAction.paused = !isWalking;
       }
       setCharacterVisibility(isWalking);
@@ -1197,16 +1257,26 @@ export function createCharacterController({
 
     /**
      * 풍선을 든 상태일 때 오른손(Hand_R Empty)의 월드 좌표를 out에 쓴다.
+     * 현재 보이는 모델 기준 — 멈췄으면 idle 풍선 모델, 걸으면 walk 풍선 모델.
      * Stage3.update()는 interactionsController를 character.update보다 먼저
      * 호출하므로 이 값은 최대 1프레임 지연될 수 있다(풍선 실 기준 무시 가능).
      * @param {THREE.Vector3} out
      * @returns {boolean} 유효한 좌표를 썼으면 true
      */
     getBalloonHandAnchorWorld(out) {
-      if (!isBalloonHeld || !balloonCharacterModel || !balloonHandAnchor)
-        return false;
-      balloonCharacterModel.updateMatrixWorld(true);
-      balloonHandAnchor.getWorldPosition(out);
+      if (!isBalloonHeld) return false;
+      let model = null;
+      let anchor = null;
+      if (!isWalking && balloonIdleCharacterModel && balloonIdleHandAnchor) {
+        model = balloonIdleCharacterModel;
+        anchor = balloonIdleHandAnchor;
+      } else if (balloonCharacterModel && balloonHandAnchor) {
+        model = balloonCharacterModel;
+        anchor = balloonHandAnchor;
+      }
+      if (!model || !anchor) return false;
+      model.updateMatrixWorld(true);
+      anchor.getWorldPosition(out);
       return (
         Number.isFinite(out.x) &&
         Number.isFinite(out.y) &&
@@ -1232,6 +1302,7 @@ export function createCharacterController({
         characterModel,
         idleCharacterModel,
         balloonCharacterModel,
+        balloonIdleCharacterModel,
       ];
       for (const root of targets) {
         if (!root) continue;
