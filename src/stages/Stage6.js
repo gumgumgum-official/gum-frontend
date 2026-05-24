@@ -12,6 +12,10 @@ import {
 import { createCharacterController } from "../utils/stages/stage3/characterController.js";
 import { createKeyboardInput } from "../utils/common/keyboardInput.js";
 import { STAGE6_CONFIG } from "../config/stages/stage6/stage6.js";
+import {
+  applyStage6AudioVolume,
+  stage6ScaledVolume,
+} from "../config/stages/stage6/stage6Audio.js";
 import { preloadStage6AirportGlb } from "../utils/stages/stage6/stage6AirportPreload.js";
 import {
   clearRetainedStage3Whiteout,
@@ -588,7 +592,10 @@ export function Stage6() {
         "/static/sounds/airport/airport_announce_intro.mp3",
       );
     }
-    airportAnnounceIntroAudio.volume = AIRPORT_ANNOUNCE_INTRO_VOLUME;
+    applyStage6AudioVolume(
+      airportAnnounceIntroAudio,
+      AIRPORT_ANNOUNCE_INTRO_VOLUME,
+    );
     airportAnnounceIntroAudio.currentTime = 0;
 
     // Autoplay may be silently blocked (Promise stays pending forever on SPA nav).
@@ -653,7 +660,7 @@ export function Stage6() {
       atmClickAudio = new window.Audio();
       atmClickAudio.preload = "auto";
     }
-    atmClickAudio.volume = ATM_CLICK_SOUND_VOLUME;
+    applyStage6AudioVolume(atmClickAudio, ATM_CLICK_SOUND_VOLUME);
     atmClickAudio.pause();
     atmClickAudio.currentTime = 0;
     atmClickAudio.src = src;
@@ -721,7 +728,7 @@ export function Stage6() {
     airplaneCallSignAudio.onended = () => {
       hideAirportChimeIndicator();
     };
-    airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
+    applyStage6AudioVolume(airplaneCallSignAudio, AIRPLANE_CALL_SIGN_VOLUME);
     airplaneCallSignAudio.currentTime = 0;
     try {
       airplaneCallSignAudio.load();
@@ -806,7 +813,7 @@ export function Stage6() {
           "/static/sounds/airport/airplane_call_sign.mp3",
         );
       }
-      airplaneCallSignAudio.volume = AIRPLANE_CALL_SIGN_VOLUME;
+      applyStage6AudioVolume(airplaneCallSignAudio, AIRPLANE_CALL_SIGN_VOLUME);
       airplaneCallSignAudio.currentTime = 0;
       isAirportChimeVisible = false;
 
@@ -1013,7 +1020,10 @@ export function Stage6() {
         charHoverAirplaneHeheAudio.src = resolvePublicAssetUrl(
           CHAR_HOVER_AIRPLANE_HEHE_PATH,
         );
-        charHoverAirplaneHeheAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+        applyStage6AudioVolume(
+          charHoverAirplaneHeheAudio,
+          CHAR_HOVER_SOUND_VOLUME,
+        );
       }
       if (!charHoverAirplanePlaneAudio) {
         charHoverAirplanePlaneAudio = new window.Audio();
@@ -1021,7 +1031,10 @@ export function Stage6() {
         charHoverAirplanePlaneAudio.src = resolvePublicAssetUrl(
           CHAR_HOVER_AIRPLANE_PLANE_PATH,
         );
-        charHoverAirplanePlaneAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+        applyStage6AudioVolume(
+          charHoverAirplanePlaneAudio,
+          CHAR_HOVER_SOUND_VOLUME,
+        );
       }
       charHoverAirplaneHeheAudio.currentTime = 0;
       charHoverAirplanePlaneAudio.currentTime = 0;
@@ -1032,7 +1045,7 @@ export function Stage6() {
         charHoverCryAudio = new window.Audio();
         charHoverCryAudio.preload = "auto";
         charHoverCryAudio.src = resolvePublicAssetUrl(CHAR_HOVER_CRY_PATH);
-        charHoverCryAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+        applyStage6AudioVolume(charHoverCryAudio, CHAR_HOVER_SOUND_VOLUME);
       }
       charHoverCryAudio.currentTime = 0;
       charHoverCryAudio.play().catch(() => {});
@@ -1043,7 +1056,7 @@ export function Stage6() {
         charHoverCameraAudio.src = resolvePublicAssetUrl(
           CHAR_HOVER_CAMERA_PATH,
         );
-        charHoverCameraAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+        applyStage6AudioVolume(charHoverCameraAudio, CHAR_HOVER_SOUND_VOLUME);
       }
       charHoverCameraAudio.currentTime = 0;
       charHoverCameraAudio.play().catch(() => {});
@@ -1052,7 +1065,7 @@ export function Stage6() {
         charHoverHeartAudio = new window.Audio();
         charHoverHeartAudio.preload = "auto";
         charHoverHeartAudio.src = resolvePublicAssetUrl(CHAR_HOVER_HEART_PATH);
-        charHoverHeartAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+        applyStage6AudioVolume(charHoverHeartAudio, CHAR_HOVER_SOUND_VOLUME);
       }
       charHoverHeartAudio.currentTime = 0;
       charHoverHeartAudio.play().catch(() => {});
@@ -1063,7 +1076,7 @@ export function Stage6() {
         charHoverLollipopAudio.src = resolvePublicAssetUrl(
           CHAR_HOVER_LOLLIPOP_PATH,
         );
-        charHoverLollipopAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+        applyStage6AudioVolume(charHoverLollipopAudio, CHAR_HOVER_SOUND_VOLUME);
       }
       charHoverLollipopAudio.currentTime = 0;
       charHoverLollipopAudio.play().catch(() => {});
@@ -1074,7 +1087,7 @@ export function Stage6() {
         charHoverCounterAudio.src = resolvePublicAssetUrl(
           CHAR_HOVER_COUNTER_PATH,
         );
-        charHoverCounterAudio.volume = CHAR_HOVER_SOUND_VOLUME;
+        applyStage6AudioVolume(charHoverCounterAudio, CHAR_HOVER_SOUND_VOLUME);
       }
       charHoverCounterAudio.currentTime = 0;
       charHoverCounterAudio.play().catch(() => {});
@@ -1332,7 +1345,7 @@ export function Stage6() {
       if (p && typeof p.catch === "function") p.catch(() => {});
     };
     phoneRingCyclesRemaining = PHONE_RING_REPEAT_COUNT;
-    phoneRingAudio.volume = PHONE_RING_SOUND_VOLUME;
+    applyStage6AudioVolume(phoneRingAudio, PHONE_RING_SOUND_VOLUME);
     phoneRingAudio.currentTime = 0;
     const p = phoneRingAudio.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
@@ -1442,7 +1455,7 @@ export function Stage6() {
     phoneCallAudio.pause();
     phoneCallAudio.currentTime = 0;
     phoneCallAudio.src = callSrc;
-    phoneCallAudio.volume = PHONE_CALL_SOUND_VOLUME;
+    applyStage6AudioVolume(phoneCallAudio, PHONE_CALL_SOUND_VOLUME);
     phoneCallAudio.onended = () => {
       isPhoneInCall = false;
       hidePhoneIndicator();
@@ -1487,7 +1500,7 @@ export function Stage6() {
     phoneHangupAudio.onended = null;
     phoneHangupAudio.pause();
     phoneHangupAudio.currentTime = 0;
-    phoneHangupAudio.volume = PHONE_HANGUP_SOUND_VOLUME;
+    applyStage6AudioVolume(phoneHangupAudio, PHONE_HANGUP_SOUND_VOLUME);
     phoneHangupAudio.onended = () => {
       if (isStage6Active) startPhoneCallAfterHangup(callSrc);
     };
@@ -1858,7 +1871,7 @@ export function Stage6() {
         if (!hit) return;
         if (isStage6PointerBlocked()) return;
         if (hit.target === "photobooth") {
-          playUiClickSound();
+          playUiClickSound(stage6ScaledVolume(1));
           hideTelBubble();
           openStage6PhotoboothModal({
             videoSrc:
@@ -1890,7 +1903,7 @@ export function Stage6() {
           registerNonAtmInteraction(hit);
         }
         if (hit.target === "boardpic" || hit.target === "poster") {
-          playUiClickSound();
+          playUiClickSound(stage6ScaledVolume(1));
           hideTelBubble();
           openStage6PosterModal({
             imageSrc:

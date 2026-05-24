@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { resolvePublicAssetUrl } from "../utils/common/gltfTemplateCache.js";
+import { applyStage6AudioVolume } from "../config/stages/stage6/stage6Audio.js";
 import {
   AIRPORT_SUBTITLE_HIDE_EVENT,
   AIRPORT_SUBTITLE_SHOW_EVENT,
@@ -45,7 +46,7 @@ function playRandomTicketIssueSound() {
     ];
   const audio = new window.Audio();
   audio.preload = "auto";
-  audio.volume = TICKET_ISSUE_SOUND_VOLUME;
+  applyStage6AudioVolume(audio, TICKET_ISSUE_SOUND_VOLUME);
   audio.src = resolvePublicAssetUrl(path);
   try {
     audio.load();
