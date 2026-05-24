@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {
   STAGE3_WALKABLE_NAME_PATTERNS,
   STAGE3_WALKABLE_MATERIAL_PATTERNS,
+  STAGE3_WALKABLE_EXCLUDE_NAME_PATTERNS,
   STAGE3_EDGE_SAFETY_INSET,
 } from "../../../../config/stages/stage3/stage3Island.js";
 
@@ -99,6 +100,7 @@ export function collectStage3WalkableFromModel(
   model,
   namePatterns = STAGE3_WALKABLE_NAME_PATTERNS,
   materialPatterns = STAGE3_WALKABLE_MATERIAL_PATTERNS,
+  excludeNamePatterns = STAGE3_WALKABLE_EXCLUDE_NAME_PATTERNS,
 ) {
   /** @type {import("three").Mesh[]} */
   const meshes = [];
@@ -109,6 +111,17 @@ export function collectStage3WalkableFromModel(
   model.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
     let p = /** @type {THREE.Object3D | null} */ (obj);
+    let isExcluded = false;
+    while (p) {
+      const n = typeof p.name === "string" ? p.name.trim() : "";
+      if (excludeNamePatterns.some((re) => re.test(n))) {
+        isExcluded = true;
+        break;
+      }
+      p = p.parent;
+    }
+    if (isExcluded) return;
+    p = /** @type {THREE.Object3D | null} */ (obj);
     let isWalkableByName = false;
     while (p) {
       const n = typeof p.name === "string" ? p.name.trim() : "";

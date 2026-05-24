@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { applyStage6AudioVolume } from "../../../config/stages/stage6/stage6Audio.js";
 
 /**
  * Stage6 말풍선 호버 컴포넌트
@@ -34,7 +35,7 @@ export function createSpeechBubbleHover({
 
   if (cheerSoundPath) {
     cheerAudio = new window.Audio(cheerSoundPath);
-    cheerAudio.volume = 0.5;
+    applyStage6AudioVolume(cheerAudio, 0.5);
   }
 
   speechBubbleEl = document.createElement("div");

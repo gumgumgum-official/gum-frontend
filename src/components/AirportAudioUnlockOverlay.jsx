@@ -39,11 +39,11 @@ export function AirportAudioUnlockOverlay() {
     <button
       type="button"
       className={styles.airportAudioUnlockOverlay}
-      aria-label="화면을 터치하면 안내 방송이 시작됩니다"
+      aria-label="화면을 클릭하면 안내 방송이 시작됩니다"
       onPointerDown={handlePointerDown}
     >
       <span className={styles.airportAudioUnlockText}>
-        화면을 터치하면 안내 방송이 시작됩니다
+        화면을 클릭하면 안내 방송이 시작됩니다
       </span>
     </button>,
     document.body,

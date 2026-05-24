@@ -1,5 +1,5 @@
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
-import { applyExtendedAudioVolume } from "../../common/audioGain.js";
+import { applyStage6AudioVolume } from "../../../config/stages/stage6/stage6Audio.js";
 
 const CAMERA_SOUND_PATH = "/static/sounds/airport/camera_sound.m4a";
 const CAMERA_SOUND_VOLUME = 0.85;
@@ -17,7 +17,7 @@ export function playPhotoboothCameraSound() {
     }
     cameraSoundAudio.pause();
     cameraSoundAudio.currentTime = 0;
-    applyExtendedAudioVolume(cameraSoundAudio, CAMERA_SOUND_VOLUME);
+    applyStage6AudioVolume(cameraSoundAudio, CAMERA_SOUND_VOLUME);
     const p = cameraSoundAudio.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
   } catch {

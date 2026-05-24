@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { slideMoveXZAgainstAABBs } from "../stage3/islandStaticColliders.js";
 import { resolvePublicAssetUrl } from "../../common/gltfTemplateCache.js";
+import { applyStage6AudioVolume } from "../../../config/stages/stage6/stage6Audio.js";
 
 export const BAG_OBJECT_NAME = "INT_Bag1";
 
@@ -220,7 +221,7 @@ export function createBagPhysics() {
             );
           }
           const snd = bagTouchAudios[sndIdx];
-          snd.volume = BAG_TOUCH_SOUND_VOLUME;
+          applyStage6AudioVolume(snd, BAG_TOUCH_SOUND_VOLUME);
           snd.currentTime = 0;
           snd.play().catch(() => {});
           bagNudgeCooldown = BAG_NUDGE_COOLDOWN_SEC;

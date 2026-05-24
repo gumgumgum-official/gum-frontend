@@ -1,10 +1,20 @@
 import { getSessionId } from "./session.js";
+import { fetchWithRetry } from "./fetchWithRetry.js";
 
 /** 게시판 껌딱지 투표 UX용 — `:${getSessionId()}` 접미로 localStorage 에 저장됨 */
 export const GGUMDDI_MY_VOTE_STORAGE_PREFIX = "gum-ggumddi-my-vote";
 
-/** clientId 저장 키 — prefix 아래에 두어 kiosk 리셋 시 자동 삭제됨 */
-export const VOTE_CLIENT_ID_STORAGE_KEY = `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:clientId`;
+/** ?monitor=N 파라미터를 읽어 모니터별 스토리지 키 접미사를 반환 */
+function getMonitorSuffix() {
+  if (typeof window === "undefined") return "";
+  const m = new URLSearchParams(window.location.search).get("monitor");
+  return m ? `:m${m}` : "";
+}
+
+/** clientId 저장 키 — prefix 아래에 두어 kiosk 리셋 시 자동 삭제됨. 모니터별로 분리됨 */
+export function getVoteClientIdStorageKey() {
+  return `${GGUMDDI_MY_VOTE_STORAGE_PREFIX}:clientId${getMonitorSuffix()}`;
+}
 
 /** 다음 이용자에게 '이미 투표함' 상태가 새지 않도록 해당 키만 제거 */
 export function clearGgumddiMyVotesFromLocalStorage() {
@@ -20,11 +30,12 @@ export function clearGgumddiMyVotesFromLocalStorage() {
 
 /** 기존 clientId를 반환하거나 새 UUID를 생성·저장해 반환 */
 export function getOrCreateVoteClientId() {
+  const key = getVoteClientIdStorageKey();
   try {
-    const stored = localStorage.getItem(VOTE_CLIENT_ID_STORAGE_KEY);
+    const stored = localStorage.getItem(key);
     if (stored && stored.trim()) return stored.trim();
     const id = window.crypto.randomUUID();
-    localStorage.setItem(VOTE_CLIENT_ID_STORAGE_KEY, id);
+    localStorage.setItem(key, id);
     return id;
   } catch {
     return window.crypto.randomUUID();
@@ -34,7 +45,7 @@ export function getOrCreateVoteClientId() {
 /** 서버 응답 clientId를 localStorage에 저장 */
 export function saveVoteClientId(clientId) {
   try {
-    localStorage.setItem(VOTE_CLIENT_ID_STORAGE_KEY, clientId);
+    localStorage.setItem(getVoteClientIdStorageKey(), clientId);
   } catch {
     /* ignore */
   }
@@ -88,9 +99,9 @@ function normalizeAggregate(payload) {
  */
 export async function fetchMyVote(clientId) {
   const base = getGumServerBaseUrl();
-  const res = await fetch(
+  const res = await fetchWithRetry(
     `${base}/api/votes/my?clientId=${encodeURIComponent(clientId)}`,
-    { headers: { Accept: "application/json" } },
+    { headers: { Accept: "application/json" }, idempotent: true },
   );
   if (!res.ok) {
     throw new Error(`내 투표 조회 실패 (HTTP ${res.status})`);
@@ -105,9 +116,10 @@ export async function fetchMyVote(clientId) {
  */
 export async function fetchVoteResults() {
   const base = getGumServerBaseUrl();
-  const res = await fetch(`${base}/api/votes/results`, {
+  const res = await fetchWithRetry(`${base}/api/votes/results`, {
     method: "GET",
     headers: { Accept: "application/json" },
+    idempotent: true,
   });
   if (!res.ok) {
     throw new Error(`투표 집계 조회 실패 (HTTP ${res.status})`);
@@ -128,7 +140,7 @@ export async function postVote(candidate, opts = {}) {
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
 
-  const res = await fetch(`${base}/api/votes`, {
+  const res = await fetchWithRetry(`${base}/api/votes`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
@@ -172,7 +184,7 @@ export async function deleteMyVote(opts = {}) {
   const sessionId = opts.sessionId ?? getSessionId();
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
-  const res = await fetch(`${base}/api/votes/my`, {
+  const res = await fetchWithRetry(`${base}/api/votes/my`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
@@ -205,7 +217,7 @@ export async function updateMyVote(candidate, opts = {}) {
   const sessionId = opts.sessionId ?? getSessionId();
   if (sessionId) body.sessionId = sessionId;
   if (opts.clientId) body.clientId = opts.clientId;
-  const res = await fetch(`${base}/api/votes/my`, {
+  const res = await fetchWithRetry(`${base}/api/votes/my`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),

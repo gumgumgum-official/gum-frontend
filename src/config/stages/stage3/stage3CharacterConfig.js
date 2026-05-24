@@ -7,6 +7,10 @@ export const STAGE3_CHARACTER_CONFIG = {
   characterIdleModelPath: "/models/common/user_idle.glb",
   /** punch(망치질) 애니메이션 전용 GLB 경로 */
   characterPunchModelPath: "/models/stage3/user_punch.glb",
+  /** 풍선을 든 채 걷는 캐릭터 전용 GLB 경로 (오른손에 Hand_R Empty 포함) */
+  characterBalloonModelPath: "/models/common/user_walk_v2_balloon.glb",
+  /** 풍선을 든 idle(정지) 포즈 GLB 경로 (애니메이션 없는 정적 포즈) */
+  characterIdleBalloonModelPath: "/models/common/user_idle_balloon.glb",
 
   /** 캐릭터 이동·카메라 (Stage3 전용) */
   character: /** @type {import("../../../types.js").Stage3CharacterConfig} */ ({

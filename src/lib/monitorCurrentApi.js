@@ -4,8 +4,10 @@
  * @see 요구사항.md, docs/MONITOR_USER_FLOW.md
  */
 
+import { fetchWithRetry } from "./fetchWithRetry.js";
+
 /** 모니터 현재 할당 폴링 간격 (ms) — Stage3와 동일 */
-export const MONITOR_POLL_MS = 1500;
+export const MONITOR_POLL_MS = 3000;
 
 const JSON_EMPTY = "{}";
 
@@ -54,9 +56,10 @@ export async function fetchMonitorCurrent() {
   if (!base) return null;
   const monitorId = getMonitorDeviceId();
   const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/current`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "GET",
     headers: { Accept: "application/json" },
+    idempotent: true,
   });
   if (!res.ok) {
     console.warn("[monitor current] HTTP 오류:", res.status);
@@ -74,9 +77,10 @@ export async function fetchGumServerStatus() {
   const base = getGumServerBaseUrl();
   if (!base) return null;
   const url = `${base}/status`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "GET",
     headers: { Accept: "application/json" },
+    idempotent: true,
   });
   if (!res.ok) {
     console.warn("[gum status] HTTP 오류:", res.status);
@@ -95,7 +99,7 @@ export async function postMonitorStart() {
   if (!base) return false;
   const monitorId = getMonitorDeviceId();
   const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/start`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON_EMPTY,
@@ -117,13 +121,35 @@ export async function postMonitorComplete() {
   if (!base) return false;
   const monitorId = getMonitorDeviceId();
   const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/complete`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON_EMPTY,
   });
   if (!res.ok) {
     console.warn("[monitor complete] HTTP 오류:", res.status);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 강제 초기화 — 진행 중·예약 상태와 무관하게 모니터를 즉시 idle로 되돌린다.
+ * POST /api/monitors/:monitorId/clear
+ * @returns {Promise<boolean>} 성공 여부
+ */
+export async function postMonitorClear() {
+  const base = getGumServerBaseUrl();
+  if (!base) return false;
+  const monitorId = getMonitorDeviceId();
+  const url = `${base}/api/monitors/${encodeURIComponent(monitorId)}/clear`;
+  const res = await fetchWithRetry(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON_EMPTY,
+  });
+  if (!res.ok) {
+    console.warn("[monitor clear] HTTP 오류:", res.status);
     return false;
   }
   return true;
